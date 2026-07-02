@@ -1,0 +1,12 @@
+{
+  "name": "Stark Hub",
+  "short_name": "StarkHub",
+  "description": "Plataforma de governança, QA e produtividade da equipe.",
+  "theme_color": "#0b1220",
+  "background_color": "#0b1220",
+  "display": "standalone",
+  "start_url": "./",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
