@@ -14,9 +14,10 @@ import Avatar from "../../components/common/Avatar.jsx";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { useWorkItems } from "../../hooks/useWorkItems.js";
 import { useCollaborators } from "../../hooks/useCollaborators.js";
+import { useTestEvidence } from "../../hooks/useTestEvidence.js";
 import { useFeatureFlags } from "../../contexts/FeatureFlagsContext.jsx";
-import { mockTestEvidence } from "../../utils/mockData.js";
 import { countries, workItemTypes, defaultWorkItemTypeStyle } from "../../utils/constants.js";
+import { azureWorkItemUrl } from "../../utils/azure.js";
 
 const testResultOptions = [
   { value: "pending", label: "Pendente" },
@@ -41,6 +42,7 @@ export default function QaBoard() {
   const { profile, demoMode } = useAuth();
   const { items, updateItem, needsAzureIntegration } = useWorkItems();
   const { collaborators } = useCollaborators();
+  const { evidence, reload: reloadEvidence } = useTestEvidence();
   const { isEnabled } = useFeatureFlags();
   const [search, setSearch] = useState("");
   const [statuses, setStatuses] = useState([]);
@@ -99,8 +101,9 @@ export default function QaBoard() {
     pending: myQaItems.filter((i) => !i.lastTestResult).length
   };
 
-  function setResult(item, result) {
-    updateItem(item.id, { lastTestResult: result === "pending" ? null : result });
+  async function setResult(item, result) {
+    await updateItem(item.id, { lastTestResult: result === "pending" ? null : result });
+    reloadEvidence();
   }
 
   function assignQa(item, qaCollaboratorId) {
@@ -108,7 +111,7 @@ export default function QaBoard() {
   }
 
   function evidenceFor(itemId) {
-    return mockTestEvidence.filter((entry) => entry.workItemId === itemId);
+    return evidence.filter((entry) => entry.workItemId === itemId);
   }
 
   const listClass = { grid: "row g-3", list: "d-flex flex-column gap-2", compact: "d-flex flex-column gap-1" }[viewMode];
@@ -332,7 +335,7 @@ export default function QaBoard() {
       {activeItem && (
         <IframeTaskModal
           title={`${activeItem.type} #${activeItem.id}`}
-          url={`https://dev.azure.com/SUA-ORG/SEU-PROJETO/_workitems/edit/${activeItem.id}`}
+          url={azureWorkItemUrl(profile?.azureOrgUrl || "SUA-ORG", profile?.azureProject || "SEU-PROJETO", activeItem.id)}
           onClose={() => setActiveItem(null)}
         />
       )}
