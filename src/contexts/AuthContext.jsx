@@ -32,11 +32,23 @@ export function AuthProvider({ children }) {
       return;
     }
 
+    // getSession() aguarda a inicialização completa do client (incluindo o
+    // processamento do token OAuth que acabou de chegar na URL após o
+    // redirect do Google). onAuthStateChange, por sua vez, pode disparar um
+    // evento inicial com sessão `null` *antes* desse processamento terminar
+    // — se deixássemos isso setar a sessão, derrubaríamos a proteção do
+    // SESSION_PENDING e o ProtectedRoute mandaria o usuário de volta para
+    // /login logo depois de um login bem-sucedido. Por isso ignoramos
+    // qualquer evento de onAuthStateChange até getSession() resolver.
+    let initialized = false;
+
     supabase.auth.getSession().then(({ data }) => {
+      initialized = true;
       setSession(data.session || null);
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!initialized) return;
       setSession(nextSession || null);
     });
 
@@ -118,7 +130,7 @@ export function AuthProvider({ children }) {
       demoMode,
       demoRole,
       enterDemoMode,
-      isApproved: demoMode || profile?.accessLevel !== accessLevels.pending,
+      isApproved: demoMode || (profile != null && profile.accessLevel !== accessLevels.pending),
       signInWithGoogle,
       signOut,
       updateProfile,

@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import ReactorLogo from "../components/layout/ReactorLogo.jsx";
@@ -8,6 +8,19 @@ import { allowedEmailDomains, accessLevelLabels } from "../utils/constants.js";
 import { isSupabaseConfigured } from "../lib/supabaseClient.js";
 
 const demoRoles = ["dev", "qa", "gestao"];
+
+// O Supabase devolve falhas de OAuth (redirect URL não autorizada, domínio
+// rejeitado pelo trigger handle_new_user, etc.) como parâmetros de erro na
+// própria URL de retorno — nunca como exceção JS. Sem ler isso aqui, o app
+// só "volta pro login" sem explicação nenhuma do que deu errado.
+function readOAuthError() {
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const query = new URLSearchParams(window.location.search);
+  const description = hash.get("error_description") || query.get("error_description");
+  const error = hash.get("error") || query.get("error");
+  if (!description && !error) return null;
+  return decodeURIComponent((description || error).replace(/\+/g, " "));
+}
 
 const particles = [
   { left: "6%", duration: "9s", delay: "0s" },
@@ -23,6 +36,7 @@ const particles = [
 export default function Login() {
   const { signInWithGoogle, enterDemoMode, demoMode, user } = useAuth();
   const navigate = useNavigate();
+  const [oauthError] = useState(readOAuthError);
 
   useEffect(() => {
     if (demoMode || user) navigate("/", { replace: true });
@@ -61,6 +75,12 @@ export default function Login() {
         {!isSupabaseConfigured && (
           <div className="alert alert-warning d-flex align-items-center gap-2" style={{ maxWidth: 480 }}>
             <FiAlertTriangle /> Supabase não configurado (.env.local).
+          </div>
+        )}
+
+        {oauthError && (
+          <div className="alert alert-danger d-flex align-items-center gap-2" style={{ maxWidth: 480 }}>
+            <FiAlertTriangle /> Falha no login: {oauthError}
           </div>
         )}
 
