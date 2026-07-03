@@ -12,6 +12,13 @@ const AuthContext = createContext(null);
 // acabou de chegar na URL após o redirect do Google, perdendo a sessão.
 const SESSION_PENDING = undefined;
 
+function getAuthRedirectUrl() {
+  const configuredUrl = import.meta.env.VITE_AUTH_REDIRECT_URL;
+  if (configuredUrl) return configuredUrl;
+
+  return new URL(import.meta.env.BASE_URL, window.location.origin).toString();
+}
+
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(SESSION_PENDING);
   const [profile, setProfile] = useState(null);
@@ -70,7 +77,7 @@ export function AuthProvider({ children }) {
     if (!isSupabaseConfigured) return;
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin }
+      options: { redirectTo: getAuthRedirectUrl() }
     });
   }
 

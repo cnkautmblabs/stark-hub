@@ -34,7 +34,11 @@ Sugestão de próximos passos, em ordem:
 2. No SQL Editor, execute todo o conteúdo de `supabase/schema.sql`.
 3. Em Authentication → Providers, habilite o Google e configure o OAuth Client (Google Cloud Console).
 4. Copie `.env.example` para `.env.local` e preencha `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`.
-5. Rode `run.bat` (Windows) ou `npm install && npm run dev`.
+5. Em Authentication → URL Configuration, configure:
+   - Site URL: `https://cnkautmblabs.github.io/stark-hub/`
+   - Redirect URLs: `https://cnkautmblabs.github.io/stark-hub/**`
+   - Para desenvolvimento local, adicione também `http://localhost:5173/**`.
+6. Rode `run.bat` (Windows) ou `npm install && npm run dev`.
 
 ## Deploy no GitHub Pages
 ```
