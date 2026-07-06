@@ -115,7 +115,7 @@ export const mockTestEvidence = [
 export const mockProfiles = {
   dev: { id: "demo-dev", fullName: "Bruno Lima", email: "bruno.lima@mblabs.com.br", accessLevel: "dev" },
   qa: { id: "demo-qa", fullName: "Ana Ferreira", email: "ana.ferreira@mblabs.com.br", accessLevel: "qa" },
-  gestao: { id: "demo-gestao", fullName: "Matheus Bonotto", email: "matheus.bonotto@mblabs.com.br", accessLevel: "gestao" }
+  gestao: { id: "demo-gestao", fullName: "Matheus Bonotto", email: "gestao.demo@mblabs.com.br", accessLevel: "gestao" }
 };
 
 export const mockFeatureFlags = {

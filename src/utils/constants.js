@@ -1,9 +1,6 @@
 // Domínios de e-mail autorizados a autenticar no Stark Hub.
 export const allowedEmailDomains = ["mblabs.com.br", "bankeiro.com.br"];
 
-// Usuário com acesso administrativo total garantido pelo schema.sql (trigger handle_new_user).
-export const adminEmail = "matheus.bonotto@mblabs.com.br";
-
 export const accessLevels = {
   pending: "pending",
   dev: "dev",
