@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { FiEdit2, FiSave, FiTrash2 } from "react-icons/fi";
 import Avatar from "./Avatar.jsx";
+import { accessLevelLabels } from "../../utils/constants.js";
 
 // Porta fiel do card de colaborador do userscript legado (.mb-collaborator-card):
 // resumo (avatar, cor, nome, papéis) + corpo expansível só editável depois de
@@ -28,7 +29,8 @@ export default function CollaboratorEditor({ person, canEdit, onUpdate, onDelete
       fixedMention: Boolean(draft.fixedMention),
       isQa: Boolean(draft.isQa),
       isDev: Boolean(draft.isDev),
-      isManagement: Boolean(draft.isManagement)
+      isManagement: Boolean(draft.isManagement),
+      ...(person.profileId ? { accessLevel: draft.accessLevel } : {})
     });
     setEditing(false);
   }
@@ -149,6 +151,20 @@ export default function CollaboratorEditor({ person, canEdit, onUpdate, onDelete
             </label>
           ))}
         </div>
+
+        {person.profileId && (
+          <div>
+            <label className="form-label small text-muted d-block">Nível de acesso ao Stark Hub</label>
+            <select
+              className="form-select form-select-sm" style={{ maxWidth: 220 }} disabled={!editing}
+              value={draft.accessLevel || "pending"} onChange={(e) => setDraft({ ...draft, accessLevel: e.target.value })}
+            >
+              {Object.entries(accessLevelLabels).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
     </details>
   );

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { FiPlus, FiTrash2, FiDownload, FiUpload, FiSend } from "react-icons/fi";
 import { supabase } from "../lib/supabaseClient.js";
 import { useAuth } from "../contexts/AuthContext.jsx";
@@ -11,7 +12,6 @@ import { featureFlagLabels } from "../utils/mockData.js";
 import { resolveSlackWebhooks } from "../utils/slack.js";
 import AzureConnectionForm from "../components/common/AzureConnectionForm.jsx";
 import AvatarUploader from "../components/common/AvatarUploader.jsx";
-import CollaboratorEditor from "../components/common/CollaboratorEditor.jsx";
 
 const defaultProductName = "Stark Hub";
 
@@ -25,7 +25,7 @@ const defaultProductName = "Stark Hub";
 export default function Settings() {
   const { user, profile, demoMode } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const { collaborators, updateCollaborator, addCollaborator, deleteCollaborator } = useCollaborators();
+  const { collaborators, updateCollaborator, addCollaborator } = useCollaborators();
   const { getSetting, updateSetting } = useAppSettings();
   const { flags, isEnabled, setFlag } = useFeatureFlags();
   const isGestao = profile?.accessLevel === accessLevels.gestao;
@@ -183,10 +183,6 @@ export default function Settings() {
     setCreatingProfile(false);
   }
 
-  async function handleAddCollaborator() {
-    await addCollaborator({ azureName: "Novo colaborador", isDev: true });
-  }
-
   // Exportação/importação sanitizada — mesmo espírito de exportWorkbenchConfig
   // do userscript legado: nunca inclui PAT nem URLs de webhook do Slack.
   function exportConfig() {
@@ -298,7 +294,7 @@ export default function Settings() {
         </button>
       </div>
 
-      {true && (
+      {!demoMode && (
         <div className="stark-card">
           <h6 className="text-muted text-uppercase small mb-2">Integração Azure DevOps (minha conta)</h6>
           <AzureConnectionForm submitLabel="Testar e atualizar" />
@@ -334,7 +330,7 @@ export default function Settings() {
         </div>
       </div>
 
-      {isGestao && (
+      {!demoMode && isGestao && (
         <div className="stark-card">
           {/* ---- Conexões (Azure + Slack aninhados, igual ao script) ---- */}
           <details className="stark-accordion" open>
@@ -474,26 +470,10 @@ export default function Settings() {
             </div>
           </details>
 
-          {/* ---- Colaboradores ---- */}
-          <details className="stark-accordion">
-            <summary>Colaboradores</summary>
-            <div className="stark-accordion-body">
-              <div className="d-flex align-items-center justify-content-between mb-2">
-                <p className="text-muted small mb-0">Cadastro único de identidade, aliases, permissões, Slack e aparência.</p>
-                <button type="button" className="btn btn-sm btn-primary" onClick={handleAddCollaborator}>+ Novo</button>
-              </div>
-              {collaborators.map((person) => (
-                <CollaboratorEditor
-                  key={person.id}
-                  person={person}
-                  canEdit={isGestao}
-                  onUpdate={(patch) => updateCollaborator(person.id, patch)}
-                  onDelete={() => deleteCollaborator(person.id)}
-                />
-              ))}
-              {!collaborators.length && <span className="text-muted small">Nenhum colaborador cadastrado.</span>}
-            </div>
-          </details>
+          <p className="text-muted small mt-3 mb-0">
+            Cadastro único de identidade, aliases, permissões, Slack e aparência: gerencie em{" "}
+            <Link to="/management/collaborators">Colaboradores</Link>.
+          </p>
 
           <div className="d-flex align-items-center flex-wrap gap-2 mt-3 pt-3 border-top">
             <button type="button" className="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1" onClick={exportConfig}>
