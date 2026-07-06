@@ -6,6 +6,7 @@ export default function AzureConnectionForm({ onSuccess, submitLabel = "Testar e
   const { profile, updateProfile } = useAuth();
   const [orgUrl, setOrgUrl] = useState(profile?.azureOrgUrl || "");
   const [project, setProject] = useState(profile?.azureProject || "");
+  const [team, setTeam] = useState(profile?.azureTeam || "");
   const [pat, setPat] = useState("");
   const [status, setStatus] = useState(null);
   const [testing, setTesting] = useState(false);
@@ -35,6 +36,7 @@ export default function AzureConnectionForm({ onSuccess, submitLabel = "Testar e
       const { error: saveError } = await updateProfile({
         azureOrgUrl: orgUrl,
         azureProject: project,
+        azureTeam: team,
         azurePat: effectivePat,
         azureVerifiedAt: new Date().toISOString()
       });
@@ -73,6 +75,19 @@ export default function AzureConnectionForm({ onSuccess, submitLabel = "Testar e
           onChange={(e) => setProject(e.target.value)}
           required
         />
+      </div>
+      <div>
+        <label className="form-label small text-muted">Time (Team) do Azure DevOps</label>
+        <input
+          className="form-control"
+          placeholder="ex: MB Labs"
+          value={team}
+          onChange={(e) => setTeam(e.target.value)}
+          required
+        />
+        <div className="form-text">
+          Essencial: as sprints e work items são buscados só dentro deste time. Sem isso, itens de outros times do mesmo projeto (ex.: outro cliente) apareceriam misturados.
+        </div>
       </div>
       <div>
         <label className="form-label small text-muted">Personal Access Token (PAT)</label>

@@ -4,5 +4,7 @@ dist
 .env.local
 .DS_Store
 *.log
-MB Azure Workbench-5.5.10.txt
+MB Azure Workbench-5..8.1.txt
 supabase/.temp
+Apresentação_Automações CNK.txt
+*.sql

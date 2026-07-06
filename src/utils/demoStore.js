@@ -67,6 +67,25 @@ export function updateDemoCollaborator(id, patch) {
   return collaborators;
 }
 
+export function deleteDemoCollaborator(id) {
+  const state = getState();
+  const collaborators = state.collaborators.filter((person) => person.id !== id);
+  writeState({ ...state, collaborators });
+  return collaborators;
+}
+
+export function addDemoCollaborator(patch) {
+  const state = getState();
+  const created = {
+    id: `c${Date.now()}`, profileId: null, azureName: "", slackName: "", slackMemberId: "",
+    aliases: [], color: "#475569", imageUrl: "", isQa: false, isDev: true, isManagement: false,
+    ...patch
+  };
+  const collaborators = [...state.collaborators, created];
+  writeState({ ...state, collaborators });
+  return { collaborators, created };
+}
+
 export function getDemoWorkItems() {
   return getState().workItems;
 }

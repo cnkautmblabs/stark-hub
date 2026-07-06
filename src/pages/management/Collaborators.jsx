@@ -7,22 +7,23 @@ import { accessLevelLabels, accessLevels } from "../../utils/constants.js";
 
 function CollaboratorCard({ person, canEdit, canEditPhoto, onUpdate }) {
   const [aliasInput, setAliasInput] = useState("");
+  const aliases = person.aliases || [];
 
   function addAlias() {
     const value = aliasInput.trim();
-    if (!value || person.aliases.some((a) => a.toLowerCase() === value.toLowerCase())) return;
-    onUpdate({ aliases: [...person.aliases, value] });
+    if (!value || aliases.some((a) => a.toLowerCase() === value.toLowerCase())) return;
+    onUpdate({ aliases: [...aliases, value] });
     setAliasInput("");
   }
 
   function removeAlias(value) {
-    onUpdate({ aliases: person.aliases.filter((a) => a !== value) });
+    onUpdate({ aliases: aliases.filter((a) => a !== value) });
   }
 
   const roleSummary = [person.isQa && "QA", person.isDev && "DEV", person.isManagement && "Gestão"].filter(Boolean).join(" · ") || "Sem função";
 
   return (
-    <details className="stark-card">
+    <details className="stark-card" data-collaborator-id={person.id}>
       <summary className="d-flex align-items-center gap-3" style={{ cursor: "pointer", listStyle: "none" }}>
         {canEditPhoto ? (
           <span onClick={(e) => e.preventDefault()}>
@@ -79,13 +80,13 @@ function CollaboratorCard({ person, canEdit, canEditPhoto, onUpdate }) {
         <div>
           <label className="form-label small text-muted d-block">Aliases</label>
           <div className="d-flex flex-wrap gap-2 mb-2">
-            {person.aliases.map((alias) => (
+            {aliases.map((alias) => (
               <span key={alias} className="stark-alias-pill">
                 {alias}
                 {canEdit && <button type="button" onClick={() => removeAlias(alias)}>&times;</button>}
               </span>
             ))}
-            {!person.aliases.length && <span className="text-muted small">Nenhum alias.</span>}
+            {!aliases.length && <span className="text-muted small">Nenhum alias.</span>}
           </div>
           {canEdit && (
             <div className="d-flex gap-2" style={{ maxWidth: 320 }}>
@@ -133,13 +134,25 @@ function CollaboratorCard({ person, canEdit, canEditPhoto, onUpdate }) {
 
 export default function Collaborators() {
   const { profile, demoMode } = useAuth();
-  const { collaborators, updateCollaborator } = useCollaborators();
+  const { collaborators, updateCollaborator, addCollaborator } = useCollaborators();
   const canEdit = profile?.accessLevel === "gestao";
+
+  async function handleAdd() {
+    const { data } = await addCollaborator({ azureName: "Novo colaborador", isDev: true });
+    // Abre o card recém-criado direto na edição — mesmo espírito do "Adicionar
+    // QA"/"Adicionar dev" do userscript legado (que já criava a linha em modo edição).
+    requestAnimationFrame(() => {
+      document.querySelector(`[data-collaborator-id="${data?.id}"]`)?.setAttribute("open", "true");
+    });
+  }
 
   return (
     <div>
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h3 className="mb-0">Colaboradores {demoMode && <span className="stark-badge-demo ms-2">demo</span>}</h3>
+        {canEdit && (
+          <button type="button" className="btn btn-sm btn-primary" onClick={handleAdd}>+ Adicionar colaborador</button>
+        )}
       </div>
       {!canEdit && (
         <p className="text-muted small">

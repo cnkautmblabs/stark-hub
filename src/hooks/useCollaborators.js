@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase, isSupabaseConfigured } from "../lib/supabaseClient.js";
 import { useAuth } from "../contexts/AuthContext.jsx";
-import { getDemoCollaborators, updateDemoCollaborator } from "../utils/demoStore.js";
+import { getDemoCollaborators, updateDemoCollaborator, addDemoCollaborator, deleteDemoCollaborator } from "../utils/demoStore.js";
 
 // Fonte do diretório de colaboradores (tabela `collaborators`). No modo
 // demo, vem do localStorage e as edições ficam salvas localmente. Fora do
@@ -54,5 +54,31 @@ export function useCollaborators() {
     return { error };
   }
 
-  return { collaborators, loading, updateCollaborator };
+  // Cadastro de um novo colaborador — sem isso não existia NENHUMA forma de
+  // colocar alguém no diretório pela UI (nem a própria Gestão conseguia se
+  // cadastrar: handle_new_user só cria `profiles`, nunca `collaborators`).
+  async function addCollaborator(patch) {
+    if (demoMode) {
+      const { collaborators: next, created } = addDemoCollaborator(patch);
+      setCollaborators(next);
+      return { error: null, data: created };
+    }
+    if (!isSupabaseConfigured) return { error: new Error("Supabase não configurado") };
+    const { data, error } = await supabase.from("collaborators").insert(patch).select().maybeSingle();
+    if (!error && data) setCollaborators((current) => [...current, data]);
+    return { error, data };
+  }
+
+  async function deleteCollaborator(id) {
+    if (demoMode) {
+      setCollaborators(deleteDemoCollaborator(id));
+      return { error: null };
+    }
+    if (!isSupabaseConfigured) return { error: new Error("Supabase não configurado") };
+    const { error } = await supabase.from("collaborators").delete().eq("id", id);
+    if (!error) setCollaborators((current) => current.filter((person) => person.id !== id));
+    return { error };
+  }
+
+  return { collaborators, loading, updateCollaborator, addCollaborator, deleteCollaborator };
 }

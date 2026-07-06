@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { FiCopy, FiAlertCircle, FiPlus, FiArrowRight, FiSearch } from "react-icons/fi";
+import { FiCopy, FiAlertCircle, FiPlus, FiArrowRight, FiSearch, FiFileText } from "react-icons/fi";
+import { copyExecutiveReportText, downloadExecutiveReportPdf } from "../../utils/executiveReport.js";
 import PeriodFilter from "../../components/common/PeriodFilter.jsx";
 import MultiSelectFilter from "../../components/common/MultiSelectFilter.jsx";
 import StatusPill from "../../components/common/StatusPill.jsx";
@@ -14,15 +15,17 @@ import { useAuth } from "../../contexts/AuthContext.jsx";
 import { useWorkItems } from "../../hooks/useWorkItems.js";
 import { useCollaborators } from "../../hooks/useCollaborators.js";
 import { useFeatureFlags } from "../../contexts/FeatureFlagsContext.jsx";
+import { useAppSettings } from "../../hooks/useAppSettings.js";
 import { countries, nextEnvStep, workItemTypes, defaultWorkItemTypeStyle, defaultGoalHours } from "../../utils/constants.js";
 
 const typeToggleOptions = ["Task", "Bug"];
 
 export default function DevDashboard() {
   const { profile, demoMode } = useAuth();
-  const { items, updateItem, addItem, needsAzureIntegration } = useWorkItems();
+  const { items, updateItem, addItem, needsAzureIntegration, error: itemsError } = useWorkItems();
   const { collaborators } = useCollaborators();
   const { isEnabled } = useFeatureFlags();
+  const { getSetting } = useAppSettings();
   const [search, setSearch] = useState("");
   const [period, setPeriod] = useState({ preset: "7d" });
   const [countryFilter, setCountryFilter] = useState([]);
@@ -47,6 +50,10 @@ export default function DevDashboard() {
   }
 
   const filtered = items.filter((item) => {
+    // "Meus itens" == itens atribuídos a mim no Azure DevOps, nunca o
+    // backlog inteiro do projeto (mesmo escopo do userscript legado). Sem
+    // colaborador vinculado ao meu perfil, não há como saber quais são "meus".
+    if (!myCollaborator || item.assigneeId !== myCollaborator.id) return false;
     if (search.trim() && !`${item.id} ${item.title}`.toLowerCase().includes(search.trim().toLowerCase())) return false;
     if (typeFilter.length && !typeFilter.includes(item.type)) return false;
     if (countryFilter.length && !item.countries.some((c) => countryFilter.includes(c))) return false;
@@ -58,18 +65,30 @@ export default function DevDashboard() {
 
   const totalHours = filtered.reduce((sum, item) => sum + (item.completedHours || 0), 0);
   const missingEstimateCount = filtered.filter((item) => item.completedHours == null).length;
-  const goalHours = myCollaborator?.goalHours || defaultGoalHours;
+  const goalHours = myCollaborator?.goalHours || getSetting("defaultGoalHours", defaultGoalHours);
   const goalBalance = totalHours - goalHours;
 
+  const myName = myCollaborator?.azureName || profile?.displayName || profile?.fullName || "Dev";
+  const myTone = goalBalance < 0 ? "danger" : goalBalance > 0 ? "warning" : "primary";
+  const myLabel = goalBalance < 0 ? "Abaixo da meta" : goalBalance > 0 ? "Acima da meta" : "Meta cumprida";
+  const reportTotals = {
+    developers: 1, cards: filtered.length, hours: totalHours, goal: goalHours,
+    missing: Math.max(goalHours - totalHours, 0), extra: Math.max(totalHours - goalHours, 0)
+  };
+  const reportRows = [{ name: myName, hours: totalHours, goal: goalHours, label: myLabel, tone: myTone }];
+
   function copyExecutiveReport() {
-    const lines = [
-      `Relatório executivo — ${profile?.displayName || profile?.fullName || "Dev"}`,
-      `Período: ${period.preset}`,
-      `Total de horas: ${totalHours}h`,
-      "",
-      ...filtered.map((item) => `${item.type.toUpperCase()} #${item.id} — ${item.title} (${item.completedHours ?? "não estimado"}h)`)
-    ];
-    navigator.clipboard?.writeText(lines.join("\n"));
+    copyExecutiveReportText({ title: `Relatório executivo — ${myName}`, period: period.preset, totals: reportTotals, rows: reportRows });
+  }
+
+  function downloadPersonalPdf() {
+    downloadExecutiveReportPdf({
+      title: `Stark Hub — Relatório Executivo (${myName})`,
+      period: period.preset,
+      totals: reportTotals,
+      rows: reportRows,
+      filename: `stark-hub-meus-itens-${new Date().toISOString().slice(0, 10)}.pdf`
+    });
   }
 
   function toggleSelected(id) {
@@ -116,6 +135,9 @@ export default function DevDashboard() {
           )}
           <button className="btn btn-sm btn-outline-primary d-flex align-items-center gap-1" onClick={copyExecutiveReport}>
             <FiCopy /> Copiar relatório executivo
+          </button>
+          <button className="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1" onClick={downloadPersonalPdf}>
+            <FiFileText /> Baixar PDF
           </button>
         </div>
       </div>
@@ -224,6 +246,15 @@ export default function DevDashboard() {
         <div className="stark-card text-center text-muted py-5">
           Ainda não conectado à API do Azure DevOps. Configure a integração em Configurações.
         </div>
+      ) : itemsError ? (
+        <div className="stark-card text-center py-5">
+          <div className="alert alert-danger d-inline-block mb-0">{itemsError}</div>
+        </div>
+      ) : !myCollaborator && !demoMode ? (
+        <div className="stark-card text-center text-muted py-5">
+          Seu perfil ainda não está vinculado a um colaborador (com o nome exato de "Assigned To" no Azure DevOps).
+          Peça para a Gestão te cadastrar em Colaboradores.
+        </div>
       ) : (
         <div className="d-flex flex-column gap-2">
           {filtered.map((item) => {
@@ -257,7 +288,7 @@ export default function DevDashboard() {
                       <strong>#{item.id}</strong> — {item.title}
                     </div>
                     <div className="d-flex align-items-center gap-3 small text-muted">
-                      <span>Dev: {assignee?.azureName || "Sem responsável"}</span>
+                      <span>Dev: {assignee?.azureName || item.assigneeName || "Sem responsável"}</span>
                       <span>QA: {qaCollaborator?.azureName || "Não definido"}</span>
                     </div>
                   </div>
@@ -300,6 +331,8 @@ export default function DevDashboard() {
 
       {newTaskModal && (
         <NewTaskModal
+          items={items}
+          myCollaborator={myCollaborator}
           onCreate={(item) => { addItem(item); setNewTaskModal(false); }}
           onClose={() => setNewTaskModal(false)}
         />

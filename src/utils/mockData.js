@@ -104,11 +104,11 @@ export const mockWorkItems = [
 ];
 
 export const mockTestEvidence = [
-  { id: "e1", workItemId: 4809, result: "pass", author: "Ana Ferreira", note: "Breakpoint 1280px, 360px. Sem regressões.", createdAt: "2026-06-29T09:38:00Z" },
-  { id: "e2", workItemId: 4780, result: "fail", author: "Ana Ferreira", note: "Menu não recolhe em telas < 400px.", createdAt: "2026-06-24T16:18:00Z" },
-  { id: "e3", workItemId: 4761, result: "limitation", author: "Ana Ferreira", note: "Ambiente de homologação não replica latência real do provedor de pagamento.", createdAt: "2026-06-18T12:55:00Z" },
-  { id: "e4", workItemId: 4755, result: "pass", author: "Ana Ferreira", note: "Textos revisados com time de i18n.", createdAt: "2026-06-27T10:28:00Z" },
-  { id: "e5", workItemId: 4718, result: "pass", author: "Ana Ferreira", note: "Validado com QA local em AR e CL.", createdAt: "2026-06-09T18:40:00Z" }
+  { id: "e1", workItemId: 4809, result: "pass", environment: "beta", author: "Ana Ferreira", note: "Breakpoint 1280px, 360px. Sem regressões.", createdAt: "2026-06-29T09:38:00Z" },
+  { id: "e2", workItemId: 4780, result: "fail", environment: "qa", author: "Ana Ferreira", note: "Menu não recolhe em telas < 400px.", createdAt: "2026-06-24T16:18:00Z" },
+  { id: "e3", workItemId: 4761, result: "limitation", environment: "prod", author: "Ana Ferreira", note: "Ambiente de homologação não replica latência real do provedor de pagamento.", createdAt: "2026-06-18T12:55:00Z" },
+  { id: "e4", workItemId: 4755, result: "pass", environment: "qa", author: "Ana Ferreira", note: "Textos revisados com time de i18n.", createdAt: "2026-06-27T10:28:00Z" },
+  { id: "e5", workItemId: 4718, result: "pass", environment: "prod", author: "Ana Ferreira", note: "Validado com QA local em AR e CL.", createdAt: "2026-06-09T18:40:00Z" }
 ];
 
 // Perfis usados quando o usuário escolhe um papel específico no modo demonstração.

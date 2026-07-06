@@ -12,11 +12,54 @@ const AuthContext = createContext(null);
 // acabou de chegar na URL após o redirect do Google, perdendo a sessão.
 const SESSION_PENDING = undefined;
 
+const OAUTH_PENDING_KEY = "stark-hub-oauth-pending";
+
 function getAuthRedirectUrl() {
   const configuredUrl = import.meta.env.VITE_AUTH_REDIRECT_URL;
   if (configuredUrl) return configuredUrl;
 
   return new URL(import.meta.env.BASE_URL, window.location.origin).toString();
+}
+
+// O Google/Supabase redireciona de volta para a raiz do app ("/"), que é uma
+// rota protegida — não para /login. Se a sessão não se estabelecer, o
+// ProtectedRoute navega para /login via history.replaceState, o que reescreve
+// a URL inteira e apaga qualquer hash/query (#error=..., #access_token=...)
+// antes que a página de login chegue a existir para ler isso. Por isso essa
+// leitura precisa acontecer aqui, no primeiro render do provider (que roda
+// antes de qualquer decisão de rota), e não no Login.jsx.
+function readOAuthDiagnostics() {
+  if (typeof window === "undefined") return null;
+
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const query = new URLSearchParams(window.location.search);
+  const description = hash.get("error_description") || query.get("error_description");
+  const error = hash.get("error") || query.get("error");
+  if (description || error) {
+    sessionStorage.removeItem(OAUTH_PENDING_KEY);
+    return decodeURIComponent((description || error).replace(/\+/g, " "));
+  }
+
+  const hasOAuthPayload =
+    hash.get("access_token") || hash.get("code") || query.get("code") || hash.get("provider_token");
+  if (hasOAuthPayload) {
+    // Retorno com token/code presente: deixa o supabase-js processar normalmente.
+    sessionStorage.removeItem(OAUTH_PENDING_KEY);
+    return null;
+  }
+
+  // Voltamos de um clique em "Entrar com Google" mas a URL não tem nem token
+  // nem erro — o Google/Supabase descartou o redirect antes de chegar aqui.
+  // Isso é sintoma clássico de a URL de redirect não estar cadastrada em
+  // Authentication > URL Configuration (Redirect URLs) no Supabase, ou de o
+  // "Authorized redirect URI" do Google Cloud não apontar para o callback do
+  // Supabase (<projeto>.supabase.co/auth/v1/callback).
+  if (sessionStorage.getItem(OAUTH_PENDING_KEY) === "1") {
+    sessionStorage.removeItem(OAUTH_PENDING_KEY);
+    return "O Google/Supabase retornou sem nenhum token de acesso. Verifique, no painel do Supabase, em Authentication > URL Configuration, se a Redirect URL do app está cadastrada, e no Google Cloud Console se o Authorized redirect URI aponta para o callback do Supabase.";
+  }
+
+  return null;
 }
 
 export function AuthProvider({ children }) {
@@ -25,6 +68,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [demoMode, setDemoMode] = useState(false);
   const [demoRole, setDemoRole] = useState(accessLevels.gestao);
+  const [oauthError] = useState(readOAuthDiagnostics);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -87,6 +131,7 @@ export function AuthProvider({ children }) {
 
   async function signInWithGoogle() {
     if (!isSupabaseConfigured) return;
+    sessionStorage.setItem(OAUTH_PENDING_KEY, "1");
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: getAuthRedirectUrl() }
@@ -134,9 +179,10 @@ export function AuthProvider({ children }) {
       signInWithGoogle,
       signOut,
       updateProfile,
-      reloadProfile: () => session?.user && loadProfile(session.user.id)
+      reloadProfile: () => session?.user && loadProfile(session.user.id),
+      oauthError
     }),
-    [session, profile, loading, demoMode, demoRole, effectiveProfile]
+    [session, profile, loading, demoMode, demoRole, effectiveProfile, oauthError]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

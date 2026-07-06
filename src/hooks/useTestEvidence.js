@@ -24,9 +24,9 @@ export function useTestEvidence() {
     }
     const { data, error } = await supabase
       .from("test_evidence")
-      .select("id, workItemId, result, note, authorId, createdAt")
+      .select("id, workItemId, result, note, environment, authorId, createdAt, author:authorId(fullName, displayName)")
       .order("createdAt", { ascending: false });
-    if (!error && data) setEvidence(data);
+    if (!error && data) setEvidence(data.map((row) => ({ ...row, authorName: row.author?.displayName || row.author?.fullName || null })));
   }, [demoMode]);
 
   useEffect(() => {

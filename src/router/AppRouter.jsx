@@ -8,6 +8,7 @@ import DevDashboard from "../pages/dev/DevDashboard.jsx";
 import QaBoard from "../pages/qa/QaBoard.jsx";
 import Governance from "../pages/management/Governance.jsx";
 import Collaborators from "../pages/management/Collaborators.jsx";
+import Import from "../pages/Import.jsx";
 import Settings from "../pages/Settings.jsx";
 import Faq from "../pages/Faq.jsx";
 import About from "../pages/About.jsx";
@@ -35,6 +36,7 @@ export default function AppRouter() {
         <Route path="/qa" element={<ProtectedRoute allow={["qa", "gestao"]}><QaBoard /></ProtectedRoute>} />
         <Route path="/management" element={<ProtectedRoute allow={["gestao"]}><Governance /></ProtectedRoute>} />
         <Route path="/management/collaborators" element={<ProtectedRoute allow={["gestao"]}><Collaborators /></ProtectedRoute>} />
+        <Route path="/import" element={<ProtectedRoute allow={["qa", "gestao"]}><Import /></ProtectedRoute>} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/faq" element={<Faq />} />
         <Route path="/about" element={<About />} />

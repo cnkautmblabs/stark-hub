@@ -59,10 +59,14 @@ export const testResultTypes = {
 // Tipo de work item do Azure DevOps — cores herdadas de workTypeInfo(), ícone
 // segue a convenção do próprio Azure DevOps (martelo=Task, livro=User Story,
 // quebra-cabeça=Feature, raio=Epic).
+// Bug/Task/User Story usam var(--stark-type-*) — mesmos tokens exatos do
+// sistema de tema definitivo do userscript (reagem a claro/escuro sozinhos).
+// Feature/Epic não tinham variante dark documentada no legado, então mantêm
+// a cor fixa original (workTypeInfo()).
 export const workItemTypes = {
-  Bug: { color: "#dc2626", background: "#fff5f5", icon: "bi-bug-fill" },
-  Task: { color: "#b7791f", background: "#fffaf0", icon: "bi-hammer" },
-  "User Story": { color: "#2563eb", background: "#eff6ff", icon: "bi-book-fill" },
+  Bug: { color: "var(--starkTypeBug)", background: "var(--starkTypeBugBg)", icon: "bi-bug-fill" },
+  Task: { color: "var(--starkTypeTask)", background: "var(--starkTypeTaskBg)", icon: "bi-hammer" },
+  "User Story": { color: "var(--starkTypeStory)", background: "var(--starkTypeStoryBg)", icon: "bi-book-fill" },
   Feature: { color: "#7c3aed", background: "#f5f3ff", icon: "bi-puzzle-fill" },
   Epic: { color: "#ea580c", background: "#fff7ed", icon: "bi-lightning-charge-fill" }
 };

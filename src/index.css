@@ -1,24 +1,85 @@
+/* Tokens extraídos do sistema de tema definitivo do userscript legado
+   (".mbqa-light" / ".mbqa-dark" da v5.5.7+ "SCOPED THEME SYSTEM") — mesmos
+   valores exatos, só renomeados para o padrão --stark* já usado no projeto. */
 :root[data-theme="light"] {
-  --starkBackground: #f4f6fb;
+  --starkBackground: #f7f9fc;
   --starkSurface: #ffffff;
-  --starkSurfaceAlt: #eef1f7;
-  --starkText: #10131a;
-  --starkMuted: #5b6472;
-  --starkBorder: #dde2ea;
-  --starkAccent: #0ea5e9;
-  --starkAccentSoft: #e0f4ff;
+  --starkSurfaceAlt: #f1f5f9;
+  --starkSurfaceAlt2: #e8eef6;
+  --starkText: #0f172a;
+  --starkMuted: #607089;
+  --starkBorder: #cfd9e6;
+  --starkAccent: #0b74de;
+  --starkAccentSoft: #eaf4ff;
+  --starkTypeStory: #0b74de;
+  --starkTypeStoryBg: #eaf4ff;
+  --starkTypeTask: #a66f00;
+  --starkTypeTaskBg: #fff8dc;
+  --starkTypeBug: #c62828;
+  --starkTypeBugBg: #fff0f0;
+  color-scheme: light;
 }
 
 :root[data-theme="dark"] {
-  --starkBackground: #0b1220;
-  --starkSurface: #121a2b;
-  --starkSurfaceAlt: #182338;
-  --starkText: #eef2f8;
-  --starkMuted: #93a0b4;
-  --starkBorder: #263349;
-  --starkAccent: #38bdf8;
-  --starkAccentSoft: #0e2c3d;
+  --starkBackground: #07111f;
+  --starkSurface: #0e1b2d;
+  --starkSurfaceAlt: #16263b;
+  --starkSurfaceAlt2: #20334b;
+  --starkText: #f7fbff;
+  --starkMuted: #a9bad0;
+  --starkBorder: #38506b;
+  --starkAccent: #60a5fa;
+  --starkAccentSoft: #102b49;
+  --starkTypeStory: #69b2ff;
+  --starkTypeStoryBg: #102b49;
+  --starkTypeTask: #ffd84d;
+  --starkTypeTaskBg: #352f12;
+  --starkTypeBug: #ff8181;
+  --starkTypeBugBg: #3a2028;
+  color-scheme: dark;
 }
+
+/* O Bootstrap padrão (form-control, text-muted, progress, dropdown, etc.)
+   não conhece nosso tema — sem isso, esses elementos ficam claros/ilegíveis
+   por cima do fundo escuro (confirmado visualmente: inputs e textarea com
+   fundo branco chapado, texto muted quase invisível, trilho do progress
+   bar claro dentro de um card escuro). */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+:root[data-theme="dark"] .text-muted { color: var(--starkMuted) !important; }
+:root[data-theme="dark"] hr { border-color: var(--starkBorder); opacity: 1; }
+:root[data-theme="dark"] .border,
+:root[data-theme="dark"] .border-top,
+:root[data-theme="dark"] .border-bottom,
+:root[data-theme="dark"] .border-start,
+:root[data-theme="dark"] .border-end {
+  border-color: var(--starkBorder) !important;
+}
+:root[data-theme="dark"] :is(.form-control, .form-select, textarea, input, select) {
+  background-color: var(--starkSurfaceAlt);
+  color: var(--starkText);
+  border-color: var(--starkBorder);
+}
+:root[data-theme="dark"] :is(.form-control, textarea, input)::placeholder { color: var(--starkMuted); opacity: 1; }
+:root[data-theme="dark"] :is(.form-control, .form-select, textarea, input, select):focus {
+  background-color: var(--starkSurfaceAlt);
+  color: var(--starkText);
+  border-color: var(--starkAccent);
+  box-shadow: 0 0 0 .2rem rgba(96, 165, 250, .18);
+}
+:root[data-theme="dark"] :is(.form-control, .form-select):disabled { background-color: var(--starkSurface); color: var(--starkMuted); }
+:root[data-theme="dark"] .progress { background-color: var(--starkSurfaceAlt2); }
+:root[data-theme="dark"] .btn-outline-secondary {
+  color: var(--starkText); border-color: var(--starkBorder);
+}
+:root[data-theme="dark"] .btn-outline-secondary:hover { background-color: var(--starkSurfaceAlt); color: var(--starkText); }
+:root[data-theme="dark"] .btn-outline-primary { color: var(--starkAccent); border-color: var(--starkAccent); }
+:root[data-theme="dark"] .btn-link { color: var(--starkAccent); }
+:root[data-theme="dark"] .dropdown-menu { background-color: var(--starkSurface); color: var(--starkText); border-color: var(--starkBorder); }
+:root[data-theme="dark"] .alert-danger { background-color: #3a2028; border-color: #5c2c36; color: #ffb3b3; }
+:root[data-theme="dark"] .alert-warning { background-color: #3a3212; border-color: #5c4e1c; color: #ffe28a; }
+:root[data-theme="dark"] .alert-success { background-color: #123524; border-color: #1f8a55; color: #86efac; }
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
@@ -31,7 +92,7 @@ body {
 
 .stark-app-shell { display: flex; min-height: 100vh; }
 .stark-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.stark-content { flex: 1; padding: 24px; overflow: auto; }
+.stark-content { flex: 1; padding: 18px; overflow: auto; }
 
 .stark-sidebar {
   width: 240px; min-width: 240px;
@@ -41,13 +102,14 @@ body {
   transition: width .18s ease, min-width .18s ease;
 }
 .stark-sidebar.collapsed { width: 68px; min-width: 68px; }
-.stark-sidebar-brand { display: flex; align-items: center; gap: 10px; padding: 16px 14px; border-bottom: 1px solid var(--starkBorder); }
-.stark-sidebar-brand span { font-weight: 800; font-size: 15px; white-space: nowrap; overflow: hidden; }
+.stark-sidebar-brand { display: flex; align-items: center; gap: 10px; padding: 0 14px; height: 44px; border-bottom: 1px solid var(--starkBorder); }
+.stark-sidebar-brand span { font-weight: 800; font-size: 14px; white-space: nowrap; overflow: hidden; }
 
 .stark-nav-link {
   display: flex; align-items: center; gap: 12px;
-  padding: 10px 14px; color: var(--starkMuted); text-decoration: none;
-  border-radius: 8px; margin: 2px 8px; white-space: nowrap; overflow: hidden;
+  padding: 9px 14px; color: var(--starkMuted); text-decoration: none;
+  font-size: 13px; font-weight: 600;
+  border-radius: 7px; margin: 2px 8px; white-space: nowrap; overflow: hidden;
 }
 .stark-nav-link:hover { background: var(--starkSurfaceAlt); color: var(--starkText); }
 .stark-nav-link.active { background: var(--starkAccentSoft); color: var(--starkAccent); font-weight: 700; }
@@ -55,8 +117,8 @@ body {
 .stark-sidebar.collapsed .stark-nav-label { display: none; }
 
 .stark-topbar {
-  height: 58px; display: flex; align-items: center; justify-content: space-between;
-  padding: 0 18px; background: var(--starkSurface); border-bottom: 1px solid var(--starkBorder);
+  height: 44px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 16px; background: var(--starkSurface); border-bottom: 1px solid var(--starkBorder);
 }
 
 .stark-reactor { width: 30px; height: 30px; flex: none; }
@@ -74,8 +136,22 @@ body {
 }
 @keyframes starkShimmer { 100% { transform: translateX(100%); } }
 
-.stark-card { background: var(--starkSurface); border: 1px solid var(--starkBorder); border-radius: 12px; padding: 16px; }
+.stark-card { background: var(--starkSurface); border: 1px solid var(--starkBorder); border-radius: 9px; padding: 12px 14px; }
 .stark-badge-demo { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: #fef3c7; color: #92400e; }
+
+/* Accordion de configurações agrupadas — mesmo padrão visual do painel
+   "Configurações" do userscript legado (.mbaz-config-acc): cartão com borda,
+   cabeçalho clicável de altura fixa e seta que gira ao abrir. */
+.stark-accordion { border: 1px solid var(--starkBorder); border-radius: 8px; margin-bottom: 10px; background: var(--starkSurfaceAlt); overflow: hidden; }
+.stark-accordion:last-child { margin-bottom: 0; }
+.stark-accordion > summary {
+  height: 38px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between;
+  cursor: pointer; font-size: 12px; font-weight: 800; color: var(--starkText); list-style: none;
+}
+.stark-accordion > summary::-webkit-details-marker { display: none; }
+.stark-accordion > summary::after { content: "\25BC"; font-size: 10px; color: var(--starkMuted); transition: transform .15s ease; }
+.stark-accordion[open] > summary::after { transform: rotate(-180deg); }
+.stark-accordion-body { padding: 0 12px 12px; border-top: 1px solid var(--starkBorder); padding-top: 12px; }
 
 /* ---------- Login: fundo animado (grid + glow + anéis + partículas) ---------- */
 .stark-text-cyan { color: var(--starkAccent); }
@@ -330,3 +406,15 @@ body {
 .stark-login-footer .stark-brand-footer-logo { height: 20px; opacity: .9; }
 .stark-login-footer .stark-brand-footer-text { color: rgba(255,255,255,.55); font-size: 11px; white-space: normal; text-align: center; }
 .stark-login-footer .stark-brand-footer-text a { color: var(--starkAccent); }
+
+/* ---------- Dashboard de status do QA Board (cards clicáveis) ---------- */
+.stark-stat-card {
+  background: var(--starkSurfaceAlt); border: 1px solid var(--starkBorder);
+  border-radius: 8px; padding: 8px 10px; cursor: pointer;
+  transition: border-color .12s ease, background .12s ease;
+}
+.stark-stat-card:hover { border-color: var(--stat-color, var(--starkAccent)); }
+.stark-stat-card.active {
+  border-color: var(--stat-color, var(--starkAccent));
+  background: color-mix(in srgb, var(--stat-color, var(--starkAccent)) 12%, var(--starkSurfaceAlt));
+}

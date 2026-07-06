@@ -55,8 +55,24 @@ async function createWorkItem(baseUrl, project, authHeader, item) {
     { op: "add", path: "/fields/System.Title", value: item.title }
   ];
   if (item.sprint) patchOps.push({ op: "add", path: "/fields/System.IterationPath", value: item.sprint });
+  if (item.areaPath) patchOps.push({ op: "add", path: "/fields/System.AreaPath", value: item.areaPath });
+  if (item.description) patchOps.push({ op: "add", path: "/fields/System.Description", value: item.description });
+  if (item.assigneeAlias) patchOps.push({ op: "add", path: "/fields/System.AssignedTo", value: item.assigneeAlias });
   const tags = [...(item.countries || []).map((code) => `0-${code}`), ...(item.tags || [])];
   if (tags.length) patchOps.push({ op: "add", path: "/fields/System.Tags", value: tags.join("; ") });
+  // Vincula como filho da User Story/Bug escolhida como Parent — mesmo
+  // comportamento do userscript legado (criar Task a partir de uma US/Bug).
+  if (item.parentId) {
+    patchOps.push({
+      op: "add",
+      path: "/relations/-",
+      value: {
+        rel: "System.LinkTypes.Hierarchy-Reverse",
+        url: `${baseUrl}/_apis/wit/workItems/${item.parentId}`,
+        attributes: { comment: "Criado pelo Stark Hub a partir do Parent" }
+      }
+    });
+  }
 
   const response = await fetch(`${baseUrl}/${encodeURIComponent(project)}/_apis/wit/workitems/$${encodeURIComponent(item.type)}?api-version=7.1`, {
     method: "POST",

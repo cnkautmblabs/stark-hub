@@ -85,6 +85,8 @@ const WORK_ITEM_FIELDS = [
   "System.Tags",
   "System.AssignedTo",
   "System.IterationPath",
+  "System.AreaPath",
+  "System.Description",
   "System.ChangedDate",
   "Microsoft.VSTS.Scheduling.CompletedWork"
 ];
@@ -100,23 +102,102 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: "Corpo da requisição inválido." }, 400);
   }
 
-  const { orgUrl, project, pat } = payload || {};
+  const { orgUrl, project, pat, team, iterationPattern, customQuery, maxItems } = payload || {};
   if (!orgUrl || !project || !pat) {
     return json({ ok: false, error: "Conexão com Azure DevOps não configurada." }, 400);
   }
 
   const baseUrl = normalizeOrgUrl(orgUrl);
   const authHeader = `Basic ${btoa(`:${pat}`)}`;
+  const projectPath = `${baseUrl}/${encodeURIComponent(project)}`;
+
+  // Mesma estratégia do userscript legado (ensureSprintsLoaded): tenta as
+  // iterations do TIME primeiro (mais preciso), mas nunca trava nisso — o
+  // nome exato do Time na API do Azure nem sempre bate com o nome visível
+  // na UI. Se falhar, cai para a árvore de iterations do projeto inteiro
+  // (classificationnodes, que sempre funciona) e filtra pelo padrão de
+  // nome configurado (ex.: "MB Labs") — exatamente a convenção que o
+  // userscript usava (inferIterationFromPage/isMbLabsIterationPath).
+  let allPaths = [];
+  let usedTeamScope = false;
+
+  if (team) {
+    try {
+      const teamResponse = await fetch(
+        `${projectPath}/${encodeURIComponent(team)}/_apis/work/teamsettings/iterations?api-version=7.1`,
+        { headers: { Authorization: authHeader } }
+      );
+      if (teamResponse.ok) {
+        const teamData = await teamResponse.json();
+        const teamPaths = (teamData.value || []).map((it) => it.path).filter(Boolean);
+        if (teamPaths.length) {
+          allPaths = teamPaths;
+          usedTeamScope = true;
+        }
+      }
+    } catch {
+      // Time não encontrado/indisponível: segue para o fallback abaixo.
+    }
+  }
+
+  if (!usedTeamScope) {
+    try {
+      const nodesResponse = await fetch(
+        `${projectPath}/_apis/wit/classificationnodes/iterations?$depth=6&api-version=7.1`,
+        { headers: { Authorization: authHeader } }
+      );
+      if (nodesResponse.status === 401 || nodesResponse.status === 203) {
+        return json({ ok: false, error: "PAT inválido ou sem permissão para ler as iterations do projeto." });
+      }
+      if (!nodesResponse.ok) {
+        return json({ ok: false, error: `Não foi possível listar as iterations do projeto (status ${nodesResponse.status}).` });
+      }
+      const nodesData = await nodesResponse.json();
+      const flattened = [];
+      (function walk(node, parentPath) {
+        if (!node) return;
+        const path = parentPath ? `${parentPath}\\${node.name}` : node.name;
+        flattened.push(path);
+        (node.children || []).forEach((child) => walk(child, path));
+      })(nodesData, "");
+      allPaths = flattened;
+    } catch (err) {
+      return json({ ok: false, error: `Falha ao listar iterations do projeto: ${err.message}` }, 502);
+    }
+  }
+
+  const pattern = String(iterationPattern || "").trim().toLowerCase();
+  const scopedPaths = pattern ? allPaths.filter((path) => path.toLowerCase().includes(pattern)) : allPaths;
+
+  // Um padrão configurado que não bate com NADA é quase sempre erro de
+  // digitação — melhor travar aqui com um aviso claro do que devolver o
+  // projeto inteiro sem avisar (foi esse silêncio que vazou a Lenio Labs).
+  if (pattern && !scopedPaths.length) {
+    return json({ ok: false, error: `Nenhuma iteration do projeto contém "${iterationPattern}". Confira o "Padrão do nome da iteration" em Configurações.` });
+  }
+  if (!scopedPaths.length) {
+    return json({ ok: false, error: "Não foi possível determinar as iterations do projeto (nem por Time, nem pela árvore geral)." });
+  }
+
+  const iterationClause = `AND (${scopedPaths.map((path) => `[System.IterationPath] UNDER '${path.replace(/'/g, "''")}'`).join(" OR ")})`;
+
+  // Filtro de tipo/estado é customizável em Configurações (mesmo espírito do
+  // "customQuery" do userscript legado), mas o escopo de projeto/iteration
+  // acima é SEMPRE aplicado por cima — nunca fica a critério da query
+  // customizada, pelo mesmo motivo do resto do arquivo (vazamento Lenio Labs).
+  const defaultFilter = `[System.WorkItemType] IN ('Bug','Task','User Story','Feature') AND [System.State] NOT IN ('Removed','Closed')`;
+  const filterBody = String(customQuery || "").trim() || defaultFilter;
+  const topN = Math.min(Math.max(parseInt(maxItems, 10) || 200, 1), 2000);
 
   const wiql = `SELECT [System.Id] FROM WorkItems
     WHERE [System.TeamProject] = '${String(project).replace(/'/g, "''")}'
-    AND [System.WorkItemType] IN ('Bug','Task','User Story','Feature')
-    AND [System.State] NOT IN ('Removed','Closed')
+    AND (${filterBody})
+    ${iterationClause}
     ORDER BY [System.ChangedDate] DESC`;
 
   let wiqlResponse;
   try {
-    wiqlResponse = await fetch(`${baseUrl}/${encodeURIComponent(project)}/_apis/wit/wiql?$top=200&api-version=7.1`, {
+    wiqlResponse = await fetch(`${baseUrl}/${encodeURIComponent(project)}/_apis/wit/wiql?$top=${topN}&api-version=7.1`, {
       method: "POST",
       headers: { Authorization: authHeader, "Content-Type": "application/json" },
       body: JSON.stringify({ query: wiql })
@@ -129,6 +210,9 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: "Personal Access Token inválido ou sem permissão." });
   }
   if (!wiqlResponse.ok) {
+    if (wiqlResponse.status === 400 && String(customQuery || "").trim()) {
+      return json({ ok: false, error: "A condição WIQL personalizada em Configurações é inválida. Confira a sintaxe (sem SELECT/WHERE, só a condição) e tente de novo." });
+    }
     return json({ ok: false, error: `Azure DevOps retornou status ${wiqlResponse.status} na consulta WIQL.` });
   }
 
@@ -201,8 +285,16 @@ Deno.serve(async (req) => {
       countries: countriesFromTags(fields["System.Tags"]),
       tags: tagsList(fields["System.Tags"]),
       sprint: sprintFromIterationPath(fields["System.IterationPath"]),
+      areaPath: fields["System.AreaPath"] || null,
+      description: fields["System.Description"] || "",
       completedHours: fields["Microsoft.VSTS.Scheduling.CompletedWork"] ?? null,
+      // O nome bruto do Azure SEMPRE vai junto, mesmo sem colaborador
+      // cadastrado — o userscript legado nunca escondia o "Assigned To" só
+      // porque a pessoa não tinha avatar/cor configurados; ele mostrava o
+      // nome puro. Aqui, assigneeId só existe quando bate um colaborador
+      // cadastrado (pra avatar/cor); assigneeName é o fallback de exibição.
       assigneeId: collaboratorByAzureName.get(assigneeName.toLowerCase()) || null,
+      assigneeName: assigneeName || null,
       qaCollaboratorId,
       lastTestResult: lastResultByItemId.get(id) || null,
       updatedAt: fields["System.ChangedDate"]

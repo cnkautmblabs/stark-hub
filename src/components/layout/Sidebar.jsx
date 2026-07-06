@@ -2,7 +2,7 @@ import React from "react";
 import { NavLink } from "react-router-dom";
 import {
   FiHome, FiClipboard, FiCheckSquare, FiSettings, FiHelpCircle, FiInfo,
-  FiChevronsLeft, FiChevronsRight, FiUsers, FiShield
+  FiChevronsLeft, FiChevronsRight, FiUsers, FiShield, FiUploadCloud
 } from "react-icons/fi";
 import ReactorLogo from "./ReactorLogo.jsx";
 import BrandFooter from "./BrandFooter.jsx";
@@ -15,13 +15,15 @@ const navByRole = {
     { to: "/dev", label: "Meus itens", icon: FiClipboard, flag: "showMyItems" }
   ],
   [accessLevels.qa]: [
-    { to: "/qa", label: "QA Board", icon: FiCheckSquare, flag: "showQaBoard" }
+    { to: "/qa", label: "QA Board", icon: FiCheckSquare, flag: "showQaBoard" },
+    { to: "/import", label: "Importar/Exportar", icon: FiUploadCloud }
   ],
   [accessLevels.gestao]: [
     { to: "/dev", label: "Meus itens", icon: FiClipboard, flag: "showMyItems" },
     { to: "/qa", label: "QA Board", icon: FiCheckSquare, flag: "showQaBoard" },
     { to: "/management", label: "Governança", icon: FiShield, flag: "showGovernance" },
-    { to: "/management/collaborators", label: "Colaboradores", icon: FiUsers, flag: "showGovernance" }
+    { to: "/management/collaborators", label: "Colaboradores", icon: FiUsers, flag: "showGovernance" },
+    { to: "/import", label: "Importar/Exportar", icon: FiUploadCloud }
   ]
 };
 
@@ -43,7 +45,7 @@ export default function Sidebar({ collapsed, onToggle }) {
           <FiHome /> <span className="stark-nav-label">Início</span>
         </NavLink>
         {items.map((item) => (
-          <NavLink key={item.to} to={item.to} className="stark-nav-link">
+          <NavLink key={item.to} to={item.to} end={item.to === "/management"} className="stark-nav-link">
             <item.icon /> <span className="stark-nav-label">{item.label}</span>
           </NavLink>
         ))}
