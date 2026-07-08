@@ -26,16 +26,20 @@ export function useCollaborators() {
     supabase.from("collaborators").select("*").then(async ({ data, error }) => {
       if (!error && data) {
         let rows = data;
-        if (profile?.accessLevel === "gestao") {
-          const profileIds = data.map((person) => person.profileId).filter(Boolean);
-          if (profileIds.length) {
-            const { data: profiles } = await supabase
-              .from("profiles")
-              .select('id, email, "fullName", "displayName", "accessLevel"')
-              .in("id", profileIds);
-            const byId = new Map((profiles || []).map((row) => [row.id, row]));
-            rows = data.map((person) => ({ ...person, linkedProfile: byId.get(person.profileId) || null, accessLevel: byId.get(person.profileId)?.accessLevel }));
-          }
+        // A policy "profiles_select_own_or_management" so deixa ler o proprio
+        // perfil OU tudo (se Gestao/Gerente) — entao buscar sempre (sem
+        // gatear por hasManagementAccess) e seguro: Dev/QA recebem so a
+        // propria linha de volta, mas passam a enxergar os campos gravados
+        // no onboarding (slackMemberId, aliases etc.) no proprio card, que
+        // antes ficavam sempre vazios por essa busca nunca rodar pra eles.
+        const profileIds = data.map((person) => person.profileId).filter(Boolean);
+        if (profileIds.length) {
+          const { data: profiles } = await supabase
+            .from("profiles")
+            .select('id, email, "fullName", "displayName", "accessLevel", "aliasAzure", "aliasSlack", "aliasVariations", "slackMemberId", "avatarUrl"')
+            .in("id", profileIds);
+          const byId = new Map((profiles || []).map((row) => [row.id, row]));
+          rows = data.map((person) => ({ ...person, linkedProfile: byId.get(person.profileId) || null, accessLevel: byId.get(person.profileId)?.accessLevel || person.accessLevel }));
         }
         setCollaborators(rows);
       }
@@ -64,7 +68,27 @@ export function useCollaborators() {
 
     if (!Object.keys(collaboratorPatch).length) return { error: null };
     const { data, error } = await supabase.from("collaborators").update(collaboratorPatch).eq("id", id).select().maybeSingle();
-    if (!error && data) setCollaborators((current) => current.map((person) => (person.id === id ? { ...person, ...data } : person)));
+    if (!error && data) {
+      setCollaborators((current) => current.map((person) => (person.id === id ? { ...person, ...data } : person)));
+      // `profiles` e `collaborators` guardam os mesmos campos de identidade
+      // (nome/Slack/avatar) com nomes diferentes — sem espelhar aqui, editar
+      // pelo Perfil so atualiza collaborators e profiles fica com o valor
+      // antigo do onboarding pra sempre, reabrindo a divergencia entre as
+      // duas tabelas que causa a maior parte da confusao de dados.
+      const collaborator = collaborators.find((person) => person.id === id);
+      if (collaborator?.profileId) {
+        const profilePatch = {};
+        if ("slackMemberId" in collaboratorPatch) profilePatch.slackMemberId = collaboratorPatch.slackMemberId;
+        if ("slackName" in collaboratorPatch) profilePatch.aliasSlack = collaboratorPatch.slackName;
+        if ("azureName" in collaboratorPatch) profilePatch.aliasAzure = collaboratorPatch.azureName;
+        if ("aliases" in collaboratorPatch) profilePatch.aliasVariations = collaboratorPatch.aliases;
+        if ("imageUrl" in collaboratorPatch) profilePatch.avatarUrl = collaboratorPatch.imageUrl;
+        if (Object.keys(profilePatch).length) {
+          await supabase.from("profiles").update(profilePatch).eq("id", collaborator.profileId);
+          setCollaborators((current) => current.map((person) => (person.id === id ? { ...person, linkedProfile: { ...(person.linkedProfile || {}), ...profilePatch } } : person)));
+        }
+      }
+    }
     return { error };
   }
 

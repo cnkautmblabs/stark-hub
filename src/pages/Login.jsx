@@ -7,7 +7,7 @@ import { FiAlertTriangle } from "react-icons/fi";
 import { allowedEmailDomains, accessLevelLabels } from "../utils/constants.js";
 import { isSupabaseConfigured } from "../lib/supabaseClient.js";
 
-const demoRoles = ["dev", "qa", "gestao"];
+const demoRoles = ["dev", "qa", "gestao", "gerente"];
 
 const particles = [
   { left: "6%", duration: "9s", delay: "0s" },

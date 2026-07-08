@@ -65,6 +65,18 @@ function legacyEvidenceToHtml(raw) {
     .replace(/\n/g, "<br/>");
 }
 
+// Discussions do Azure podem ser HTML de verdade (comentario digitado no
+// editor rico do Azure) OU texto puro na convencao do userscript legado
+// (**negrito**, ![alt](url)) — sao indistinguiveis pelo campo de origem,
+// entao decide pelo CONTEUDO: se ja tem uma tag HTML de verdade, deixa
+// passar como HTML (so sanitiza); senao, assume a convencao legada e
+// converte antes de exibir.
+function renderAzureCommentHtml(raw) {
+  const text = String(raw || "");
+  if (/<[a-z][\s\S]*>/i.test(text)) return text;
+  return legacyEvidenceToHtml(text);
+}
+
 function SlackPreview({ text }) {
   const tokenMap = {
     ":us-tag:": <img src={typeIconSrc("User Story")} alt="US" />,
@@ -429,7 +441,7 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
                     <IdentityAvatar name={entry.authorName || "QA"} imageUrl={entry.avatarUrl} size={22} />
                     <span className="mbaz-new-modal-result-author">{entry.authorName || "QA nao identificado"}</span>
                     <span className="mbaz-new-modal-result-date">{entry.createdAt ? new Date(entry.createdAt).toLocaleString("pt-BR") : ""}</span>
-                    {(entry.html || entry.note || entry.text) && <RichAzureHtml html={legacyEvidenceToHtml(entry.html || entry.note || entry.text)} />}
+                    {(entry.html || entry.note || entry.text) && <RichAzureHtml html={renderAzureCommentHtml(entry.html || entry.note || entry.text)} />}
                   </li>
                 ))}
               </ul>
@@ -458,9 +470,9 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
                   <header>
                     <IdentityAvatar name={comment.authorName} imageUrl={comment.avatarUrl} size={28} />
                     <strong>{comment.authorName}</strong>
-                    <span>{comment.createdAt ? new Date(comment.createdAt).toLocaleString("pt-BR") : "Sem data"}</span>
+                    <span className="mbaz-new-modal-disc-date">{comment.createdAt ? new Date(comment.createdAt).toLocaleString("pt-BR") : "Sem data"}</span>
                   </header>
-                  <RichAzureHtml html={comment.html || comment.text} />
+                  <RichAzureHtml html={renderAzureCommentHtml(comment.html || comment.text)} />
                 </article>
               )) : <p className="mbaz-new-modal-muted">Nenhuma discussion carregada para este Work Item.</p>}
             </div>

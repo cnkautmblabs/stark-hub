@@ -274,6 +274,7 @@ export const accessLevelBadgeConfig = {
   dev: { label: "Dev", color: "#2563eb", tooltip: "Dev — acesso a Meus itens, Horas e Configurações pessoais." },
   qa: { label: "QA", color: "#7c3aed", tooltip: "QA — acesso a Quality Board, Testes e Configurações pessoais." },
   gestao: { label: "Gestão", color: "#16a34a", tooltip: "Gestão — acesso completo: Produto, Governança, Configurações e Colaboradores." },
+  gerente: { label: "Gerente", color: "#b45309", tooltip: "Gerente — tudo que Gestão tem, mais o Gerenciamento (dashboard executivo)." },
   admin: { label: "Admin", color: "#ea580c", tooltip: "Administrador(a) — acesso total ao sistema." },
   pending: { label: "Pendente", color: "#64748b", tooltip: "Aguardando liberação de acesso." }
 };
@@ -281,6 +282,7 @@ export const accessLevelBadgeConfig = {
 export function RoleBadgeIcon({ level }) {
   if (level === "dev") return <i className="bi bi-code-slash" />;
   if (level === "admin") return <i className="bi bi-gear-fill" />;
+  if (level === "gerente") return <i className="bi bi-briefcase-fill" />;
   if (level === "gestao") {
     return (
       <svg viewBox="0 0 20 20" width="10" height="10" fill="currentColor">

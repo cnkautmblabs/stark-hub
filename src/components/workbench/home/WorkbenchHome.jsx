@@ -6,7 +6,7 @@ import { useWorkItems } from "../../../hooks/useWorkItems.js";
 import { useTestEvidence } from "../../../hooks/useTestEvidence.js";
 import { useCollaborators } from "../../../hooks/useCollaborators.js";
 import { useAppSettings } from "../../../hooks/useAppSettings.js";
-import { accessLevelLabels, accessLevels, defaultGoalHours } from "../../../utils/constants.js";
+import { accessLevelLabels, accessLevels, defaultGoalHours, hasManagementAccess } from "../../../utils/constants.js";
 import { formatHours, normalize } from "../../../utils/workbench/formatters.js";
 import { compactSprintLabel, findCurrentSprint } from "../../../utils/sprints.js";
 import {
@@ -408,7 +408,8 @@ export function WorkbenchHome() {
   const accessLabel = accessLevelLabels[access] || "Acesso";
   const isDev = access === accessLevels.dev;
   const isQa = access === accessLevels.qa;
-  const isGestao = access === accessLevels.gestao;
+  const isGestao = hasManagementAccess(access);
+  const isGerente = access === accessLevels.gerente;
   const userKey = profile?.id || user?.email || "anonymous";
   const goalDefault = getSetting("defaultGoalHours", defaultGoalHours);
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL || "";
@@ -425,9 +426,10 @@ export function WorkbenchHome() {
   useEffect(() => { writeLocal(storageKey("HomeSummary", userKey), summaryEntries); }, [summaryEntries, userKey]);
 
   const quickLinks = [
-    { to: "/dev", label: "Meus itens", icon: FiUser, show: [accessLevels.dev, accessLevels.qa, accessLevels.gestao].includes(access) },
-    { to: "/qa", label: "Quality Board", icon: FiCheckCircle, show: [accessLevels.qa, accessLevels.gestao].includes(access) },
-    { to: "/management", label: "Governanca", icon: FiShield, show: access === accessLevels.gestao },
+    { to: "/dev", label: "Meus itens", icon: FiUser, show: [accessLevels.dev, accessLevels.qa, accessLevels.gestao, accessLevels.gerente].includes(access) },
+    { to: "/qa", label: "Quality Board", icon: FiCheckCircle, show: [accessLevels.qa, accessLevels.gestao, accessLevels.gerente].includes(access) },
+    { to: "/management", label: "Governanca", icon: FiShield, show: isGestao },
+    { to: "/management/dashboard", label: "Gerenciamento", icon: FiShield, show: isGerente },
     { to: "/settings", label: "Conexoes", icon: FiPlus, show: true }
   ].filter((item) => item.show);
 

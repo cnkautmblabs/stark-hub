@@ -1,20 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase, isSupabaseConfigured } from "../lib/supabaseClient.js";
 import { useAuth } from "../contexts/AuthContext.jsx";
+import { hasManagementAccess } from "../utils/constants.js";
 
 // Diretório bruto de profiles (contas que já logaram com Google). Existe só
-// para a Gestão enxergar quem logou mas ainda não tem colaborador vinculado
-// — sem isso, um usuário novo fica invisível para sempre: handle_new_user
-// (schema.sql) só cria o profile com accessLevel "pending", nunca cria um
-// collaborator, e a tela de Colaboradores só listava collaborators.
+// para a Gestão/Gerente enxergar quem logou mas ainda não tem colaborador
+// vinculado — sem isso, um usuário novo fica invisível para sempre:
+// handle_new_user (schema.sql) só cria o profile com accessLevel "pending",
+// nunca cria um collaborator, e a tela de Colaboradores só listava
+// collaborators.
 export function useProfiles() {
   const { demoMode, profile: myProfile } = useAuth();
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(!demoMode);
-  const isGestao = myProfile?.accessLevel === "gestao";
+  const canManage = hasManagementAccess(myProfile?.accessLevel);
 
-  useEffect(() => {
-    if (demoMode || !isSupabaseConfigured || !isGestao) {
+  const reload = useCallback(() => {
+    if (demoMode || !isSupabaseConfigured || !canManage) {
       setLoading(false);
       return;
     }
@@ -23,7 +25,12 @@ export function useProfiles() {
       if (!error && data) setProfiles(data);
       setLoading(false);
     });
-  }, [demoMode, isGestao]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoMode, canManage]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
 
   async function setAccessLevel(id, accessLevel) {
     if (!isSupabaseConfigured) return { error: new Error("Supabase não configurado") };
@@ -32,5 +39,5 @@ export function useProfiles() {
     return { error };
   }
 
-  return { profiles, loading, setAccessLevel };
+  return { profiles, loading, setAccessLevel, reload };
 }

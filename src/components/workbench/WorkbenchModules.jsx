@@ -42,6 +42,7 @@ import {
   countries,
   defaultGoalHours,
   formatWorkItemCode,
+  hasManagementAccess,
   nextEnvStep,
   workItemTypes
 } from "../../utils/constants.js";
@@ -160,6 +161,35 @@ function collaboratorMatchesTokens(person, tokens) {
   return identityMatches(tokens, person?.id, person?.profileId, person?.azureName, person?.slackName, person?.email, ...(person?.aliases || []));
 }
 
+// Indexa colaboradores por TODO nome/apelido conhecido (azureName, slackName,
+// aliases cadastrados e variacoes de ordem "Sobrenome, Nome"), nao apenas o
+// azureName exato — evita criar um card duplicado quando o nome exibido pelo
+// Azure para a mesma pessoa nao bate 100% com o azureName cadastrado.
+function buildCollaboratorNameIndex(collaborators) {
+  const map = new Map();
+  (collaborators || []).forEach((person) => {
+    const names = [
+      person.azureName,
+      ...identityNameVariants(person.azureName),
+      person.slackName,
+      ...identityNameVariants(person.slackName),
+      ...(person.aliases || [])
+    ].filter(Boolean);
+    names.forEach((name) => {
+      const key = normalize(name);
+      if (key && !map.has(key)) map.set(key, person);
+    });
+  });
+  return map;
+}
+
+function findCollaboratorByName(index, rawName) {
+  if (!rawName) return null;
+  const direct = index.get(normalize(rawName));
+  if (direct) return direct;
+  return identityNameVariants(rawName).map((variant) => index.get(normalize(variant))).find(Boolean) || null;
+}
+
 function evidenceMatchesTokens(entry, tokens) {
   return identityMatches(
     tokens,
@@ -182,8 +212,13 @@ function normalizeEvidenceResult(result) {
   return value || "pending";
 }
 
-function recordsForItem(item) {
-  return item.discussionEvidence || item.evidence || [];
+// Sempre mescla test_evidence (fonte confiavel, gravada pelo proprio Stark
+// Hub) com discussionEvidence (best-effort, extraida de comentarios do
+// Azure) — usar so o segundo deixava os resumos de teste vazios sempre que
+// o fetch em lote de discussions falhava (ver azureWorkItemDetail).
+function recordsForItem(item, evidence = []) {
+  const own = evidence.filter((entry) => String(entry.workItemId) === String(item.id));
+  return [...own, ...(item.discussionEvidence || item.evidence || [])];
 }
 
 function sortedEvidenceRecords(records = []) {
@@ -229,7 +264,7 @@ function EvidenceRunFlow({ records = [], limit = 8 }) {
 
 export function QaBoardWorkbench() {
   const { profile, demoMode } = useAuth();
-  const { items, updateItem, addItem, reload, loading, needsAzureIntegration, error } = useWorkItems();
+  const { items, updateItem, addItem, reload, loading, refreshing, needsAzureIntegration, error } = useWorkItems();
   const { collaborators } = useCollaborators();
   const { evidence, reload: reloadEvidence } = useTestEvidence();
   const [search, setSearch] = useState("");
@@ -514,7 +549,7 @@ export function QaBoardWorkbench() {
           <div className="mbaz-search"><FiSearch /><input id="mbaz-search" className="mbaz-input" placeholder="Buscar por id, titulo, pessoa, pais..." value={search} onChange={(event) => setSearch(event.target.value)} /></div>
           <button id="mbaz-toggle-create" className="mbaz-btn" type="button" onClick={() => setShowCreate((value) => !value)}>Novo</button>
           <button id="mbaz-view-toggle" className="mbaz-icon-btn" type="button" title="Alternar grid" onClick={() => setViewMode((value) => value === "grid" ? "list" : "grid")}><i className={`bi ${viewMode === "grid" ? "bi-view-list" : "bi-grid-3x3-gap"}`} /></button>
-          <button id="mbaz-refresh" className="mbaz-btn mbaz-primary" type="button" onClick={reload}><i className="bi bi-arrow-clockwise" /> Atualizar</button>
+          <button id="mbaz-refresh" className="mbaz-btn mbaz-primary" type="button" onClick={reload}><i className={`bi bi-arrow-clockwise ${refreshing ? "mbw-spin" : ""}`} /> Atualizar</button>
           <button id="mbaz-export" className="mbaz-icon-btn" type="button" title="Exportar CSV" onClick={() => exportQaCsv(filtered)}><i className="bi bi-download" /></button>
         </div>
         <div className="mbaz-content">
@@ -681,7 +716,7 @@ export function QaBoardWorkbench() {
 
 export function MyItemsWorkbench() {
   const { profile, user, demoMode } = useAuth();
-  const { items, loading, updateItem, addItem, reload, needsAzureIntegration, error } = useWorkItems();
+  const { items, loading, refreshing, updateItem, addItem, reload, needsAzureIntegration, error } = useWorkItems();
   const { collaborators } = useCollaborators();
   const { evidence } = useTestEvidence();
   const { getSetting } = useAppSettings();
@@ -779,7 +814,7 @@ export function MyItemsWorkbench() {
   ];
   const environmentOptions = ["DEV", "QA", "BETA", "PROD"];
   const visibleItems = allMine.filter((item) => {
-    const itemRecords = recordsForItem(item);
+    const itemRecords = recordsForItem(item, evidence);
     const itemResults = itemRecords.length ? itemRecords.map((entry) => normalizeResult(entry.result || entry.status)) : ["pending"];
     const itemEnvironments = itemRecords.flatMap((entry) => entry.environments || [entry.environment || entry.env]).map((env) => evidenceEnv({ environment: env }));
     if (search && !normalize(`${item.id} ${item.title}`).includes(normalize(search))) return false;
@@ -802,11 +837,11 @@ export function MyItemsWorkbench() {
   const withHours = allMine.filter((item) => Number(item.completedHours || 0) > 0).length;
   const withoutHours = allMine.length - withHours;
   const testedByMe = allMine.filter((item) => (item.myItemSources || []).includes("qa-testado")).length;
-  const testedTotal = allMine.filter((item) => recordsForItem(item).length > 0).length;
+  const testedTotal = allMine.filter((item) => recordsForItem(item, evidence).length > 0).length;
   const azureAssignedTotal = allMine.filter((item) => (item.myItemSources || []).includes("azure")).length;
   const qaResponsibleTotal = allMine.filter((item) => (item.myItemSources || []).includes("qa-responsavel")).length;
   const filteredTestCounts = visibleItems.reduce((acc, item) => {
-    recordsForItem(item).forEach((entry) => {
+    recordsForItem(item, evidence).forEach((entry) => {
       const result = normalizeResult(entry.result || entry.status);
       const envs = entry.environments || [entry.environment || entry.env || "N/A"];
       acc.total += 1;
@@ -905,7 +940,7 @@ export function MyItemsWorkbench() {
 
   function renderMyCard(item) {
     return isQa && item.myItemCardType === "qa"
-      ? <MyQaBoardItemCard key={item.id} item={item} collaboratorsById={collaboratorById} qaPeople={qaPeople} onOpen={setActiveItem} onQaChange={(qaCollaboratorId) => updateItem(item.id, { qaCollaboratorId })} />
+      ? <MyQaBoardItemCard key={item.id} item={item} collaboratorsById={collaboratorById} qaPeople={qaPeople} onOpen={setActiveItem} onQaChange={(qaCollaboratorId) => updateItem(item.id, { qaCollaboratorId })} evidence={evidence} />
       : <MyItemCard key={item.id} item={item} checked={selectedIds.includes(item.id)} onCheck={toggleSelected} onOpen={setActiveItem} onHours={openHours} />;
   }
 
@@ -940,7 +975,7 @@ export function MyItemsWorkbench() {
           <IconButton title="Grid" onClick={() => setViewMode("grid")}><i className="bi bi-grid-3x3-gap" /></IconButton>
           <IconButton title="Compacto" onClick={() => setViewMode("compact")}><i className="bi bi-list" /></IconButton>
           {demoMode && <IconButton title="Nova tarefa" onClick={createDemoTask}><i className="bi bi-plus-lg" /></IconButton>}
-          <IconButton title="Atualizar" onClick={reload}><FiRefreshCw /></IconButton>
+          <IconButton title="Atualizar" onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /></IconButton>
         </>}
       />
       <ConnectionGate needsAzureIntegration={needsAzureIntegration} error={error}>
@@ -1070,8 +1105,8 @@ function bugFallbackNext(state) {
   return index >= 0 && index < flow.length - 1 ? flow[index + 1] : "";
 }
 
-function testSummaryForItem(item) {
-  const records = recordsForItem(item);
+function testSummaryForItem(item, evidence = []) {
+  const records = recordsForItem(item, evidence);
   return records.reduce((acc, entry) => {
     const key = normalizeEvidenceResult(entry.result || entry.status);
     const env = evidenceEnv(entry);
@@ -1084,11 +1119,11 @@ function testSummaryForItem(item) {
   }, { total: 0, pass: 0, fail: 0, limitation: 0, pending: 0, byEnv: {} });
 }
 
-function MyQaBoardItemCard({ item, collaboratorsById, qaPeople, onOpen, onQaChange }) {
+function MyQaBoardItemCard({ item, collaboratorsById, qaPeople, onOpen, onQaChange, evidence = [] }) {
   const [expanded, setExpanded] = useState(false);
   const status = qaStatusInfo(item.state);
   const type = workTypeInfo(item.type);
-  const records = recordsForItem(item).slice().sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+  const records = recordsForItem(item, evidence).slice().sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
   const latest = records[0];
   const latestInfo = evidenceResultInfo(latest?.result || item.lastTestResult);
   const assignee = collaboratorsById.get(item.assigneeId) || (item.assigneeName || item.assigneeImageUrl ? { azureName: item.assigneeName, imageUrl: item.assigneeImageUrl } : null);
@@ -1230,8 +1265,9 @@ function goalStatus(hours, goal) {
 
 export function HoursWorkbench() {
   const { profile, demoMode } = useAuth();
-  const { items, error, loading, reload } = useWorkItems();
+  const { items, error, loading, refreshing, reload } = useWorkItems();
   const { collaborators } = useCollaborators();
+  const { evidence } = useTestEvidence();
   const { getSetting } = useAppSettings();
   const [search, setSearch] = useState("");
   const [collaboratorFilter, setCollaboratorFilter] = useState([]);
@@ -1242,12 +1278,27 @@ export function HoursWorkbench() {
   const [viewMode, setViewMode] = useState("grid");
   const [chartsCollapsed, setChartsCollapsed] = useState(false);
   const [expanded, setExpanded] = useState(() => new Set());
+  const [expandedTests, setExpandedTests] = useState(() => new Set());
   const goalDefault = getSetting("defaultGoalHours", defaultGoalHours);
   const peopleById = useMemo(() => new Map(collaborators.map((person) => [person.id, person])), [collaborators]);
-  const peopleByName = useMemo(() => new Map(collaborators.map((person) => [normalize(person.azureName), person])), [collaborators]);
+  const peopleByName = useMemo(() => buildCollaboratorNameIndex(collaborators), [collaborators]);
   const sprintOptions = Array.from(new Set(items.map((item) => item.sprint || item.iteration).filter(Boolean))).sort((a, b) => String(b).localeCompare(String(a), "pt-BR"));
   const currentSprint = findCurrentSprint(sprintOptions);
   const effectiveSprintFilter = sprintFilter.length ? sprintFilter : currentSprint ? [currentSprint] : [];
+
+  // Governanca deve refletir o periodo filtrado (sprint atual por padrao),
+  // nao o historico completo do time. O escopo de periodo (sprint/tipo/
+  // horas) e aplicado UMA vez aqui, antes de agregar metricas por
+  // colaborador — assim horas, work items e testes ficam todos coerentes
+  // com o mesmo recorte. Filtros de lista (busca, colaborador, meta) sao
+  // aplicados depois, sobre os colaboradores ja agregados no periodo.
+  const periodItems = useMemo(() => items.filter((item) => {
+    if (typeFilter !== "all" && item.type !== typeFilter) return false;
+    if (effectiveSprintFilter.length && !effectiveSprintFilter.includes(item.sprint || item.iteration)) return false;
+    if (hourStatus === "with" && Number(item.completedHours || 0) <= 0) return false;
+    if (hourStatus === "without" && Number(item.completedHours || 0) > 0) return false;
+    return true;
+  }), [items, typeFilter, effectiveSprintFilter, hourStatus]);
 
   const developers = useMemo(() => {
     const map = new Map();
@@ -1269,8 +1320,8 @@ export function HoursWorkbench() {
     };
 
     collaborators.filter((person) => person.isDev || person.isManagement || person.isQa).forEach((person) => ensure(person.id, { person }));
-    items.forEach((item) => {
-      const person = peopleById.get(item.assigneeId) || peopleByName.get(normalize(item.assigneeName));
+    periodItems.forEach((item) => {
+      const person = peopleById.get(item.assigneeId) || findCollaboratorByName(peopleByName, item.assigneeName);
       const key = person?.id || item.assigneeName || "unassigned";
       ensure(key, { person, displayName: item.assigneeName || "Nao atribuido", imageUrl: item.assigneeImageUrl }).items.push(item);
       const qaPerson = peopleById.get(item.qaCollaboratorId);
@@ -1282,7 +1333,7 @@ export function HoursWorkbench() {
     return Array.from(map.values()).map((dev) => {
       const devItems = dev.items.slice().sort((a, b) => Number(a.completedHours > 0) - Number(b.completedHours > 0) || new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
       const testMetrics = devItems.reduce((acc, item) => {
-        const records = item.discussionEvidence || item.evidence || [];
+        const records = recordsForItem(item, evidence);
         records.forEach((entry) => {
           const result = entry.result === "approved" ? "pass" : entry.result || "pending";
           acc.total += 1;
@@ -1304,27 +1355,18 @@ export function HoursWorkbench() {
       devItems.forEach((item) => (item.countries || ["N/A"]).forEach((country) => { countryCounts[country] = (countryCounts[country] || 0) + 1; }));
       return { ...dev, items: devItems, completed, tasks, bugs, cardsWithHours, cardsWithoutHours, missingHours, extraHours, progressPercent, goalStatus: status, countries: countryCounts, testMetrics };
     }).sort((a, b) => a.displayName.localeCompare(b.displayName, "pt-BR"));
-  }, [collaborators, goalDefault, items, peopleById, peopleByName]);
+  }, [collaborators, goalDefault, periodItems, peopleById, peopleByName, evidence]);
 
+  // Tipo/periodo/horas ja foram aplicados na agregacao (periodItems); aqui
+  // sobram apenas os filtros de exibicao da lista (busca, colaborador, meta).
   const filteredDevelopers = developers.filter((dev) => {
     const q = normalize(search);
     if (q && !normalize(`${dev.displayName} ${dev.uniqueName} ${dev.items.map((item) => `${item.id} ${item.title}`).join(" ")}`).includes(q)) return false;
     if (collaboratorFilter.length && !collaboratorFilter.includes(dev.key)) return false;
-    if (typeFilter !== "all" && !dev.items.some((item) => item.type === typeFilter)) return false;
-    if (hourStatus === "with" && !dev.cardsWithHours) return false;
-    if (hourStatus === "without" && !dev.cardsWithoutHours) return false;
+    if ((typeFilter !== "all" || hourStatus !== "all") && dev.items.length === 0) return false;
     if (goalFilter !== "all" && dev.goalStatus !== goalFilter) return false;
     return true;
-  }).map((dev) => ({
-    ...dev,
-    items: dev.items.filter((item) => {
-      if (typeFilter !== "all" && item.type !== typeFilter) return false;
-      if (effectiveSprintFilter.length && !effectiveSprintFilter.includes(item.sprint || item.iteration)) return false;
-      if (hourStatus === "with" && Number(item.completedHours || 0) <= 0) return false;
-      if (hourStatus === "without" && Number(item.completedHours || 0) > 0) return false;
-      return true;
-    })
-  }));
+  });
 
   const totals = filteredDevelopers.reduce((acc, dev) => ({
     developers: acc.developers + 1,
@@ -1345,9 +1387,24 @@ export function HoursWorkbench() {
   const goalCounts = filteredDevelopers.reduce((acc, dev) => ({ ...acc, [dev.goalStatus]: (acc[dev.goalStatus] || 0) + 1 }), { below: 0, met: 0, above: 0 });
   const maxCompleted = Math.max(1, ...filteredDevelopers.map((dev) => Math.max(dev.completed, dev.goalHours)));
   const maxCountry = Math.max(1, ...countryTotals.map(([, count]) => count));
+  // Card "Pai": o proprio usuario logado, sempre visivel (nao depende dos
+  // filtros ativos). QA ve metricas de teste no lugar de Tasks/Bugs — para
+  // QA, o que importa e o que ele testou, nao o que ele "entregou" como dev.
+  const ownDev = developers.find((dev) => dev.person?.profileId === profile?.id)
+    || developers.find((dev) => normalize(dev.displayName) === normalize(profile?.displayName || profile?.fullName || ""));
+  const ownIsQaOnly = profile?.accessLevel === accessLevels.qa;
 
   function toggleDeveloper(key) {
     setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleTestExpanded(key) {
+    setExpandedTests((current) => {
       const next = new Set(current);
       if (next.has(key)) next.delete(key);
       else next.add(key);
@@ -1403,41 +1460,70 @@ export function HoursWorkbench() {
   function renderWorkItem(item) {
     const type = workTypeInfo(item.type);
     const noHours = Number(item.completedHours || 0) <= 0;
-    const testMetrics = testSummaryForItem(item);
-    const testTitle = evidenceTransitionLabel(recordsForItem(item));
+    const itemKey = `${item.id}-${item.qaGovernanceCard ? "qa" : "azure"}`;
+    // Pedido explicito: so Bug/User Story mostram o componente de resultado
+    // de teste no card do colaborador (Task nao passa por QA neste fluxo).
+    const testable = item.type === "Bug" || item.type === "User Story";
+    const records = testable ? recordsForItem(item, evidence).slice().sort((a, b) => String(b.createdAt || b.createdDate || "").localeCompare(String(a.createdAt || a.createdDate || ""))) : [];
+    const testMetrics = testable ? testSummaryForItem(item, evidence) : null;
+    const latest = records[0];
+    const latestInfo = latest ? evidenceResultInfo(latest.result || latest.status) : null;
+    const lastEnv = latest ? evidenceEnv(latest) : null;
+    const isTestExpanded = expandedTests.has(itemKey);
     return (
-      <a key={`${item.id}-${item.qaGovernanceCard ? "qa" : "azure"}`} className={`mbdhc-work-card ${String(item.type || "").toLowerCase()} ${noHours ? "missing-hours" : ""} ${item.qaGovernanceCard ? "qa-card" : ""}`} href={workItemUrl(profile, item)} target="_blank" rel="noopener noreferrer" data-work-item-type={String(item.type || "").toLowerCase()} style={{ "--wi-type-color": type.color, "--wi-type-bg": type.bg, borderLeftColor: type.color }}>
-        <div className="mbdhc-work-main">
-          <div className={`mbdhc-work-type-line ${String(item.type || "").toLowerCase()}`}><img className="mbdhc-work-type-icon" src={type.image} alt={item.type} /><strong>{formatWorkItemCode(item.id, item.type)}</strong><span>{item.type}</span></div>
-          <h4 title={item.title}>{item.title}</h4>
-          <div className="mbdhc-work-country-row"><CountryPills codes={item.countries || []} />{item.sprint && <span className="mbdhc-work-sprint">{compactSprintLabel(item.sprint)}</span>}</div>
-          <small>{item.qaGovernanceCard ? "QA responsavel" : "Azure atribuido"} - {item.state || "Sem status"} - {item.areaPath || "Sem area"}</small>
-        </div>
-        <div className="mbdhc-work-hours">
-          <strong>{formatHours(item.completedHours)}</strong>
-          <span>Completed</span>
-          {noHours && <em>Sem horas</em>}
-        </div>
-        {testMetrics.total > 0 && (
-          <div className="mbdhc-work-tests" title={`${testTitle}\n\n${evidenceTooltip(recordsForItem(item))}`}>
-            <span><i className="bi bi-clipboard-check" /> {testMetrics.total}</span>
-            <span><i className="bi bi-check-lg" /> {testMetrics.pass}</span>
-            <span><i className="bi bi-x-lg" /> {testMetrics.fail}</span>
-            <span><i className="bi bi-exclamation-triangle-fill" /> {testMetrics.limitation}</span>
-            <small>{testTitle}</small>
+      <article key={itemKey} className={`mbdhc-work-card ${String(item.type || "").toLowerCase()} ${noHours ? "missing-hours" : ""} ${item.qaGovernanceCard ? "qa-card" : ""}`} data-work-item-type={String(item.type || "").toLowerCase()} style={{ "--wi-type-color": type.color, "--wi-type-bg": type.bg, borderLeftColor: type.color }}>
+        <a className="mbdhc-work-card-link" href={workItemUrl(profile, item)} target="_blank" rel="noopener noreferrer">
+          <div className="mbdhc-work-main">
+            <div className={`mbdhc-work-type-line ${String(item.type || "").toLowerCase()}`}><img className="mbdhc-work-type-icon" src={type.image} alt={item.type} /><strong>{formatWorkItemCode(item.id, item.type)}</strong><span>{item.type}</span></div>
+            <h4 title={item.title}>{item.title}</h4>
+            <div className="mbdhc-work-country-row"><CountryPills codes={item.countries || []} />{item.sprint && <span className="mbdhc-work-sprint">{compactSprintLabel(item.sprint)}</span>}</div>
+            <small>{item.qaGovernanceCard ? "QA responsavel" : "Azure atribuido"} - {item.state || "Sem status"} - {item.areaPath || "Sem area"}</small>
+          </div>
+          <div className="mbdhc-work-hours">
+            <strong>{formatHours(item.completedHours)}</strong>
+            <span>Completed</span>
+            {noHours && <em>Sem horas</em>}
+          </div>
+        </a>
+        {testable && (
+          <button
+            type="button"
+            className={`mbdhc-work-test-toggle ${latestInfo?.className || "pending"}`}
+            title={evidenceTooltip(records)}
+            onClick={() => toggleTestExpanded(itemKey)}
+          >
+            {latestInfo ? <i className={`bi ${latestInfo.icon}`} /> : <i className="bi bi-dash-lg" />}
+            <span>{latestInfo ? latestInfo.label : "Sem teste"}</span>
+            {lastEnv && <em>{lastEnv}</em>}
+            {records.length > 0 && <b>{records.length}</b>}
+            <i className={`bi ${isTestExpanded ? "bi-chevron-up" : "bi-chevron-down"}`} />
+          </button>
+        )}
+        {testable && isTestExpanded && (
+          <div className="mbdhc-work-test-panel">
+            {Object.entries(testMetrics.byEnv).length ? Object.entries(testMetrics.byEnv).map(([env, counts]) => (
+              <div key={env} className="mbdhc-work-test-env">
+                <strong>{env}</strong>
+                <span className="approved">{counts.pass || 0} Approved</span>
+                <span className="fail">{counts.fail || 0} Fail</span>
+                <span className="limitation">{counts.limitation || 0} Limitation</span>
+              </div>
+            )) : <span className="mbdhc-work-test-empty">Nenhum resultado registrado ainda.</span>}
           </div>
         )}
-      </a>
+      </article>
     );
   }
 
-  function renderDeveloper(dev) {
+  function renderDeveloper(dev, { pinned = false, useTestMetrics = false } = {}) {
     const isOpen = expanded.has(dev.key);
     const statusLabel = dev.goalStatus === "below" ? "Abaixo da meta" : dev.goalStatus === "above" ? "Acima da meta" : "Meta cumprida";
     const progressWidth = Math.min(100, Math.max(0, dev.progressPercent));
     const itemPreview = dev.items;
+    const testPassRate = dev.testMetrics.total ? Math.round((dev.testMetrics.pass / dev.testMetrics.total) * 100) : 0;
     return (
-      <article key={dev.key} className={`mbdhc-dev-card status-${dev.goalStatus} ${dev.goalStatus === "above" ? "pulse-over" : ""}`}>
+      <article key={dev.key} className={`mbdhc-dev-card status-${dev.goalStatus} ${dev.goalStatus === "above" ? "pulse-over" : ""} ${pinned ? "mbdhc-dev-card-pinned" : ""}`}>
+        {pinned && <div className="mbdhc-dev-pinned-label"><i className="bi bi-person-fill" /> Seu card</div>}
         <div className="mbdhc-dev-head">
           <AvatarDot person={dev.person || { azureName: dev.displayName, imageUrl: dev.avatarUrl, color: dev.color }} name={dev.displayName} />
           <div className="mbdhc-dev-status"><strong>{formatHours(dev.completed)}</strong><span>de {formatHours(dev.goalHours)}</span><em>{statusLabel}</em></div>
@@ -1446,30 +1532,60 @@ export function HoursWorkbench() {
           {Object.entries(dev.countries).slice(0, 6).map(([country, count]) => <span key={country} className="mbdhc-country-pill"><CountryVisual code={country} /><strong>{count}</strong></span>)}
         </div>
         <div className="mbdhc-progress"><span style={{ width: `${progressWidth}%` }} /></div>
-        <div className="mbdhc-dev-metrics">
-          <div><span>Cards</span><strong>{dev.items.length}</strong></div>
-          <div><span>Tasks</span><strong>{dev.tasks}</strong></div>
-          <div><span>Bugs</span><strong>{dev.bugs}</strong></div>
-          <div><span>Com horas</span><strong>{dev.cardsWithHours}</strong></div>
-          <div><span>Sem horas</span><strong>{dev.cardsWithoutHours}</strong></div>
-          <div><span>Saldo</span><strong>{dev.goalStatus === "above" ? `+${formatHours(dev.extraHours)}` : `-${formatHours(dev.missingHours)}`}</strong></div>
-        </div>
+        {useTestMetrics ? (
+          <div className="mbdhc-dev-metrics">
+            <div><span>Cards testados</span><strong>{dev.testMetrics.total}</strong></div>
+            <div><span>Approved</span><strong>{dev.testMetrics.pass}</strong></div>
+            <div><span>Fail</span><strong>{dev.testMetrics.fail}</strong></div>
+            <div><span>Limitation</span><strong>{dev.testMetrics.limitation}</strong></div>
+            <div><span>Pass rate</span><strong>{testPassRate}%</strong></div>
+          </div>
+        ) : (
+          <div className="mbdhc-dev-metrics">
+            <div><span>Cards</span><strong>{dev.items.length}</strong></div>
+            <div><span>Tasks</span><strong>{dev.tasks}</strong></div>
+            <div><span>Bugs</span><strong>{dev.bugs}</strong></div>
+            <div><span>Com horas</span><strong>{dev.cardsWithHours}</strong></div>
+            <div><span>Sem horas</span><strong>{dev.cardsWithoutHours}</strong></div>
+            <div><span>Saldo</span><strong>{dev.goalStatus === "above" ? `+${formatHours(dev.extraHours)}` : `-${formatHours(dev.missingHours)}`}</strong></div>
+          </div>
+        )}
         <div className="mbdhc-dev-actions">
           <button className="mbdhc-button secondary" type="button" onClick={() => copyHoursNotice(dev)} title="Copiar aviso de horas para enviar ao colaborador"><i className="bi bi-clipboard-check" /> Copiar aviso</button>
-          <button className="mbdhc-button secondary" type="button" onClick={() => toggleDeveloper(dev.key)}>{isOpen ? "Ocultar" : "Ver mais"} <i className={`bi ${isOpen ? "bi-chevron-up" : "bi-chevron-down"}`} /></button>
+          {!pinned && <button className="mbdhc-button secondary" type="button" onClick={() => toggleDeveloper(dev.key)}>{isOpen ? "Ocultar" : "Ver mais"} <i className={`bi ${isOpen ? "bi-chevron-up" : "bi-chevron-down"}`} /></button>}
         </div>
-        <div className="mbdhc-dev-items" hidden={!isOpen}>
-          <div className="mbdhc-dev-items-head"><strong>Cards do colaborador</strong><small>{dev.cardsWithoutHours} sem horas</small></div>
-          <div className="mbdhc-dev-items-scroll">{itemPreview.map(renderWorkItem)}</div>
-        </div>
+        {/* No card fixo (pinned) o usuario ja tem "Meus itens" pra ver o
+            detalhe card a card — a lista aqui ficava sempre aberta (sem
+            botao "Ver mais"/"Ocultar") e poluia o card fixo, que deveria
+            ser so o resumo. Removida do pinned; continua disponivel via
+            "Ver mais" nos cards normais do time. */}
+        {!pinned && (
+          <div className="mbdhc-dev-items" hidden={!isOpen}>
+            <div className="mbdhc-dev-items-head"><strong>Cards do colaborador</strong><small>{dev.cardsWithoutHours} sem horas</small></div>
+            <div className="mbdhc-dev-items-scroll">{itemPreview.map(renderWorkItem)}</div>
+          </div>
+        )}
       </article>
     );
   }
 
   return (
     <section className="mbw-page mbdhc-page mbdhc-governance">
-      <WorkbenchHeader kicker="Modulo 4" title="Governanca da equipe" subtitle="Horas, metas, cards sem apontamento e distribuicao por pais." demoMode={demoMode} actions={<><Button onClick={reload}><FiRefreshCw /> Atualizar</Button><Button onClick={copyReport}><FiCopy /> Copiar</Button><Button onClick={sendGovernanceSlack}><i className="bi bi-slack" /> Slack</Button><Button onClick={pdfReport}><FiDownload /> PDF</Button></>} />
+      <WorkbenchHeader
+        kicker="Modulo 4"
+        title={ownIsQaOnly ? "Minhas metricas" : "Governanca da equipe"}
+        subtitle={ownIsQaOnly ? "Seu card com metricas de teste. A visao completa do time e restrita a Gestao/Gerente." : "Horas, metas, cards sem apontamento e distribuicao por pais."}
+        demoMode={demoMode}
+        actions={ownIsQaOnly
+          ? <Button onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /> Atualizar</Button>
+          : <><Button onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /> Atualizar</Button><Button onClick={copyReport}><FiCopy /> Copiar</Button><Button onClick={sendGovernanceSlack}><i className="bi bi-slack" /> Slack</Button><Button onClick={pdfReport}><FiDownload /> PDF</Button></>}
+      />
       {error && <div className="mbw-alert error">{error}</div>}
+      {ownDev
+        ? <div className="mbdhc-own-card-wrap">{renderDeveloper(ownDev, { pinned: true, useTestMetrics: ownIsQaOnly })}</div>
+        : ownIsQaOnly && <EmptyState title="Sua conta ainda nao foi vinculada a um colaborador" />}
+      {!ownIsQaOnly && (
+      <>
       <details className="mbdhc-filters" open>
         <summary><span>Filtros <small>{filteredDevelopers.length} colaborador(es)</small></span><b>{[search, collaboratorFilter.length, typeFilter !== "all", hourStatus !== "all", goalFilter !== "all"].filter(Boolean).length} ativos</b></summary>
         <div className="mbdhc-filter-grid">
@@ -1509,6 +1625,8 @@ export function HoursWorkbench() {
         <div className="mbdhc-section-header"><div><h3>Resumo por colaborador</h3><p>{loading ? "Consultando Azure DevOps..." : `${filteredDevelopers.length} colaborador(es) no filtro atual.`}</p></div><div className="mbdhc-view-controls"><button className={viewMode === "list" ? "active" : ""} onClick={() => setViewMode("list")} type="button"><i className="bi bi-list-ul" /></button><button className={viewMode === "grid" ? "active" : ""} onClick={() => setViewMode("grid")} type="button"><i className="bi bi-grid-3x3-gap" /></button><button className={viewMode === "compact" ? "active" : ""} onClick={() => setViewMode("compact")} type="button"><i className="bi bi-layout-sidebar" /></button></div></div>
         <div className={`mbdhc-dev-grid mode-${viewMode}`}>{loading ? <WorkbenchCardSkeleton rows={6} mode={viewMode} /> : filteredDevelopers.length ? filteredDevelopers.map(renderDeveloper) : <EmptyState title="Nenhum colaborador encontrado" />}</div>
       </section>
+      </>
+      )}
     </section>
   );
 }
@@ -1517,8 +1635,8 @@ export function SettingsWorkbench() {
   const { profile, user, demoMode } = useAuth();
   const { flags, isEnabled, setFlag } = useFeatureFlags();
   const { collaborators } = useCollaborators();
-  const { getSetting, updateSetting } = useAppSettings();
-  const isGestao = profile?.accessLevel === accessLevels.gestao;
+  const { getSetting, updateSetting, loading: settingsLoading } = useAppSettings();
+  const isGestao = hasManagementAccess(profile?.accessLevel);
   const personalSettingsKey = `starkHubPersonalConnections:${profile?.id || user?.email || "anonymous"}`;
   function readPersonalSetting(key, fallback = "") {
     if (typeof window === "undefined") return fallback;
@@ -1565,6 +1683,29 @@ export function SettingsWorkbench() {
   const [showSecrets, setShowSecrets] = useState(false);
   const [saving, setSaving] = useState("");
   const [preview, setPreview] = useState("");
+  const [saveStatus, setSaveStatus] = useState(null);
+
+  // Os campos globais (Gestao/Gerente) acima sao inicializados com
+  // getSetting() no primeiro render, ANTES do useAppSettings terminar de
+  // buscar app_settings no Supabase (settingsLoading ainda true) — nesse
+  // momento settings esta vazio, entao o valor exibido e sempre o fallback
+  // (ex.: 60s de auto-refresh), nunca o que esta realmente salvo. Sem este
+  // resync, o campo parece "nao aceitar" alteracao: some ao trocar de tela e
+  // volta pro fallback. Sincroniza uma unica vez quando o carregamento
+  // termina.
+  useEffect(() => {
+    if (settingsLoading) return;
+    setProductName(getSetting("productName", "Stark Hub"));
+    setGoalHours(getSetting("defaultGoalHours", defaultGoalHours));
+    setAzureMaxItems(getSetting("azureMaxItems", 200));
+    setAzureAutoRefreshSeconds(getSetting("azureAutoRefreshSeconds", 60));
+    setIterationPattern(getSetting("azureIterationPattern", ""));
+    setSlackWebhookUrl(getSetting("slackWebhookUrl", ""));
+    setSlackTestMode(Boolean(getSetting("slackTestMode", false)));
+    setSlackTestWebhookUrl(getSetting("slackTestWebhookUrl", ""));
+    setSlackPrimaryWebhookName(getSetting("slackPrimaryWebhookName", "Canal principal"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsLoading]);
 
   const featureLabels = {
     showQaBoard: ["Quality Board", "Cards disponiveis para validacao"],
@@ -1580,38 +1721,46 @@ export function SettingsWorkbench() {
 
   async function saveSettings() {
     setSaving("settings");
+    setSaveStatus(null);
     // Sons de notificacao sao preferencia individual: salvos sempre, para
     // qualquer nivel de acesso, independente do restante do formulario ser
     // pessoal (Dev/QA) ou global (Gestao).
     writeNotificationSetting(profile, user, "notificationSoundsMuted", notificationSoundsMuted);
     notificationTypes.forEach(({ key }) => writeNotificationSetting(profile, user, `notificationSound:${key}`, notificationSoundPrefs[key]));
     if (!isGestao) {
-      writePersonalSettings({
-        pipelineQaName,
-        pipelineBetaName,
-        slackWebhookUrl: personalSlackWebhookUrl,
-        slackTestWebhookUrl: personalSlackTestWebhookUrl,
-        slackTestMode: personalSlackTestMode,
-        slackPrimaryWebhookName: personalSlackPrimaryWebhookName,
-        updatedAt: new Date().toISOString()
-      });
-      setPreview("Conexoes pessoais salvas localmente neste navegador.");
+      try {
+        writePersonalSettings({
+          pipelineQaName,
+          pipelineBetaName,
+          slackWebhookUrl: personalSlackWebhookUrl,
+          slackTestWebhookUrl: personalSlackTestWebhookUrl,
+          slackTestMode: personalSlackTestMode,
+          slackPrimaryWebhookName: personalSlackPrimaryWebhookName,
+          updatedAt: new Date().toISOString()
+        });
+        setSaveStatus({ type: "success", message: "Configuracoes aplicadas com sucesso." });
+      } catch (error) {
+        setSaveStatus({ type: "error", message: `Falha ao aplicar: ${error.message}` });
+      }
       setSaving("");
       return;
     }
-    await Promise.all([
+    const results = await Promise.all([
       updateSetting("productName", productName),
       updateSetting("defaultGoalHours", Number(goalHours) || defaultGoalHours),
       updateSetting("azureMaxItems", Number(azureMaxItems) || 200),
       updateSetting("azureAutoRefreshSeconds", Number(azureAutoRefreshSeconds) || 60),
       updateSetting("azureIterationPattern", iterationPattern),
       updateSetting("azurePipelines", { qa: pipelineQaName, beta: pipelineBetaName }),
-      updateSetting("governancePeriod", { start: periodStart, end: periodEnd }),
       updateSetting("slackWebhookUrl", slackWebhookUrl),
       updateSetting("slackTestMode", slackTestMode),
       updateSetting("slackTestWebhookUrl", slackTestWebhookUrl),
       updateSetting("slackPrimaryWebhookName", slackPrimaryWebhookName)
     ]);
+    const failed = results.filter((result) => result?.error);
+    setSaveStatus(failed.length
+      ? { type: "error", message: `Falha ao aplicar ${failed.length} configuracao(oes): ${failed[0].error.message}` }
+      : { type: "success", message: "Configuracoes aplicadas com sucesso." });
     setSaving("");
   }
   function exportConfig() {
@@ -1737,9 +1886,10 @@ export function SettingsWorkbench() {
         title="Configuracoes"
         subtitle={isGestao ? "Produto, funcionalidades, conexoes e governanca." : "Conexoes pessoais do Azure, pipelines e Slack."}
         demoMode={demoMode}
-        actions={<>{isGestao && <div className="mb-settings-scope"><FilterCombobox label="Escopo" options={[{ value: accessLevels.dev, label: "Dev" }, { value: accessLevels.qa, label: "QA" }, { value: accessLevels.gestao, label: "Gestao" }]} values={[configScope]} multiple={false} onChange={(value) => setConfigScope(value || accessLevels.gestao)} /></div>}<Button onClick={() => importRef.current?.click()}><FiUpload /> Importar</Button><Button onClick={exportConfig}><FiDownload /> Exportar</Button><Button onClick={previewSlack}><FiCopy /> Testar Slack</Button><Button onClick={saveSettings} tone="primary">{saving ? "Salvando..." : "Salvar"}</Button></>}
+        actions={<>{isGestao && <div className="mb-settings-scope"><FilterCombobox label="Escopo" options={[{ value: accessLevels.dev, label: "Dev" }, { value: accessLevels.qa, label: "QA" }, { value: accessLevels.gestao, label: "Gestao" }, { value: accessLevels.gerente, label: "Gerente" }]} values={[configScope]} multiple={false} onChange={(value) => setConfigScope(value || accessLevels.gestao)} /></div>}<Button onClick={() => importRef.current?.click()}><FiUpload /> Importar</Button><Button onClick={exportConfig}><FiDownload /> Exportar</Button><Button onClick={previewSlack}><FiCopy /> Testar Slack</Button><Button onClick={saveSettings} tone="primary">{saving ? "Aplicando..." : "Aplicar"}</Button></>}
       />
       <input ref={importRef} type="file" accept="application/json" hidden onChange={importConfig} />
+      {saveStatus && <div className={`mb-settings-save-status ${saveStatus.type}`}><i className={`bi ${saveStatus.type === "error" ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill"}`} /> {saveStatus.message}</div>}
       <div className="mb-settings-grid">
         {isGestao && <SettingsSection title="Produto e funcionalidades" description="Identidade do produto e feature flags." open>
           <label className="mb-form-row"><span>Nome do produto</span><input value={productName} onChange={(event) => setProductName(event.target.value)} /></label>
@@ -1763,6 +1913,16 @@ export function SettingsWorkbench() {
               <div className="mb-inner-accordion-body"><AzureConnectionForm submitLabel="Testar e atualizar" /></div>
             </details>
           )}
+          {isGestao && (
+            <details className="mb-inner-accordion">
+              <summary><span>Sincronizacao Azure</span><small>Escopo da busca de work items (todas as telas)</small></summary>
+              <div className="mb-inner-accordion-body">
+                <label className="mb-form-row"><span>Limite de itens buscados</span><input type="number" min="100" step="100" value={azureMaxItems} onChange={(event) => setAzureMaxItems(event.target.value)} /></label>
+                <label className="mb-form-row"><span>Iteration pattern</span><input value={iterationPattern} onChange={(event) => setIterationPattern(event.target.value)} placeholder="MB Labs" /></label>
+                <small className="mb-settings-note">Afeta Quality Board, Meus itens e Governanca — nao e especifico de nenhuma tela.</small>
+              </div>
+            </details>
+          )}
           <details className="mb-inner-accordion">
             <summary><span>Pipelines</span><small>Nomes das pipelines QA e BETA</small></summary>
             <div className="mb-inner-accordion-body">
@@ -1783,14 +1943,11 @@ export function SettingsWorkbench() {
           </details>
         </SettingsSection>
 
-        {isGestao && <SettingsSection title="Governanca" description="Meta, periodo e indicadores utilizados pela governanca do time.">
+        {isGestao && <SettingsSection title="Governanca" description="Meta padrao de horas usada quando um colaborador nao tem meta propria.">
           <div className="mb-governance-grid">
             <label className="mb-form-row"><span>Meta padrao de horas</span><input type="number" min="0" step="0.5" value={goalHours} onChange={(event) => setGoalHours(event.target.value)} /></label>
-            <label className="mb-form-row"><span>Limite de itens da governanca</span><input type="number" min="100" step="100" value={azureMaxItems} onChange={(event) => setAzureMaxItems(event.target.value)} /></label>
-            <label className="mb-form-row"><span>Periodo inicial</span><input type="date" value={periodStart} onChange={(event) => setPeriodStart(event.target.value)} /></label>
-            <label className="mb-form-row"><span>Periodo final</span><input type="date" value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} /></label>
-            <label className="mb-form-row mb-span-2"><span>Iteration pattern</span><input value={iterationPattern} onChange={(event) => setIterationPattern(event.target.value)} placeholder="MB Labs" /></label>
           </div>
+          <small className="mb-settings-note">Periodo, limite de itens e sprint agora sao filtros dentro da propria tela de Governanca do time, nao configuracoes globais.</small>
         </SettingsSection>}
 
         <SettingsSection title="Notificacoes sonoras" description="Escolha o som de cada notificacao ou desative por completo. Preferencia individual, salva neste navegador.">

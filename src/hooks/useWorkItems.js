@@ -1,13 +1,59 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase, isSupabaseConfigured } from "../lib/supabaseClient.js";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import { useAppSettings } from "./useAppSettings.js";
 import { useCollaborators } from "./useCollaborators.js";
 import { useFeatureFlags } from "../contexts/FeatureFlagsContext.jsx";
+import { useToast } from "../contexts/ToastContext.jsx";
 import { resolveSlackWebhooks, buildReadyForBetaMessage } from "../utils/slack.js";
 import { buildLegacyQaResultSlackText, buildQaResultDiscussionHtml } from "../utils/slackReport.js";
 import { getDemoWorkItems, updateDemoWorkItem, addDemoWorkItem } from "../utils/demoStore.js";
 import { playNotificationSound } from "../utils/notificationSounds.js";
+import { azureWorkItemUrl } from "../utils/azure.js";
+
+const MAX_TOASTS_PER_GROUP = 4;
+
+// Compara o estado anterior (por id) com a lista fresca e dispara toast +
+// som pros 3 eventos que o usuario pediu: item novo no board, item que
+// entrou em QA, item que entrou em BETA. So roda a partir da SEGUNDA carga
+// bem-sucedida (previousStateById != null) — na primeira carga tudo "e
+// novo", o que so criaria uma enxurrada de toasts sem sentido.
+function notifyTransitions({ previousStateById, freshItems, pushToast, profile, user }) {
+  if (!previousStateById) return;
+  const newItems = [];
+  const enteredQa = [];
+  const enteredBeta = [];
+  freshItems.forEach((item) => {
+    const state = String(item.state || "").toLowerCase();
+    const prevState = previousStateById.get(item.id);
+    if (prevState === undefined) {
+      newItems.push(item);
+      return;
+    }
+    if (prevState === state) return;
+    if (state.includes("qa") && !prevState.includes("qa")) enteredQa.push(item);
+    if (state.includes("beta") && !prevState.includes("beta")) enteredBeta.push(item);
+  });
+
+  function notifyGroup(list, { type, title, tone }) {
+    if (!list.length) return;
+    const shown = list.slice(0, MAX_TOASTS_PER_GROUP);
+    shown.forEach((item) => {
+      pushToast({
+        title,
+        body: `${item.id} - ${item.title || "Sem titulo"}`,
+        tone,
+        href: item.url || azureWorkItemUrl(profile?.azureOrgUrl, profile?.azureProject, item.id)
+      });
+    });
+    if (list.length > shown.length) pushToast({ title, body: `+${list.length - shown.length} outro(s) item(ns)`, tone });
+    playNotificationSound(type, profile, user);
+  }
+
+  notifyGroup(newItems, { type: "newItem", title: "Novo item no board", tone: "info" });
+  notifyGroup(enteredQa, { type: "inQa", title: "Item entrou em QA", tone: "warning" });
+  notifyGroup(enteredBeta, { type: "readyBeta", title: "Item entrou em BETA", tone: "success" });
+}
 
 // Fiel ao userscript legado: sem member ID real do Slack nao existe fallback
 // por nome (a mencao simplesmente nao aparece na mensagem).
@@ -22,19 +68,39 @@ function mentionNameForSlack(person) {
 // workitemsbatch via Edge Function azureWorkItems), cruzado com o
 // responsável de QA (work_item_assignments) e o resultado de teste
 // (test_evidence) guardados no Supabase — ver supabase/functions/azureWorkItems.
-export function useWorkItems() {
+// `includeClosed`: usado pelo Dashboard de Gerenciamento, que precisa de
+// entregas historicas (Feature/Bug/US ja Closed) para calcular taxa de
+// entrega e series por sprint — o filtro padrao do resto do app exclui
+// Closed/Removed de proposito (foco no trabalho ativo), entao aqui a
+// consulta ignora o customQuery global e busca todos os estados.
+export function useWorkItems({ includeClosed = false } = {}) {
   const { demoMode, profile, user } = useAuth();
   const { getSetting } = useAppSettings();
   const { collaborators } = useCollaborators();
   const { isEnabled } = useFeatureFlags();
+  const { pushToast } = useToast();
   const [items, setItems] = useState(() => (demoMode ? getDemoWorkItems() : []));
   const [loading, setLoading] = useState(!demoMode);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  // So a PRIMEIRA carga mostra skeleton de tela cheia. Atualizacoes depois
+  // disso (manual ou automatica a cada `azureAutoRefreshSeconds`) mantem a
+  // ultima lista boa visivel e so acendem `refreshing` — sem isso, cada
+  // auto-refresh trocava o board inteiro por skeleton por alguns segundos,
+  // mesmo quando quase nada mudou.
+  const hasLoadedRef = useRef(false);
+  // Estado (por id) da carga anterior, pra detectar item novo/entrou em QA
+  // ou BETA entre uma atualizacao e outra. So o feed padrao notifica — a
+  // busca ampla do Dash executivo (includeClosed) e historica/multi-sprint,
+  // notificar a cada refresh dela seria ruido, nao sinal.
+  const previousStateByIdRef = useRef(null);
 
   const azureReady = Boolean(profile?.azureOrgUrl && profile?.azureProject && profile?.azurePat);
   const iterationPattern = getSetting("azureIterationPattern", "");
-  const customQuery = getSetting("azureCustomQuery", "");
-  const maxItems = getSetting("azureMaxItems", 200);
+  const customQuery = includeClosed
+    ? "[System.WorkItemType] IN ('Bug','Task','User Story','Feature')"
+    : getSetting("azureCustomQuery", "");
+  const maxItems = includeClosed ? Math.max(getSetting("azureMaxItems", 200), 800) : getSetting("azureMaxItems", 200);
   const autoRefreshSeconds = getSetting("azureAutoRefreshSeconds", 60);
 
   const loadItems = useCallback(async () => {
@@ -42,14 +108,17 @@ export function useWorkItems() {
       setItems(getDemoWorkItems());
       setLoading(false);
       setError(null);
+      hasLoadedRef.current = true;
       return;
     }
     if (!isSupabaseConfigured || !azureReady) {
       setItems([]);
       setLoading(false);
+      hasLoadedRef.current = true;
       return;
     }
-    setLoading(true);
+    if (hasLoadedRef.current) setRefreshing(true);
+    else setLoading(true);
     setError(null);
     const { data, error: invokeError } = await supabase.functions.invoke("azureWorkItems", {
       body: {
@@ -64,15 +133,24 @@ export function useWorkItems() {
     });
     // Uma falha aqui NUNCA pode virar silenciosamente "lista vazia" — foi
     // exatamente esse silêncio que escondeu o vazamento de dados de outro
-    // time (Lenio Labs) sem avisar ninguém.
+    // time (Lenio Labs) sem avisar ninguém. Isso vale pra PRIMEIRA carga
+    // (nao ha nada bom pra preservar); numa atualizacao que ja tinha uma
+    // lista boa, uma falha pontual (rede instavel) mantem a ultima lista
+    // boa visivel — apagar tudo so pioraria, parecendo "sem itens".
     if (invokeError || !data?.ok) {
-      setItems([]);
+      if (!hasLoadedRef.current) setItems([]);
       setError(data?.error || invokeError?.message || "Falha ao consultar o Azure DevOps.");
     } else {
+      if (!includeClosed) {
+        notifyTransitions({ previousStateById: previousStateByIdRef.current, freshItems: data.items, pushToast, profile, user });
+        previousStateByIdRef.current = new Map(data.items.map((item) => [item.id, String(item.state || "").toLowerCase()]));
+      }
       setItems(data.items);
     }
+    hasLoadedRef.current = true;
     setLoading(false);
-  }, [demoMode, azureReady, profile?.azureOrgUrl, profile?.azureProject, profile?.azureTeam, profile?.azurePat, iterationPattern, customQuery, maxItems]);
+    setRefreshing(false);
+  }, [demoMode, azureReady, profile?.azureOrgUrl, profile?.azureProject, profile?.azureTeam, profile?.azurePat, iterationPattern, customQuery, maxItems, includeClosed, pushToast]);
 
   useEffect(() => {
     loadItems();
@@ -268,5 +346,5 @@ export function useWorkItems() {
     if (!error && data?.ok) await loadItems();
   }
 
-  return { items, loading, error, updateItem, addItem, reload: loadItems, needsAzureIntegration: !demoMode && !azureReady };
+  return { items, loading, refreshing, error, updateItem, addItem, reload: loadItems, needsAzureIntegration: !demoMode && !azureReady };
 }

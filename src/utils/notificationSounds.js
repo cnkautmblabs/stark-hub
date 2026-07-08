@@ -6,6 +6,8 @@
 // arquivos de audio.
 
 export const notificationTypes = [
+  { key: "newItem", label: "Novo item detectado", description: "Quando um work item novo aparece no board." },
+  { key: "inQa", label: "Entrou em QA", description: "Quando um item avanca para o estado In QA." },
   { key: "readyBeta", label: "Pronto para Beta", description: "Quando um item avanca para BETA." },
   { key: "testResult", label: "Resultado de teste registrado", description: "Ao registrar Approved, Fail ou Limitation em um work item." }
 ];

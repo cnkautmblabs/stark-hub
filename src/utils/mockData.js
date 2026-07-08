@@ -117,7 +117,8 @@ export const mockTestEvidence = [
 const fallbackProfiles = {
   dev: { id: "demo-dev", fullName: "Rafael Demo", email: "dev.demo@example.test", accessLevel: "dev" },
   qa: { id: "demo-qa", fullName: "Lia Martins", email: "qa.demo@example.test", accessLevel: "qa" },
-  gestao: { id: "demo-gestao", fullName: "Marina Costa", email: "gestao.demo@example.test", accessLevel: "gestao" }
+  gestao: { id: "demo-gestao", fullName: "Marina Costa", email: "gestao.demo@example.test", accessLevel: "gestao" },
+  gerente: { id: "demo-gerente", fullName: "Eduardo Gerente", email: "gerente.demo@example.test", accessLevel: "gerente" }
 };
 
 export const mockProfiles = fallbackProfiles;

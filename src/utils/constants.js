@@ -5,15 +5,24 @@ export const accessLevels = {
   pending: "pending",
   dev: "dev",
   qa: "qa",
-  gestao: "gestao"
+  gestao: "gestao",
+  gerente: "gerente"
 };
 
 export const accessLevelLabels = {
   pending: "Aguardando liberação",
   dev: "Dev",
   qa: "QA",
-  gestao: "Gestão"
+  gestao: "Gestão",
+  gerente: "Gerente"
 };
+
+// Gerente tem tudo que Gestao tem, mais a tela exclusiva de Gerenciamento.
+// Use isto (nao "=== accessLevels.gestao") em qualquer checagem que hoje
+// restringe algo à Gestão, para o Gerente herdar o mesmo acesso.
+export function hasManagementAccess(accessLevel) {
+  return accessLevel === accessLevels.gestao || accessLevel === accessLevels.gerente;
+}
 
 export function isDomainAllowed(email) {
   if (!allowedEmailDomains.length) return true;

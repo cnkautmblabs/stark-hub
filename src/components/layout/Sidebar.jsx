@@ -1,6 +1,7 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
 import {
+  FiBarChart2,
   FiCheckSquare,
   FiChevronsLeft,
   FiChevronsRight,
@@ -29,6 +30,7 @@ const navByRole = {
   [accessLevels.qa]: [
     { to: "/qa", label: "Quality Board", icon: FiCheckSquare, flag: "showQaBoard" },
     { to: "/dev", label: "Meus itens", icon: FiClipboard, flag: "showMyItems" },
+    { to: "/management", label: "Minhas metricas", icon: FiShield, flag: "showGovernance" },
     { to: "/management/collaborators", label: "Perfil", icon: FiUsers, flag: "showGovernance" },
     { to: "/import", label: "Import Work Items", icon: FiGitBranch, flag: "showImportWorkItems" }
   ],
@@ -36,6 +38,14 @@ const navByRole = {
     { to: "/qa", label: "Quality Board", icon: FiCheckSquare, flag: "showQaBoard" },
     { to: "/dev", label: "Meus itens", icon: FiClipboard, flag: "showMyItems" },
     { to: "/management", label: "Governanca do time", icon: FiShield, flag: "showGovernance" },
+    { to: "/management/collaborators", label: "Perfil", icon: FiUsers, flag: "showGovernance" },
+    { to: "/import", label: "Import Work Items", icon: FiGitBranch, flag: "showImportWorkItems" }
+  ],
+  [accessLevels.gerente]: [
+    { to: "/qa", label: "Quality Board", icon: FiCheckSquare, flag: "showQaBoard" },
+    { to: "/dev", label: "Meus itens", icon: FiClipboard, flag: "showMyItems" },
+    { to: "/management", label: "Governanca do time", icon: FiShield, flag: "showGovernance" },
+    { to: "/management/dashboard", label: "Gerenciamento", icon: FiBarChart2, flag: "showGovernance" },
     { to: "/management/collaborators", label: "Perfil", icon: FiUsers, flag: "showGovernance" },
     { to: "/import", label: "Import Work Items", icon: FiGitBranch, flag: "showImportWorkItems" }
   ]

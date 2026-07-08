@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import ReactorLogo from "../components/layout/ReactorLogo.jsx";
 import { useAuth } from "../contexts/AuthContext.jsx";
+import { useCollaborators } from "../hooks/useCollaborators.js";
 
 function AliasTagInput({ values = [], onChange }) {
   const [draft, setDraft] = useState("");
@@ -41,6 +42,7 @@ function AliasTagInput({ values = [], onChange }) {
 
 export default function ProfileSetup() {
   const { profile, user, updateProfile, demoMode } = useAuth();
+  const { collaborators, addCollaborator, updateCollaborator } = useCollaborators();
   const navigate = useNavigate();
   const [slackMemberId, setSlackMemberId] = useState(profile?.slackMemberId || "");
   const [aliasSlack, setAliasSlack] = useState(profile?.aliasSlack || "");
@@ -70,11 +72,29 @@ export default function ProfileSetup() {
       aliasVariations,
       avatarUrl: avatarUrl.trim() || null
     });
-    setSaving(false);
     if (error) {
+      setSaving(false);
       setStatus({ type: "error", message: `Erro ao salvar: ${error.message}` });
       return;
     }
+    // O diretorio de identidade usado em todo o app (menções no Slack, QA
+    // responsavel, Assigned To) e a tabela collaborators, nao profiles — sem
+    // sincronizar aqui, o slackMemberId preenchido acima nunca chegava onde
+    // as mensagens de Slack realmente sao montadas.
+    const own = collaborators.find((person) => person.profileId === profile?.id);
+    const collaboratorPatch = {
+      slackMemberId: slackMemberId.trim(),
+      slackName: aliasSlack.trim(),
+      azureName: aliasAzure.trim(),
+      aliases: aliasVariations,
+      imageUrl: avatarUrl.trim() || undefined
+    };
+    if (own) {
+      await updateCollaborator(own.id, collaboratorPatch);
+    } else {
+      await addCollaborator({ profileId: profile.id, email: profile.email, ...collaboratorPatch });
+    }
+    setSaving(false);
     navigate("/", { replace: true });
   }
 
