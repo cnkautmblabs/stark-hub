@@ -5,8 +5,9 @@
 // diretas do navegador.
 //
 // Body esperado:
-//   { action: "update", orgUrl, project, pat, updates: [{ id, completedHours, state }] }
+//   { action: "update", orgUrl, project, pat, updates: [{ id, completedHours, state, assigneeAlias }] }
 //   { action: "create", orgUrl, project, pat, item: { type, title, sprint, countries } }
+//   { action: "attachment", orgUrl, project, pat, fileName, contentType, dataUrl }
 //
 // "update" aplica cada item sequencialmente (mesmo padrão do userscript
 // legado: PATCH por item, não há batch write na API do Azure DevOps para
@@ -34,10 +35,15 @@ function normalizeOrgUrl(rawUrl) {
 }
 
 async function updateWorkItem(baseUrl, authHeader, update) {
-  const patchOps = [
-    { op: "add", path: "/fields/Microsoft.VSTS.Scheduling.CompletedWork", value: update.completedHours }
-  ];
+  const patchOps = [];
+  if (typeof update.completedHours !== "undefined") {
+    patchOps.push({ op: "add", path: "/fields/Microsoft.VSTS.Scheduling.CompletedWork", value: update.completedHours });
+  }
   if (update.state) patchOps.push({ op: "add", path: "/fields/System.State", value: update.state });
+  if (update.assigneeAlias || update.assigneeName) {
+    patchOps.push({ op: "add", path: "/fields/System.AssignedTo", value: update.assigneeAlias || update.assigneeName });
+  }
+  if (!patchOps.length) return { id: update.id, ok: true };
 
   const response = await fetch(`${baseUrl}/_apis/wit/workitems/${update.id}?api-version=7.1`, {
     method: "PATCH",
@@ -88,6 +94,51 @@ async function createWorkItem(baseUrl, project, authHeader, item) {
   return { ok: true, id: data.id };
 }
 
+async function addWorkItemComment(baseUrl, authHeader, id, text) {
+  const response = await fetch(`${baseUrl}/_apis/wit/workItems/${id}/comments?api-version=7.1-preview.4`, {
+    method: "POST",
+    headers: { Authorization: authHeader, "Content-Type": "application/json" },
+    body: JSON.stringify({ text })
+  });
+
+  if (response.ok) return { id, ok: true };
+  const message = response.status === 401 ? "PAT invalido ou sem permissao." : `Azure DevOps retornou status ${response.status}.`;
+  return { id, ok: false, error: message };
+}
+
+function bytesFromDataUrl(dataUrl) {
+  const raw = String(dataUrl || "");
+  const base64 = raw.includes("base64,") ? raw.split("base64,").pop() : raw;
+  const binary = atob(base64 || "");
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+async function uploadAttachment(baseUrl, project, authHeader, payload) {
+  const fileName = String(payload.fileName || "evidence.png").replace(/[\\/:*?"<>|]+/g, "-");
+  const bytes = bytesFromDataUrl(payload.dataUrl || payload.dataBase64);
+  if (!bytes.length) return { ok: false, error: "Arquivo de evidencia vazio." };
+
+  const response = await fetch(`${baseUrl}/${encodeURIComponent(project)}/_apis/wit/attachments?fileName=${encodeURIComponent(fileName)}&api-version=7.1`, {
+    method: "POST",
+    headers: {
+      Authorization: authHeader,
+      "Content-Type": payload.contentType || "application/octet-stream"
+    },
+    body: bytes
+  });
+
+  if (!response.ok) {
+    const message = response.status === 401 ? "PAT invalido ou sem permissao." : `Azure DevOps retornou status ${response.status} ao anexar evidencia.`;
+    return { ok: false, error: message };
+  }
+  const data = await response.json();
+  return { ok: true, url: data.url, id: data.id };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ ok: false, error: "Método não suportado." }, 405);
@@ -123,6 +174,17 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "Título e tipo são obrigatórios." }, 400);
     }
     const result = await createWorkItem(baseUrl, project, authHeader, payload.item);
+    return json(result, result.ok ? 200 : 200);
+  }
+
+  if (action === "comment") {
+    if (!payload.id || !payload.text) return json({ ok: false, error: "ID e texto do comentario sao obrigatorios." }, 400);
+    const result = await addWorkItemComment(baseUrl, authHeader, payload.id, payload.text);
+    return json(result, result.ok ? 200 : 200);
+  }
+  if (action === "attachment") {
+    if (!payload.dataUrl && !payload.dataBase64) return json({ ok: false, error: "Arquivo da evidencia e obrigatorio." }, 400);
+    const result = await uploadAttachment(baseUrl, project, authHeader, payload);
     return json(result, result.ok ? 200 : 200);
   }
 

@@ -1,5 +1,5 @@
 // Domínios de e-mail autorizados a autenticar no Stark Hub.
-export const allowedEmailDomains = ["mblabs.com.br", "bankeiro.com.br"];
+export const allowedEmailDomains = String(import.meta.env.VITE_ALLOWED_EMAIL_DOMAINS || "").split(",").map((domain) => domain.trim().toLowerCase()).filter(Boolean);
 
 export const accessLevels = {
   pending: "pending",
@@ -16,6 +16,7 @@ export const accessLevelLabels = {
 };
 
 export function isDomainAllowed(email) {
+  if (!allowedEmailDomains.length) return true;
   const domain = String(email || "").split("@")[1]?.toLowerCase() || "";
   return allowedEmailDomains.includes(domain);
 }
@@ -24,6 +25,7 @@ export function isDomainAllowed(email) {
 // a maioria — mostra a sigla em texto), então usamos imagens reais via
 // flagcdn.com (mesmo padrão do fluxo original, que usava flagpedia.net).
 export const countries = {
+  LT: { label: "LATAM", iso2: "" },
   BR: { label: "Brasil", iso2: "br" },
   AR: { label: "Argentina", iso2: "ar" },
   BO: { label: "Bolívia", iso2: "bo" },
@@ -61,13 +63,22 @@ export const testResultTypes = {
 // Feature/Epic não tinham variante dark documentada no legado, então mantêm
 // a cor fixa original (workTypeInfo()).
 export const workItemTypes = {
-  Bug: { color: "var(--starkTypeBug)", background: "var(--starkTypeBugBg)", icon: "bi-bug-fill" },
-  Task: { color: "var(--starkTypeTask)", background: "var(--starkTypeTaskBg)", icon: "bi-hammer" },
-  "User Story": { color: "var(--starkTypeStory)", background: "var(--starkTypeStoryBg)", icon: "bi-book-fill" },
-  Feature: { color: "#7c3aed", background: "#f5f3ff", icon: "bi-puzzle-fill" },
-  Epic: { color: "#ea580c", background: "#fff7ed", icon: "bi-lightning-charge-fill" }
+  Bug: { color: "var(--starkTypeBug)", background: "var(--starkTypeBugBg)", icon: "bi-bug-fill", prefix: "BUG" },
+  Task: { color: "var(--starkTypeTask)", background: "var(--starkTypeTaskBg)", icon: "bi-hammer", prefix: "TASK" },
+  "User Story": { color: "var(--starkTypeStory)", background: "var(--starkTypeStoryBg)", icon: "bi-book-fill", prefix: "US" },
+  Feature: { color: "#7c3aed", background: "#f5f3ff", icon: "bi-puzzle-fill", prefix: "FEAT" },
+  Epic: { color: "#ea580c", background: "#fff7ed", icon: "bi-lightning-charge-fill", prefix: "EPIC" }
 };
-export const defaultWorkItemTypeStyle = { color: "#64748b", background: "#f8fafc", icon: "bi-card-checklist" };
+export const defaultWorkItemTypeStyle = { color: "#64748b", background: "#f8fafc", icon: "bi-card-checklist", prefix: "WI" };
+
+export function workItemTypePrefix(type) {
+  return (workItemTypes[type] || defaultWorkItemTypeStyle).prefix;
+}
+
+export function formatWorkItemCode(id, type) {
+  const value = String(id ?? "").trim();
+  return `${workItemTypePrefix(type)}${value}`;
+}
 
 // Pill de estado do work item — cores herdadas de CONFIG.statusConfig.
 // Chave normalizada (minúscula, sem espaço) para casar variações de grafia.
@@ -100,3 +111,4 @@ export const nextEnvStep = {
   qa: { env: "beta", state: "In BETA" },
   beta: { env: "prod", state: "Ready to Prod" }
 };
+

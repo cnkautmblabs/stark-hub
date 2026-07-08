@@ -1,19 +1,15 @@
 import React from "react";
 
-// Rodapé discreto de crédito — aparece no app (sidebar) e na tela de login.
+// Rodapé discreto de crédito — aparece na tela de login (fundo sempre escuro).
 export default function BrandFooter({ collapsed = false }) {
   return (
     <div className="stark-brand-footer">
-      <img
-        src="https://mblabs.com.br/wp-content/uploads/2026/03/Logo_interno_01.png"
-        alt="mblabs"
-        className="stark-brand-footer-logo"
-      />
+      <img className="stark-brand-footer-logo" src={`${import.meta.env.BASE_URL}icons/mblabs-branco.png`} alt="mb.labs" />
       {!collapsed && (
         <p className="stark-brand-footer-text">
           Desenvolvido por{" "}
           <a href="https://matheusbonotto.com.br" target="_blank" rel="noreferrer">Matheus Bonotto</a>
-          , QA mblabs + Claude Code
+          , QA mblabs
         </p>
       )}
     </div>

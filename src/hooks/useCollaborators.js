@@ -8,7 +8,7 @@ import { getDemoCollaborators, updateDemoCollaborator, addDemoCollaborator, dele
 // modo demo, vem do Supabase e as edições são persistidas via RLS
 // (somente Gestão pode escrever — ver policy collaborators_write_management).
 export function useCollaborators() {
-  const { demoMode } = useAuth();
+  const { demoMode, profile } = useAuth();
   const [collaborators, setCollaborators] = useState(() => (demoMode ? getDemoCollaborators() : []));
   const [loading, setLoading] = useState(!demoMode);
 
@@ -23,11 +23,25 @@ export function useCollaborators() {
       return;
     }
     setLoading(true);
-    supabase.from("collaborators").select("*").then(({ data, error }) => {
-      if (!error && data) setCollaborators(data);
+    supabase.from("collaborators").select("*").then(async ({ data, error }) => {
+      if (!error && data) {
+        let rows = data;
+        if (profile?.accessLevel === "gestao") {
+          const profileIds = data.map((person) => person.profileId).filter(Boolean);
+          if (profileIds.length) {
+            const { data: profiles } = await supabase
+              .from("profiles")
+              .select('id, email, "fullName", "displayName", "accessLevel"')
+              .in("id", profileIds);
+            const byId = new Map((profiles || []).map((row) => [row.id, row]));
+            rows = data.map((person) => ({ ...person, linkedProfile: byId.get(person.profileId) || null, accessLevel: byId.get(person.profileId)?.accessLevel }));
+          }
+        }
+        setCollaborators(rows);
+      }
       setLoading(false);
     });
-  }, [demoMode]);
+  }, [demoMode, profile?.accessLevel]);
 
   async function updateCollaborator(id, patch) {
     if (demoMode) {
@@ -44,7 +58,7 @@ export function useCollaborators() {
       if (collaborator?.profileId) {
         const { error } = await supabase.from("profiles").update({ accessLevel }).eq("id", collaborator.profileId);
         if (error) return { error };
-        setCollaborators((current) => current.map((person) => (person.id === id ? { ...person, accessLevel } : person)));
+        setCollaborators((current) => current.map((person) => (person.id === id ? { ...person, accessLevel, linkedProfile: { ...(person.linkedProfile || {}), accessLevel } } : person)));
       }
     }
 
@@ -64,8 +78,13 @@ export function useCollaborators() {
       return { error: null, data: created };
     }
     if (!isSupabaseConfigured) return { error: new Error("Supabase não configurado") };
-    const { data, error } = await supabase.from("collaborators").insert(patch).select().maybeSingle();
-    if (!error && data) setCollaborators((current) => [...current, data]);
+    const { accessLevel, ...collaboratorPatch } = patch;
+    const { data, error } = await supabase.from("collaborators").insert(collaboratorPatch).select().maybeSingle();
+    if (!error && data && accessLevel !== undefined && data.profileId) {
+      const { error: profileError } = await supabase.from("profiles").update({ accessLevel }).eq("id", data.profileId);
+      if (profileError) return { error: profileError, data };
+    }
+    if (!error && data) setCollaborators((current) => [...current, { ...data, accessLevel }]);
     return { error, data };
   }
 

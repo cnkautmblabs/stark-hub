@@ -1,10 +1,28 @@
 import React, { useState } from "react";
-import { Outlet } from "react-router-dom";
+import { Link, Outlet } from "react-router-dom";
+import { FiLogOut, FiUser } from "react-icons/fi";
 import Sidebar from "./Sidebar.jsx";
-import Topbar from "./Topbar.jsx";
+import { useAuth } from "../../contexts/AuthContext.jsx";
+import { accessLevelLabels } from "../../utils/constants.js";
+import { IdentityAvatar } from "../workbench/ui/WorkbenchPrimitives.jsx";
+
+function MBLabsMark() {
+  const base = import.meta.env.BASE_URL;
+  return (
+    <picture className="stark-mblabs-mark">
+      <img className="stark-mblabs-mark-dark" src={`${base}icons/mblabs-branco.png`} alt="mb.labs" />
+      <img className="stark-mblabs-mark-light" src={`${base}icons/mblabs-preto.png`} alt="mb.labs" />
+    </picture>
+  );
+}
 
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("starkHubSidebarCollapsed") === "1");
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const { profile, user, demoMode, signOut } = useAuth();
+  const displayName = profile?.displayName || profile?.fullName || user?.email || "Stark Hub";
+  const email = profile?.email || user?.email || (demoMode ? "modo.demo@starkhub.local" : "");
+  const accessLabel = accessLevelLabels[profile?.accessLevel] || "Acesso";
 
   function handleToggle() {
     setCollapsed((current) => {
@@ -14,14 +32,44 @@ export default function Layout() {
     });
   }
 
+  async function handleSignOut() {
+    setUserMenuOpen(false);
+    await signOut();
+  }
+
   return (
-    <div className="stark-app-shell">
+    <div className={`workbench-app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
       <Sidebar collapsed={collapsed} onToggle={handleToggle} />
-      <div className="stark-main">
-        <Topbar />
-        <main className="stark-content">
+      <div className="workbench-main-area">
+        <header className="stark-app-topbar">
+          <div className="stark-topbar-title">
+            <span>Stark Hub</span>
+            <small>{accessLabel}</small>
+          </div>
+          <div className="stark-user-menu-wrap">
+            <button type="button" className="stark-user-menu-trigger" onClick={() => setUserMenuOpen((value) => !value)} aria-expanded={userMenuOpen}>
+              <IdentityAvatar name={displayName} imageUrl={profile?.avatarUrl} color={profile?.color} accessLevel={profile?.accessLevel} size={36} />
+              <span className="stark-user-menu-text">
+                <strong>{displayName}</strong>
+                <small>{email}</small>
+              </span>
+            </button>
+            {userMenuOpen && (
+              <div className="stark-user-menu">
+                <div className="stark-user-menu-level">Nível de acesso: <b>{accessLabel}</b></div>
+                <Link to="/management/collaborators" onClick={() => setUserMenuOpen(false)}><FiUser /> Perfil</Link>
+                <button type="button" onClick={handleSignOut}><FiLogOut /> {demoMode ? "Sair do demo" : "Sair"}</button>
+              </div>
+            )}
+          </div>
+        </header>
+        <main id="mb-workbench-content" className="workbench-content" aria-label="Conteudo do Stark Hub" onClick={() => userMenuOpen && setUserMenuOpen(false)}>
           <Outlet />
         </main>
+        <footer className="stark-app-footer">
+          <MBLabsMark />
+          <span>Desenvolvido por <a href="https://matheusbonotto.com.br" target="_blank" rel="noreferrer">Matheus Bonotto</a> para mblabs.</span>
+        </footer>
       </div>
     </div>
   );

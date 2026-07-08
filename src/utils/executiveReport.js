@@ -139,3 +139,78 @@ export async function downloadExecutiveReportPdf({ title, period, totals, rows, 
 
   doc.save(filename || `relatorio-executivo-${new Date().toISOString().slice(0, 10)}.pdf`);
 }
+
+// Resumo executivo pessoal (Home) — lista livre de itens recorrentes
+// (sempre presentes, ex. "Daily") e temporários (só no resumo do dia,
+// ex. "1:1 com Nat"), com as mesmas ações de copiar/baixar do relatório
+// de equipe, mas sem a tabela por colaborador.
+export function buildPersonalSummaryText({ name, role, entries = [], autoEntries = [], autoLabel = "Hoje (automatico)" }) {
+  const recurring = entries.filter((entry) => entry.type === "recorrente");
+  const temporary = entries.filter((entry) => entry.type !== "recorrente");
+  return [
+    `Resumo executivo - ${name}${role ? ` (${role})` : ""}`,
+    `Gerado em ${new Date().toLocaleString("pt-BR")}`,
+    "",
+    "Recorrentes:",
+    ...(recurring.length ? recurring.map((entry) => `• ${entry.title}`) : ["• Nenhum"]),
+    "",
+    "Hoje:",
+    ...(temporary.length ? temporary.map((entry) => `• ${entry.title}`) : ["• Nenhum"]),
+    ...(autoEntries.length ? ["", `${autoLabel}:`, ...autoEntries.map((entry) => `• ${entry.title}`)] : [])
+  ].join("\n");
+}
+
+export async function copyPersonalSummaryText(payload) {
+  const text = buildPersonalSummaryText(payload);
+  await navigator.clipboard?.writeText(text);
+  return text;
+}
+
+export async function downloadPersonalSummaryPdf({ name, role, entries = [], autoEntries = [], autoLabel = "Hoje (automatico)", filename }) {
+  const { jsPDF } = await import("jspdf");
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 40;
+  let y = 96;
+
+  doc.setFillColor(...COLORS.header);
+  doc.rect(0, 0, pageWidth, 70, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(16);
+  doc.setFont("helvetica", "bold");
+  doc.text(`Resumo executivo - ${name}`, margin, 32);
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.text(`${role || ""} — Gerado em ${new Date().toLocaleString("pt-BR")}`, margin, 50);
+
+  function section(title, rows) {
+    doc.setTextColor(...COLORS.header);
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text(title, margin, y);
+    y += 18;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10.5);
+    doc.setTextColor(...COLORS.text);
+    const list = rows.length ? rows : [{ title: "Nenhum item" }];
+    list.forEach((row) => {
+      if (y > doc.internal.pageSize.getHeight() - 40) {
+        doc.addPage();
+        y = 40;
+      }
+      doc.text(`•  ${row.title}`, margin + 6, y);
+      y += 16;
+    });
+    y += 12;
+  }
+
+  section("Recorrentes", entries.filter((entry) => entry.type === "recorrente"));
+  section("Hoje", entries.filter((entry) => entry.type !== "recorrente"));
+  if (autoEntries.length) section(autoLabel, autoEntries);
+
+  doc.setFontSize(8);
+  doc.setTextColor(...COLORS.muted);
+  doc.text("Stark Hub", margin, doc.internal.pageSize.getHeight() - 16);
+
+  doc.save(filename || `resumo-executivo-${new Date().toISOString().slice(0, 10)}.pdf`);
+}

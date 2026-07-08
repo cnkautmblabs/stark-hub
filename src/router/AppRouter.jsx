@@ -4,6 +4,7 @@ import Layout from "../components/layout/Layout.jsx";
 import Login from "../pages/Login.jsx";
 import PendingApproval from "../pages/PendingApproval.jsx";
 import AzureSetup from "../pages/AzureSetup.jsx";
+import ProfileSetup from "../pages/ProfileSetup.jsx";
 import DevDashboard from "../pages/dev/DevDashboard.jsx";
 import QaBoard from "../pages/qa/QaBoard.jsx";
 import Governance from "../pages/management/Governance.jsx";
@@ -13,15 +14,7 @@ import Settings from "../pages/Settings.jsx";
 import Faq from "../pages/Faq.jsx";
 import About from "../pages/About.jsx";
 import ProtectedRoute from "./ProtectedRoute.jsx";
-import { useAuth } from "../contexts/AuthContext.jsx";
-
-function Home() {
-  const { profile } = useAuth();
-  const accessLevel = profile?.accessLevel;
-  if (accessLevel === "qa") return <Navigate to="/qa" replace />;
-  if (accessLevel === "gestao") return <Navigate to="/management" replace />;
-  return <Navigate to="/dev" replace />;
-}
+import WorkbenchHome from "../pages/WorkbenchHome.jsx";
 
 export default function AppRouter() {
   return (
@@ -29,13 +22,15 @@ export default function AppRouter() {
       <Route path="/login" element={<Login />} />
       <Route path="/pending" element={<PendingApproval />} />
       <Route path="/azure-setup" element={<AzureSetup />} />
+      <Route path="/profile-setup" element={<ProfileSetup />} />
 
       <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-        <Route path="/" element={<Home />} />
-        <Route path="/dev" element={<ProtectedRoute allow={["dev", "gestao"]}><DevDashboard /></ProtectedRoute>} />
+        <Route path="/" element={<WorkbenchHome />} />
+        <Route path="/dev" element={<ProtectedRoute allow={["dev", "qa", "gestao"]}><DevDashboard /></ProtectedRoute>} />
         <Route path="/qa" element={<ProtectedRoute allow={["qa", "gestao"]}><QaBoard /></ProtectedRoute>} />
+        <Route path="/tests" element={<Navigate to="/dev" replace />} />
         <Route path="/management" element={<ProtectedRoute allow={["gestao"]}><Governance /></ProtectedRoute>} />
-        <Route path="/management/collaborators" element={<ProtectedRoute allow={["gestao"]}><Collaborators /></ProtectedRoute>} />
+        <Route path="/management/collaborators" element={<ProtectedRoute allow={["dev", "qa", "gestao"]}><Collaborators /></ProtectedRoute>} />
         <Route path="/import" element={<ProtectedRoute allow={["qa", "gestao"]}><Import /></ProtectedRoute>} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/faq" element={<Faq />} />

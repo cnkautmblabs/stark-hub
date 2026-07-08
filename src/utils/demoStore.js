@@ -5,13 +5,34 @@
 // editado ao navegar entre telas ou recarregar a página.
 import { mockCollaborators, mockFeatureFlags, mockWorkItems } from "./mockData.js";
 
+const demoAppSettings = {
+  productName: "Stark Hub",
+  defaultGoalHours: 160,
+  azurePipelines: { qa: "", beta: "" },
+  azureIterationPattern: "",
+  azureCustomQuery: "",
+  azureMaxItems: 200,
+  azureAutoRefreshSeconds: 60,
+  azureCountryField: "",
+  slackMention: "",
+  slackAdditionalWebhooks: [],
+  slackTestMode: false,
+  slackWebhookUrl: "",
+  slackTestWebhookUrl: "",
+  slackPrimaryWebhookName: "",
+  devHoursPeriod: { mode: "changedDate", start: "", end: "" },
+  importDefaults: { organization: "", project: "", team: "", areaPath: "", iterationPath: "", defaultCountry: "All", defaultTags: "" }
+};
+
 const STORAGE_KEY = "starkHubDemoState";
+const DEMO_STATE_VERSION = 2;
 
 function readState() {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return parsed?.version === DEMO_STATE_VERSION ? parsed : null;
   } catch {
     return null;
   }
@@ -29,7 +50,9 @@ function seedState() {
   const seeded = {
     collaborators: mockCollaborators,
     featureFlags: mockFeatureFlags,
-    workItems: mockWorkItems
+    workItems: mockWorkItems,
+    appSettings: demoAppSettings,
+    version: DEMO_STATE_VERSION
   };
   writeState(seeded);
   return seeded;
@@ -53,6 +76,17 @@ export function setDemoFeatureFlag(key, value) {
   const next = { ...state, featureFlags: { ...state.featureFlags, [key]: value } };
   writeState(next);
   return next.featureFlags;
+}
+
+export function getDemoAppSettings() {
+  return getState().appSettings || demoAppSettings;
+}
+
+export function setDemoAppSetting(key, value) {
+  const state = getState();
+  const next = { ...state, appSettings: { ...(state.appSettings || demoAppSettings), [key]: value } };
+  writeState(next);
+  return next.appSettings;
 }
 
 export function getDemoCollaborators() {

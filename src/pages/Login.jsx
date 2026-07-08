@@ -74,7 +74,7 @@ export default function Login() {
           <i className="bi bi-google" /> Entrar com Google
         </button>
         <p className="text-white-50 small mb-0" style={{ maxWidth: 420 }}>
-          Somente contas dos domínios {allowedEmailDomains.join(" e ")} podem acessar.
+          {allowedEmailDomains.length ? `Somente contas dos domínios ${allowedEmailDomains.join(" e ")} podem acessar.` : "Configure os dominios permitidos em VITE_ALLOWED_EMAIL_DOMAINS para restringir o acesso."}
           Após o login, aguarde a liberação do administrador.
         </p>
 

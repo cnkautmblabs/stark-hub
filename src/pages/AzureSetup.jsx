@@ -17,7 +17,7 @@ export default function AzureSetup() {
         obrigatória — é ela que alimenta os itens, tarefas e métricas do Stark Hub.
       </p>
       <div className="stark-card text-start" style={{ width: "100%", maxWidth: 440 }}>
-        <AzureConnectionForm submitLabel="Testar e continuar" onSuccess={() => navigate("/", { replace: true })} />
+        <AzureConnectionForm submitLabel="Testar e continuar" onSuccess={() => navigate("/profile-setup", { replace: true })} />
       </div>
       <button type="button" className="btn btn-link btn-sm text-muted" onClick={signOut}>Sair</button>
     </div>

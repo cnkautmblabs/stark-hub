@@ -9,6 +9,7 @@ export default function ProtectedRoute({ children, allow }) {
   if (!demoMode && !user) return <Navigate to="/login" replace />;
   if (!isApproved) return <Navigate to="/pending" replace />;
   if (!demoMode && !profile?.azureVerifiedAt) return <Navigate to="/azure-setup" replace />;
+  if (!demoMode && !(profile?.slackMemberId && profile?.aliasSlack && profile?.aliasAzure)) return <Navigate to="/profile-setup" replace />;
 
   const accessLevel = profile?.accessLevel;
   if (allow && !allow.includes(accessLevel)) return <Navigate to="/" replace />;

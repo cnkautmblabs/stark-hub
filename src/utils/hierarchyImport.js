@@ -132,6 +132,39 @@ export function buildTreeFromCsvRows(objects) {
   return root;
 }
 
+// Constrói a mesma árvore genérica a partir de uma lista plana de itens
+// cadastrados manualmente (aba Manual), cada um com parentId apontando para
+// outro item da lista ou null/undefined para virar raiz.
+export function buildTreeFromManualItems(items) {
+  const root = { type: "root", children: [] };
+  const nodeById = new Map();
+  items.forEach((item) => {
+    const node = {
+      type: item.type,
+      title: item.title,
+      children: [],
+      opts: {
+        areaPath: item.areaPath || "",
+        iterationPath: item.iterationPath || "",
+        tags: item.tags || "",
+        description: item.description || "",
+        countryValue: item.countryValue || ""
+      }
+    };
+    if (item.type === "Test Case" && item.description) {
+      const parsed = extractStepsFromDescription(item.description);
+      if (parsed.steps.length) node.opts.stepsXml = buildStepsXml(parsed.steps, parsed.expected);
+    }
+    nodeById.set(item.id, node);
+  });
+  items.forEach((item) => {
+    const node = nodeById.get(item.id);
+    const parent = item.parentId ? nodeById.get(item.parentId) : null;
+    (parent || root).children.push(node);
+  });
+  return root;
+}
+
 // Primeiro node com Area Path/Iteration Path preenchidos (tipicamente o
 // Epic), usado para pré-preencher os campos de fallback a partir do CSV.
 export function findFirstConfigSource(root) {

@@ -71,10 +71,215 @@ function tagsList(tagsField) {
     .filter(Boolean);
 }
 
+function isWebAppMbLabsIteration(path) {
+  const text = String(path || "").toLowerCase();
+  return text.includes("webapp") && text.includes("mb labs");
+}
+
 function sprintFromIterationPath(path) {
   if (!path) return null;
   const parts = String(path).split("\\");
-  return parts[parts.length - 1] || null;
+  const leaf = parts[parts.length - 1] || "";
+  const match = leaf.match(/([A-Za-zÀ-ÿ]+)\s*\[?(20\d{2})\]?/i);
+  if (!match) return leaf || null;
+  const monthMap = {
+    janeiro: "Jan", fevereiro: "Feb", marco: "Mar", "março": "Mar", abril: "Apr", maio: "May", junho: "Jun",
+    julho: "Jul", agosto: "Aug", setembro: "Sep", outubro: "Oct", novembro: "Nov", dezembro: "Dec",
+    january: "Jan", february: "Feb", march: "Mar", april: "Apr", may: "May", june: "Jun", july: "Jul",
+    august: "Aug", september: "Sep", october: "Oct", november: "Nov", december: "Dec"
+  };
+  const month = monthMap[String(match[1]).toLowerCase()] || match[1].slice(0, 3);
+  return `${month}${match[2].slice(-2)}`;
+}
+
+function stripHtmlText(value) {
+  return String(value || "")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function detectEvidenceResult(htmlOrText) {
+  const text = stripHtmlText(htmlOrText).toUpperCase().replace(/\s+/g, " ");
+  if (/TEST(?:ING)?\s+LIMITATION\s+IN|\bLIMITATION\s+IN\b|\bLIMITATION\b/.test(text)) return "limitation";
+  if (/TEST\s+FAILED\s+IN|\bFAIL(?:ED)?\s+IN\b|\bFAILED\b|\bFAIL\b/.test(text)) return "fail";
+  if (/TEST\s+APPROVED\s+IN|\bAPPROVED\s+IN\b|\bAPPROVED\b|\bAPROVAD[OA]\b|\bPASS(?:ED)?\b/.test(text)) return "pass";
+  return "";
+}
+
+function detectEvidenceEnvironments(htmlOrText, fallbackEnv) {
+  const normalized = stripHtmlText(htmlOrText).toUpperCase().replace(/READY\s*TO\s*/g, "").replace(/[\-_]/g, " ");
+  const found = ["DEV", "QA", "BETA", "PROD"].filter((environment) =>
+    new RegExp("(^|[^A-Z])" + environment + "([^A-Z]|$)", "i").test(normalized)
+  );
+  if (found.length) return found;
+  return fallbackEnv ? [String(fallbackEnv).toUpperCase()] : ["N/A"];
+}
+
+function normalizeEvidenceComment(comment, item) {
+  const rawComment = comment?.renderedText || comment?.text || "";
+  const result = detectEvidenceResult(rawComment);
+  if (!result) return null;
+  const author = comment.createdBy || comment.modifiedBy || {};
+  const environments = detectEvidenceEnvironments(rawComment, item.env);
+  return {
+    id: `discussion-${item.id}-${comment.id || comment.createdDate || ""}`,
+    commentId: comment.id || null,
+    workItemId: Number(item.id),
+    result,
+    status: result,
+    environments,
+    environment: environments[0] || "N/A",
+    authorName: author.displayName || author.uniqueName || "QA nao identificado",
+    authorEmail: author.uniqueName || "",
+    avatarUrl: author.imageUrl || author._links?.avatar?.href || "",
+    createdAt: comment.createdDate || comment.modifiedDate || "",
+    createdDate: comment.createdDate || comment.modifiedDate || "",
+    note: stripHtmlText(rawComment).slice(0, 500),
+    html: rawComment,
+    source: "azure-discussion"
+  };
+}
+
+function normalizeDiscussionComment(comment, item) {
+  const rawComment = comment?.renderedText || comment?.text || "";
+  const author = comment.createdBy || comment.modifiedBy || {};
+  const result = detectEvidenceResult(rawComment);
+  return {
+    id: `comment-${item.id}-${comment.id || comment.createdDate || ""}`,
+    commentId: comment.id || null,
+    workItemId: Number(item.id),
+    html: rawComment,
+    text: stripHtmlText(rawComment),
+    result: result || null,
+    environments: result ? detectEvidenceEnvironments(rawComment, item.env) : [],
+    authorName: author.displayName || author.uniqueName || "Autor nao identificado",
+    authorEmail: author.uniqueName || "",
+    avatarUrl: author.imageUrl || author._links?.avatar?.href || "",
+    createdAt: comment.createdDate || comment.modifiedDate || "",
+    createdDate: comment.createdDate || comment.modifiedDate || "",
+    modifiedAt: comment.modifiedDate || ""
+  };
+}
+
+function normalizeDiscussionUpdate(update, item) {
+  const rawComment = update?.fields?.["System.History"]?.newValue || "";
+  if (!rawComment) return null;
+  const author = update.revisedBy || {};
+  const result = detectEvidenceResult(rawComment);
+  return {
+    id: `update-${item.id}-${update.id || update.rev || update.revisedDate || ""}`,
+    commentId: update.id || update.rev || null,
+    workItemId: Number(item.id),
+    html: rawComment,
+    text: stripHtmlText(rawComment),
+    result: result || null,
+    environments: result ? detectEvidenceEnvironments(rawComment, item.env) : [],
+    authorName: author.displayName || author.uniqueName || "Autor nao identificado",
+    authorEmail: author.uniqueName || "",
+    avatarUrl: author.imageUrl || author._links?.avatar?.href || "",
+    createdAt: update.revisedDate || "",
+    createdDate: update.revisedDate || "",
+    modifiedAt: update.revisedDate || ""
+  };
+}
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+  const output = new Array(items.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < items.length) {
+      const index = cursor++;
+      output[index] = await mapper(items[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length || 1) }, worker));
+  return output;
+}
+
+async function fetchDiscussionsForItem(item, projectPath, authHeader) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 6500);
+  try {
+    const comments = [];
+    let continuationToken = "";
+    for (let page = 0; page < 5; page += 1) {
+      const suffix = continuationToken ? `&continuationToken=${encodeURIComponent(continuationToken)}` : "";
+      const response = await fetch(
+        `${projectPath}/_apis/wit/workItems/${encodeURIComponent(item.id)}/comments?$top=200${suffix}&api-version=7.1-preview.4`,
+        { headers: { Authorization: authHeader }, signal: controller.signal }
+      );
+      if (!response.ok) break;
+      const data = await response.json();
+      comments.push(...(data.comments || data.value || []));
+      continuationToken = data.continuationToken || "";
+      if (!continuationToken) break;
+    }
+    if (!comments.length) {
+      const updateResponse = await fetch(
+        `${projectPath}/_apis/wit/workItems/${encodeURIComponent(item.id)}/updates?$top=200&api-version=7.1`,
+        { headers: { Authorization: authHeader }, signal: controller.signal }
+      );
+      if (updateResponse.ok) {
+        const updateData = await updateResponse.json();
+        comments.push(...((updateData.value || []).map((update) => normalizeDiscussionUpdate(update, item)).filter(Boolean)));
+      }
+    }
+    return comments
+      .map((comment) => comment?.workItemId && comment?.html ? comment : normalizeDiscussionComment(comment, item))
+      .filter(Boolean)
+      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function fetchEvidenceForItem(item, projectPath, authHeader) {
+  const discussions = await fetchDiscussionsForItem(item, projectPath, authHeader);
+  return discussions
+    .filter((comment) => comment.result)
+    .map((comment) => normalizeEvidenceComment({
+      id: comment.commentId,
+      renderedText: comment.html,
+      text: comment.text,
+      createdBy: { displayName: comment.authorName, uniqueName: comment.authorEmail, imageUrl: comment.avatarUrl },
+      createdDate: comment.createdAt,
+      modifiedDate: comment.modifiedAt
+    }, item));
+}
+
+function pullRequestFromRelations(relations, projectPath) {
+  for (const relation of relations || []) {
+    const candidates = [relation?.url, relation?.attributes?.resource, relation?.attributes?.comment].filter(Boolean).map(String);
+    for (const raw of candidates) {
+      const variants = [raw];
+      try { variants.push(decodeURIComponent(raw)); } catch (_) {}
+      for (const candidate of variants) {
+        const normalized = candidate.replace(/%2F/ig, "/");
+        const match = normalized.match(/PullRequestId\/([^/]+)\/([^/]+)\/(\d+)/i)
+          || normalized.match(/Git\/PullRequestId\/([^/]+)\/([^/]+)\/(\d+)/i)
+          || normalized.match(/repositories\/([^/]+)\/pullRequests\/(\d+)/i);
+        if (match) {
+          const repositoryId = match.length === 4 ? match[2] : match[1];
+          const pullRequestId = Number(match.length === 4 ? match[3] : match[2]);
+          if (repositoryId && pullRequestId) {
+            return { prId: pullRequestId, prUrl: `${projectPath}/_git/${encodeURIComponent(repositoryId)}/pullrequest/${encodeURIComponent(pullRequestId)}` };
+          }
+        }
+      }
+    }
+  }
+  return {};
 }
 
 const WORK_ITEM_FIELDS = [
@@ -87,8 +292,20 @@ const WORK_ITEM_FIELDS = [
   "System.IterationPath",
   "System.AreaPath",
   "System.Description",
+  "System.CreatedDate",
+  "System.CreatedBy",
   "System.ChangedDate",
-  "Microsoft.VSTS.Scheduling.CompletedWork"
+  "System.ChangedBy",
+  "System.Reason",
+  "System.Parent",
+  "Microsoft.VSTS.Common.Priority",
+  "Microsoft.VSTS.Common.Severity",
+  "Microsoft.VSTS.Common.ValueArea",
+  "Microsoft.VSTS.Scheduling.OriginalEstimate",
+  "Microsoft.VSTS.Scheduling.CompletedWork",
+  "Microsoft.VSTS.Scheduling.RemainingWork",
+  "Microsoft.VSTS.Common.AcceptanceCriteria",
+  "Microsoft.VSTS.TCM.ReproSteps"
 ];
 
 Deno.serve(async (req) => {
@@ -166,17 +383,19 @@ Deno.serve(async (req) => {
     }
   }
 
-  const pattern = String(iterationPattern || "").trim().toLowerCase();
-  const scopedPaths = pattern ? allPaths.filter((path) => path.toLowerCase().includes(pattern)) : allPaths;
+  const webAppMbLabsPaths = allPaths.filter(isWebAppMbLabsIteration);
+  const baseScopedPaths = webAppMbLabsPaths.length ? webAppMbLabsPaths : [];
+  const pattern = String(iterationPattern || "MB Labs").trim().toLowerCase();
+  const scopedPaths = pattern ? baseScopedPaths.filter((path) => path.toLowerCase().includes(pattern)) : baseScopedPaths;
 
   // Um padrão configurado que não bate com NADA é quase sempre erro de
   // digitação — melhor travar aqui com um aviso claro do que devolver o
   // projeto inteiro sem avisar (foi esse silêncio que vazou a Lenio Labs).
   if (pattern && !scopedPaths.length) {
-    return json({ ok: false, error: `Nenhuma iteration do projeto contém "${iterationPattern}". Confira o "Padrão do nome da iteration" em Configurações.` });
+    return json({ ok: false, error: `Nenhuma sprint WebApp MB Labs contém "${iterationPattern || "MB Labs"}". A busca global foi limitada a WebApp + MB Labs.` });
   }
   if (!scopedPaths.length) {
-    return json({ ok: false, error: "Não foi possível determinar as iterations do projeto (nem por Time, nem pela árvore geral)." });
+    return json({ ok: false, error: "Não foi possível determinar sprints WebApp MB Labs no projeto." });
   }
 
   const iterationClause = `AND (${scopedPaths.map((path) => `[System.IterationPath] UNDER '${path.replace(/'/g, "''")}'`).join(" OR ")})`;
@@ -223,11 +442,18 @@ Deno.serve(async (req) => {
   const rawWorkItems = [];
   for (let offset = 0; offset < ids.length; offset += 200) {
     const chunk = ids.slice(offset, offset + 200);
-    const batchResponse = await fetch(`${baseUrl}/_apis/wit/workitemsbatch?api-version=7.1`, {
+    let batchResponse = await fetch(`${baseUrl}/_apis/wit/workitemsbatch?api-version=7.1`, {
       method: "POST",
       headers: { Authorization: authHeader, "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: chunk, fields: WORK_ITEM_FIELDS, errorPolicy: "Omit" })
+      body: JSON.stringify({ ids: chunk, fields: WORK_ITEM_FIELDS, errorPolicy: "Omit", $expand: "Relations" })
     });
+    if (!batchResponse.ok) {
+      batchResponse = await fetch(`${baseUrl}/_apis/wit/workitemsbatch?api-version=7.1`, {
+        method: "POST",
+        headers: { Authorization: authHeader, "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: chunk, fields: WORK_ITEM_FIELDS, errorPolicy: "Omit" })
+      });
+    }
     if (!batchResponse.ok) continue;
     const batchData = await batchResponse.json();
     rawWorkItems.push(...(batchData.value || []));
@@ -268,7 +494,9 @@ Deno.serve(async (req) => {
     const id = wi.id;
     const state = fields["System.State"];
     const assigneeName = fields["System.AssignedTo"]?.displayName || "";
+    const assigneeImageUrl = fields["System.AssignedTo"]?.imageUrl || fields["System.AssignedTo"]?._links?.avatar?.href || "";
     const assignment = assignmentByItemId.get(id);
+    const prInfo = pullRequestFromRelations(wi.relations || [], projectPath);
 
     let qaCollaboratorId = assignment?.qaCollaboratorId || null;
     if (qaCollaboratorId && assignment?.lastKnownState && assignment.lastKnownState !== state) {
@@ -287,7 +515,19 @@ Deno.serve(async (req) => {
       sprint: sprintFromIterationPath(fields["System.IterationPath"]),
       areaPath: fields["System.AreaPath"] || null,
       description: fields["System.Description"] || "",
+      createdAt: fields["System.CreatedDate"] || null,
+      createdBy: fields["System.CreatedBy"]?.displayName || null,
+      changedBy: fields["System.ChangedBy"]?.displayName || null,
+      reason: fields["System.Reason"] || null,
+      priority: fields["Microsoft.VSTS.Common.Priority"] ?? null,
+      severity: fields["Microsoft.VSTS.Common.Severity"] || null,
+      valueArea: fields["Microsoft.VSTS.Common.ValueArea"] || null,
+      originalEstimate: fields["Microsoft.VSTS.Scheduling.OriginalEstimate"] ?? null,
       completedHours: fields["Microsoft.VSTS.Scheduling.CompletedWork"] ?? null,
+      remainingHours: fields["Microsoft.VSTS.Scheduling.RemainingWork"] ?? null,
+      acceptanceCriteria: fields["Microsoft.VSTS.Common.AcceptanceCriteria"] || "",
+      reproSteps: fields["Microsoft.VSTS.TCM.ReproSteps"] || "",
+      azureFields: Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, typeof value === "object" && value?.displayName ? value.displayName : value])),
       // O nome bruto do Azure SEMPRE vai junto, mesmo sem colaborador
       // cadastrado — o userscript legado nunca escondia o "Assigned To" só
       // porque a pessoa não tinha avatar/cor configurados; ele mostrava o
@@ -295,11 +535,67 @@ Deno.serve(async (req) => {
       // cadastrado (pra avatar/cor); assigneeName é o fallback de exibição.
       assigneeId: collaboratorByAzureName.get(assigneeName.toLowerCase()) || null,
       assigneeName: assigneeName || null,
+      assigneeImageUrl,
       qaCollaboratorId,
       lastTestResult: lastResultByItemId.get(id) || null,
+      discussionEvidence: [],
+      discussions: [],
+      parentId: fields["System.Parent"] || null,
+      parent: null,
+      url: `${projectPath}/_workitems/edit/${id}`,
+      prId: prInfo.prId || null,
+      prUrl: prInfo.prUrl || "",
       updatedAt: fields["System.ChangedDate"]
     };
   });
+
+  // Parent (ex.: Feature) so aparece na mensagem do Slack como uma linha
+  // curta (tag + id, sem titulo) — igual ao userscript legado. System.Parent
+  // devolve so o ID; busca em lote so os campos minimos dos pais unicos.
+  const parentIds = Array.from(new Set(items.map((item) => item.parentId).filter(Boolean)));
+  if (parentIds.length) {
+    const parentBatchResponse = await fetch(`${baseUrl}/_apis/wit/workitemsbatch?api-version=7.1`, {
+      method: "POST",
+      headers: { Authorization: authHeader, "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: parentIds, fields: ["System.Id", "System.Title", "System.WorkItemType"], errorPolicy: "Omit" })
+    });
+    if (parentBatchResponse.ok) {
+      const parentBatchData = await parentBatchResponse.json();
+      const parentById = new Map((parentBatchData.value || []).map((wi) => [wi.id, {
+        id: wi.id,
+        type: wi.fields?.["System.WorkItemType"],
+        title: wi.fields?.["System.Title"],
+        url: `${projectPath}/_workitems/edit/${wi.id}`
+      }]));
+      items.forEach((item) => {
+        if (item.parentId) item.parent = parentById.get(item.parentId) || null;
+      });
+    }
+  }
+
+  const discussionItems = items.slice(0, Math.min(items.length, topN));
+  const discussionsByIndex = await mapWithConcurrency(
+    discussionItems,
+    8,
+    (item) => fetchDiscussionsForItem(item, projectPath, authHeader)
+  );
+  for (let index = 0; index < discussionsByIndex.length; index += 1) {
+    const discussions = discussionsByIndex[index] || [];
+    const records = discussions
+      .filter((comment) => comment.result)
+      .map((comment) => normalizeEvidenceComment({
+        id: comment.commentId,
+        renderedText: comment.html,
+        text: comment.text,
+        createdBy: { displayName: comment.authorName, uniqueName: comment.authorEmail, imageUrl: comment.avatarUrl },
+        createdDate: comment.createdAt,
+        modifiedDate: comment.modifiedAt
+      }, items[index]))
+      .filter(Boolean);
+    items[index].discussions = discussions;
+    items[index].discussionEvidence = records;
+    if (records[0]?.result) items[index].lastTestResult = records[0].result;
+  }
 
   if (staleAssignmentIds.length && serviceRoleKey) {
     const serviceClient = createClient(supabaseUrl, serviceRoleKey);

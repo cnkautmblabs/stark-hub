@@ -4,7 +4,12 @@ dist
 .env.local
 .DS_Store
 *.log
-MB Azure Workbench-5..8.1.txt
+MB Azure Workbench-5.9.0.txt
 supabase/.temp
 Apresentação_Automações CNK.txt
 *.sql
+Stark Hub Refatoração.pdf
+mb-azure-workbench-config-sanitized.json
+/stark-hub-script
+/docs
+tempermonkey.js

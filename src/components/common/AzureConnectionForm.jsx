@@ -1,10 +1,13 @@
 import React, { useState } from "react";
 import { supabase } from "../../lib/supabaseClient.js";
 import { useAuth } from "../../contexts/AuthContext.jsx";
+import { normalizeAzureOrgUrl } from "../../utils/azure.js";
+
+const DEFAULT_ORG_URL = "https://dev.azure.com/cinemarkintl";
 
 export default function AzureConnectionForm({ onSuccess, submitLabel = "Testar e salvar" }) {
   const { profile, updateProfile } = useAuth();
-  const [orgUrl, setOrgUrl] = useState(profile?.azureOrgUrl || "");
+  const [orgUrl, setOrgUrl] = useState(profile?.azureOrgUrl || DEFAULT_ORG_URL);
   const [project, setProject] = useState(profile?.azureProject || "");
   const [team, setTeam] = useState(profile?.azureTeam || "");
   const [pat, setPat] = useState("");
@@ -98,6 +101,16 @@ export default function AzureConnectionForm({ onSuccess, submitLabel = "Testar e
           value={pat}
           onChange={(e) => setPat(e.target.value)}
         />
+        <div className="stark-onboarding-hint">
+          <p className="mb-1">
+            Ainda não tem um token? <a href={`${normalizeAzureOrgUrl(orgUrl) || DEFAULT_ORG_URL}/_usersSettings/tokens`} target="_blank" rel="noreferrer">Clique aqui para gerar no Azure DevOps</a>.
+          </p>
+          <ol className="mb-0 ps-3">
+            <li>Clique em "+ New Token" e dê um nome (ex.: "Stark Hub").</li>
+            <li>Em Scopes, marque <strong>Full access</strong> — ou, no modo custom, habilite ao menos: Work Items (Read &amp; Write), Code (Read), Project and Team (Read) e Identity (Read).</li>
+            <li>Copie o token gerado (ele só aparece uma vez) e cole no campo acima.</li>
+          </ol>
+        </div>
       </div>
       {status && (
         <div className={`alert ${status.type === "error" ? "alert-danger" : "alert-success"} py-2 small mb-0`}>

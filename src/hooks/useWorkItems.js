@@ -5,7 +5,17 @@ import { useAppSettings } from "./useAppSettings.js";
 import { useCollaborators } from "./useCollaborators.js";
 import { useFeatureFlags } from "../contexts/FeatureFlagsContext.jsx";
 import { resolveSlackWebhooks, buildReadyForBetaMessage } from "../utils/slack.js";
+import { buildLegacyQaResultSlackText, buildQaResultDiscussionHtml } from "../utils/slackReport.js";
 import { getDemoWorkItems, updateDemoWorkItem, addDemoWorkItem } from "../utils/demoStore.js";
+import { playNotificationSound } from "../utils/notificationSounds.js";
+
+// Fiel ao userscript legado: sem member ID real do Slack nao existe fallback
+// por nome (a mencao simplesmente nao aparece na mensagem).
+function mentionNameForSlack(person) {
+  if (!person) return "";
+  const memberId = person.slackMemberId || person.slackId;
+  return memberId ? `<@${String(memberId).replace(/[<@>]/g, "")}>` : "";
+}
 
 // Fonte de work items do painel. No modo demo, vem do localStorage (editável
 // localmente). Fora do modo demo, vem de verdade do Azure DevOps (WIQL +
@@ -13,7 +23,7 @@ import { getDemoWorkItems, updateDemoWorkItem, addDemoWorkItem } from "../utils/
 // responsável de QA (work_item_assignments) e o resultado de teste
 // (test_evidence) guardados no Supabase — ver supabase/functions/azureWorkItems.
 export function useWorkItems() {
-  const { demoMode, profile } = useAuth();
+  const { demoMode, profile, user } = useAuth();
   const { getSetting } = useAppSettings();
   const { collaborators } = useCollaborators();
   const { isEnabled } = useFeatureFlags();
@@ -105,27 +115,120 @@ export function useWorkItems() {
     // reconstruir depois em qual ambiente cada resultado foi obtido —
     // mesma distinção que o userscript legado fazia por comentário (QA/BETA).
     if ("lastTestResult" in patch) {
+      const resultLabel = patch.lastTestResult === "pass" ? "Approved" : patch.lastTestResult === "fail" ? "Fail" : patch.lastTestResult === "limitation" ? "Limitation" : patch.lastTestResult;
+      const environments = Array.isArray(patch.environments) && patch.environments.length ? patch.environments : [String(item.env || "QA").toUpperCase()];
+      const testedCountries = Array.isArray(patch.countries) ? patch.countries : [];
+      const rawAttachments = Array.isArray(patch.attachments) ? patch.attachments.filter(Boolean) : [];
+      const breakpoints = Array.isArray(patch.breakpoints) ? patch.breakpoints : [];
+      const attachmentUrls = [];
+      for (const attachment of rawAttachments) {
+        if (typeof attachment === "string") {
+          attachmentUrls.push(attachment);
+          continue;
+        }
+        if (!attachment?.dataUrl) continue;
+        const { data } = await supabase.functions.invoke("azureWorkItemAction", {
+          body: {
+            action: "attachment",
+            orgUrl: profile.azureOrgUrl,
+            project: profile.azureProject,
+            pat: profile.azurePat,
+            fileName: attachment.name || `evidence-${id}.png`,
+            contentType: attachment.type || "image/png",
+            dataUrl: attachment.dataUrl
+          }
+        });
+        if (data?.ok && data.url) attachmentUrls.push(data.url);
+      }
+      const fyiPeople = collaborators.filter((person) => person.fixedMention || person.isFyiFixed || person.fyiFixed || person.fixedFyi);
+      const assignee = collaborators.find((c) => c.id === item.assigneeId || c.azureName === item.assigneeName) || { azureName: item.assigneeName || item.assignedTo };
+      const qaResponsible = collaborators.find((c) => c.id === item.qaCollaboratorId);
+      const context = patch.context || patch.note || "";
+      const commentText = patch.discussionText || buildQaResultDiscussionHtml({
+        resultKey: patch.lastTestResult,
+        environments,
+        countries: testedCountries,
+        breakpoints,
+        context,
+        attachments: attachmentUrls
+      });
       if (patch.lastTestResult) {
-        await supabase.from("test_evidence").insert({
+        await supabase.from("test_evidence").insert(environments.map((environment) => ({
           workItemId: id,
           result: patch.lastTestResult,
-          environment: item.env,
-          note: patch.note || null,
+          environment,
+          note: context || null,
           authorId: profile.id
+        })));
+      }
+      if (!demoMode && azureReady && commentText) {
+        await supabase.functions.invoke("azureWorkItemAction", {
+          body: {
+            action: "comment",
+            orgUrl: profile.azureOrgUrl,
+            project: profile.azureProject,
+            pat: profile.azurePat,
+            id,
+            text: commentText
+          }
         });
       }
-      setItems((current) => current.map((i) => (i.id === id ? { ...i, lastTestResult: patch.lastTestResult } : i)));
+      if (!demoMode && azureReady && patch.state) {
+        await supabase.functions.invoke("azureWorkItemAction", {
+          body: {
+            action: "update",
+            orgUrl: profile.azureOrgUrl,
+            project: profile.azureProject,
+            pat: profile.azurePat,
+            updates: [{ id, state: patch.state }]
+          }
+        });
+      }
+      if (!demoMode && patch.notifySlack !== false) {
+        const webhooks = resolveSlackWebhooks(getSetting);
+        const reporter = collaborators.find((c) => c.id === profile?.id || c.email === profile?.email || c.azureEmail === profile?.email);
+        const text = buildLegacyQaResultSlackText({
+          item,
+          resultKey: patch.lastTestResult,
+          resultLabel,
+          environments,
+          countries: testedCountries,
+          authorName: mentionNameForSlack(reporter),
+          assignee,
+          fyi: fyiPeople
+        });
+        webhooks.forEach((webhookUrl) => {
+          supabase.functions.invoke("slackNotify", { body: { webhooks: [webhookUrl], text } }).catch(() => {});
+        });
+      }
+      const nextPatch = { lastTestResult: patch.lastTestResult, ...(patch.state ? { state: patch.state } : {}) };
+      setItems((current) => current.map((i) => (i.id === id ? { ...i, ...nextPatch } : i)));
+      if (patch.lastTestResult === "pass" && patch.state && /beta/i.test(patch.state) && isEnabled("enableReadyBetaNotifications")) {
+        const webhooks = resolveSlackWebhooks(getSetting);
+        if (webhooks.length) {
+          const assignee = collaborators.find((c) => c.id === item.assigneeId);
+          const text = buildReadyForBetaMessage({ ...item, ...nextPatch }, assignee);
+          supabase.functions.invoke("slackNotify", { body: { webhooks, text } }).catch(() => {});
+        }
+        playNotificationSound("readyBeta", profile, user);
+      }
+      if (patch.lastTestResult) playNotificationSound("testResult", profile, user);
       return;
     }
 
     // Horas/avanço de ambiente: grava de verdade no Azure DevOps.
+    const azureUpdate = { id };
+    if ("completedHours" in patch) azureUpdate.completedHours = patch.completedHours;
+    if (patch.state) azureUpdate.state = patch.state;
+    if (patch.assigneeAlias) azureUpdate.assigneeAlias = patch.assigneeAlias;
+    if (patch.assigneeName) azureUpdate.assigneeName = patch.assigneeName;
     const { data, error } = await supabase.functions.invoke("azureWorkItemAction", {
       body: {
         action: "update",
         orgUrl: profile.azureOrgUrl,
         project: profile.azureProject,
         pat: profile.azurePat,
-        updates: [{ id, completedHours: patch.completedHours ?? item.completedHours, state: patch.state }]
+        updates: [azureUpdate]
       }
     });
     if (!error && data?.ok) {
@@ -142,6 +245,7 @@ export function useWorkItems() {
           const text = buildReadyForBetaMessage({ ...item, ...patch }, assignee);
           supabase.functions.invoke("slackNotify", { body: { webhooks, text } }).catch(() => {});
         }
+        playNotificationSound("readyBeta", profile, user);
       }
     }
   }
