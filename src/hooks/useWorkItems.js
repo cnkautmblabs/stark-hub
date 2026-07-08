@@ -264,7 +264,11 @@ export function useWorkItems({ includeClosed = false } = {}) {
       }
       if (!demoMode && patch.notifySlack !== false) {
         const webhooks = resolveSlackWebhooks(getSetting);
-        const reporter = collaborators.find((c) => c.id === profile?.id || c.email === profile?.email || c.azureEmail === profile?.email);
+        // `c.id` e o ID proprio da linha de collaborators, NUNCA igual a
+        // `profile.id` — o vinculo com o profile logado e por `profileId`.
+        // Essa comparacao errada fazia o reporter nunca ser encontrado, e
+        // por isso "Reported by" nunca aparecia na mensagem real do Slack.
+        const reporter = collaborators.find((c) => c.profileId === profile?.id || c.email === profile?.email);
         const text = buildLegacyQaResultSlackText({
           item,
           resultKey: patch.lastTestResult,

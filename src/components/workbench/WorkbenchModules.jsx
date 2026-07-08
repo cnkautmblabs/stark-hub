@@ -1581,9 +1581,15 @@ export function HoursWorkbench() {
           : <><Button onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /> Atualizar</Button><Button onClick={copyReport}><FiCopy /> Copiar</Button><Button onClick={sendGovernanceSlack}><i className="bi bi-slack" /> Slack</Button><Button onClick={pdfReport}><FiDownload /> PDF</Button></>}
       />
       {error && <div className="mbw-alert error">{error}</div>}
-      {ownDev
-        ? <div className="mbdhc-own-card-wrap">{renderDeveloper(ownDev, { pinned: true, useTestMetrics: ownIsQaOnly })}</div>
-        : ownIsQaOnly && <EmptyState title="Sua conta ainda nao foi vinculada a um colaborador" />}
+      {/* O card fixo so faz sentido pra QA: pra ele e o UNICO conteudo desta
+          tela (o resto fica escondido logo abaixo). Gestao/Gerente ja se
+          veem no grid completo do time (sao seedados como "developer" por
+          terem isManagement/isQa) — pinar de novo em cima so duplicava a
+          propria pessoa com metricas de meta de horas sem sentido pra quem
+          nao e Dev. */}
+      {ownIsQaOnly && (ownDev
+        ? <div className="mbdhc-own-card-wrap">{renderDeveloper(ownDev, { pinned: true, useTestMetrics: true })}</div>
+        : <EmptyState title="Sua conta ainda nao foi vinculada a um colaborador" />)}
       {!ownIsQaOnly && (
       <>
       <details className="mbdhc-filters" open>

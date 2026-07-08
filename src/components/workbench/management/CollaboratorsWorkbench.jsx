@@ -126,7 +126,26 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
         {person.profileId && (
           <label className="mbw-field">
             <span>Nivel de acesso</span>
-            <select value={currentAccessLevel} disabled={!isGestao || !editable} onChange={(event) => onUpdate({ accessLevel: event.target.value })}>
+            <select
+              value={currentAccessLevel}
+              disabled={!isGestao || !editable}
+              onChange={(event) => {
+                const level = event.target.value;
+                // Nivel de acesso e Papeis (isDev/isQa/isManagement) sao dois
+                // campos separados no banco — trocar so o nivel de acesso
+                // deixava os papeis desatualizados (ex.: alguem vira Dev mas
+                // continua com isQa=true de uma aprovacao anterior), o que
+                // afeta quem aparece nos pickers de QA/Dev e nos dashboards.
+                // Trocar o nivel de acesso realinha os papeis com ele,
+                // igual ao que ja acontece na aprovacao de pendentes.
+                onUpdate({
+                  accessLevel: level,
+                  isDev: level === accessLevels.dev,
+                  isQa: level === accessLevels.qa,
+                  isManagement: level === accessLevels.gestao || level === accessLevels.gerente
+                });
+              }}
+            >
               {accessLevelOptions.map((level) => <option key={level} value={level}>{accessLevelLabels[level]}</option>)}
             </select>
           </label>

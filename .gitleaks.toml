@@ -1,0 +1,37 @@
+title = "Stark Hub gitleaks config"
+
+# Regras adicionais especificas do projeto, empilhadas sobre o conjunto
+# padrao do gitleaks (que ja cobre AWS keys, JWTs genericos, private keys,
+# etc.). Ver .github/workflows/ci.yml (job secret-scan) para o scan
+# baseado em grep que roda hoje sem exigir instalar o binario do gitleaks —
+# este arquivo fica pronto para quando o binario for adicionado ao CI ou
+# usado como pre-commit hook local.
+[[rules]]
+id = "azure-devops-pat"
+description = "Azure DevOps Personal Access Token"
+regex = '''(?i)azure[_-]?devops[_-]?pat['"]?\s*[:=]\s*['"][a-z0-9]{52}['"]'''
+tags = ["azure", "pat"]
+
+[[rules]]
+id = "slack-webhook-url"
+description = "Slack incoming webhook URL"
+regex = '''https://hooks\.slack\.com/services/T[A-Za-z0-9/]+'''
+tags = ["slack", "webhook"]
+
+[[rules]]
+id = "supabase-service-role-key"
+description = "Supabase service_role key referenced with a real value"
+regex = '''(?i)service_role['"]?\s*[:=]\s*['"]eyJ[A-Za-z0-9_-]{10,}'''
+tags = ["supabase", "service-role"]
+
+[allowlist]
+description = "Placeholders and examples that look like secrets but aren't"
+paths = [
+  '''\.env\.example$''',
+  '''docs/.*\.md$''',
+]
+regexes = [
+  '''never_commit_real_value''',
+  '''your-project\.supabase\.co''',
+  '''your-public-anon-key''',
+]
