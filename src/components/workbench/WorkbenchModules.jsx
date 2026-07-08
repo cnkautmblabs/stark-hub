@@ -21,6 +21,7 @@ import {
   KpiSkeleton,
   ProfileCombobox,
   QaPicker,
+  RoleBadgeIcon,
   TextField,
   WorkbenchCardSkeleton,
   WorkbenchHeader,
@@ -260,6 +261,10 @@ function EvidenceRunFlow({ records = [], limit = 8 }) {
       })}
     </span>
   );
+}
+
+function environmentsWithEvidence(records = []) {
+  return ["DEV", "QA", "BETA", "PROD"].filter((environment) => records.some((entry) => evidenceEnv(entry) === environment));
 }
 
 export function QaBoardWorkbench() {
@@ -513,7 +518,7 @@ export function QaBoardWorkbench() {
         </div>
         <div className="mbaz-card-expand-panel" hidden={!expanded}>
           <div className="mbaz-card-test-details mbaz-card-test-journeys">
-            {["QA", "BETA"].map((environment) => {
+            {environmentsWithEvidence(records).map((environment) => {
               const envRecords = records.filter((entry) => evidenceEnv(entry) === environment);
               return (
                 <div key={environment} className="mbaz-evidence-env-block mbaz-card-test-env" data-env={environment}>
@@ -526,6 +531,7 @@ export function QaBoardWorkbench() {
                 </div>
               );
             })}
+            {!environmentsWithEvidence(records).length && <div className="mbaz-evidence-pending"><i className="bi bi-dash-lg mbaz-evidence-pending-icon" /> Sem testes registrados</div>}
           </div>
         </div>
       </article>
@@ -1185,10 +1191,8 @@ function MyQaBoardItemCard({ item, collaboratorsById, qaPeople, onOpen, onQaChan
       </div>
       <div className="mbaz-card-expand-panel" hidden={!expanded}>
         <div className="mbaz-card-test-details mbaz-card-test-journeys">
-          {["DEV", "QA", "BETA", "PROD"].map((environment) => {
+          {environmentsWithEvidence(records).map((environment) => {
             const envRecords = records.filter((entry) => evidenceEnv(entry) === environment);
-            const last = envRecords[0];
-            const info = evidenceResultInfo(last?.result || "pending");
             return (
               <div key={environment} className="mbaz-evidence-env-block mbaz-card-test-env" data-env={environment}>
                 <div className="mbaz-evidence-env-label">
@@ -1202,6 +1206,7 @@ function MyQaBoardItemCard({ item, collaboratorsById, qaPeople, onOpen, onQaChan
               </div>
             );
           })}
+          {!environmentsWithEvidence(records).length && <div className="mbaz-evidence-pending"><i className="bi bi-dash-lg mbaz-evidence-pending-icon" /> Sem testes registrados</div>}
         </div>
       </div>
     </article>
@@ -1336,11 +1341,23 @@ export function HoursWorkbench() {
         const records = recordsForItem(item, evidence);
         records.forEach((entry) => {
           const result = entry.result === "approved" ? "pass" : entry.result || "pending";
+          const env = evidenceEnv(entry);
           acc.total += 1;
           acc[result] = (acc[result] || 0) + 1;
+          acc.byEnv[env] = acc.byEnv[env] || { total: 0, pass: 0, fail: 0, limitation: 0, pending: 0 };
+          acc.byEnv[env].total += 1;
+          acc.byEnv[env][result] = (acc.byEnv[env][result] || 0) + 1;
         });
         return acc;
-      }, { total: 0, pass: 0, fail: 0, limitation: 0, pending: 0 });
+      }, { total: 0, pass: 0, fail: 0, limitation: 0, pending: 0, byEnv: {} });
+      // Card do colaborador QA: "Testando" = itens onde a pessoa e responsavel
+      // de QA (marcados qaGovernanceCard na agregacao acima); "Atribuido Azure"
+      // = itens onde ela e a atribuida de verdade no Azure (o resto). "Para
+      // testar" = dos itens que ela e responsavel, quantos ainda nao tem
+      // nenhum resultado registrado.
+      const qaResponsibleItems = devItems.filter((item) => item.qaGovernanceCard);
+      const azureAssignedCount = devItems.length - qaResponsibleItems.length;
+      const pendingToTestCount = qaResponsibleItems.filter((item) => !recordsForItem(item, evidence).length).length;
       const completed = devItems.reduce((sum, item) => sum + Number(item.completedHours || 0), 0);
       const tasks = devItems.filter((item) => String(item.type).toLowerCase() === "task").length;
       const bugs = devItems.filter((item) => String(item.type).toLowerCase() === "bug").length;
@@ -1353,7 +1370,7 @@ export function HoursWorkbench() {
       const status = progressPercent < 100 ? "below" : progressPercent > 100 ? "above" : "met";
       const countryCounts = {};
       devItems.forEach((item) => (item.countries || ["N/A"]).forEach((country) => { countryCounts[country] = (countryCounts[country] || 0) + 1; }));
-      return { ...dev, items: devItems, completed, tasks, bugs, cardsWithHours, cardsWithoutHours, missingHours, extraHours, progressPercent, goalStatus: status, countries: countryCounts, testMetrics };
+      return { ...dev, items: devItems, completed, tasks, bugs, cardsWithHours, cardsWithoutHours, missingHours, extraHours, progressPercent, goalStatus: status, countries: countryCounts, testMetrics, qaResponsibleCount: qaResponsibleItems.length, azureAssignedCount, pendingToTestCount };
     }).sort((a, b) => a.displayName.localeCompare(b.displayName, "pt-BR"));
   }, [collaborators, goalDefault, periodItems, peopleById, peopleByName, evidence]);
 
@@ -1465,7 +1482,6 @@ export function HoursWorkbench() {
     // de teste no card do colaborador (Task nao passa por QA neste fluxo).
     const testable = item.type === "Bug" || item.type === "User Story";
     const records = testable ? recordsForItem(item, evidence).slice().sort((a, b) => String(b.createdAt || b.createdDate || "").localeCompare(String(a.createdAt || a.createdDate || ""))) : [];
-    const testMetrics = testable ? testSummaryForItem(item, evidence) : null;
     const latest = records[0];
     const latestInfo = latest ? evidenceResultInfo(latest.result || latest.status) : null;
     const lastEnv = latest ? evidenceEnv(latest) : null;
@@ -1500,32 +1516,48 @@ export function HoursWorkbench() {
           </button>
         )}
         {testable && isTestExpanded && (
-          <div className="mbdhc-work-test-panel">
-            {Object.entries(testMetrics.byEnv).length ? Object.entries(testMetrics.byEnv).map(([env, counts]) => (
-              <div key={env} className="mbdhc-work-test-env">
-                <strong>{env}</strong>
-                <span className="approved">{counts.pass || 0} Approved</span>
-                <span className="fail">{counts.fail || 0} Fail</span>
-                <span className="limitation">{counts.limitation || 0} Limitation</span>
-              </div>
-            )) : <span className="mbdhc-work-test-empty">Nenhum resultado registrado ainda.</span>}
+          <div className="mbdhc-work-test-panel mbaz-card-test-details mbaz-card-test-journeys">
+            {environmentsWithEvidence(records).map((environment) => {
+              const envRecords = records.filter((entry) => evidenceEnv(entry) === environment);
+              return (
+                <div key={environment} className="mbaz-evidence-env-block mbaz-card-test-env" data-env={environment}>
+                  <div className="mbaz-evidence-env-label">
+                    <span className="mbaz-evidence-env-count">{envRecords.length}</span>
+                    <span className="mbaz-evidence-env-name">{environment}</span>
+                    <span className="mbaz-evidence-help" title={`${evidenceTransitionLabel(envRecords)}\n\n${evidenceTooltip(envRecords)}`}>?</span>
+                  </div>
+                  <div className="mbaz-evidence-journey mb-my-qa-env-summary" title={`${evidenceTransitionLabel(envRecords)}\n\n${evidenceTooltip(envRecords)}`}>
+                    {envRecords.length ? <EvidenceRunFlow records={envRecords} limit={8} /> : <i className="bi bi-dash-lg mbaz-evidence-pending-icon" />}
+                  </div>
+                </div>
+              );
+            })}
+            {!environmentsWithEvidence(records).length && <div className="mbaz-evidence-pending"><i className="bi bi-dash-lg mbaz-evidence-pending-icon" /> Sem testes registrados</div>}
           </div>
         )}
       </article>
     );
   }
 
-  function renderDeveloper(dev, { pinned = false, useTestMetrics = false } = {}) {
+  function renderDeveloper(dev, { pinned = false } = {}) {
     const isOpen = expanded.has(dev.key);
     const statusLabel = dev.goalStatus === "below" ? "Abaixo da meta" : dev.goalStatus === "above" ? "Acima da meta" : "Meta cumprida";
     const progressWidth = Math.min(100, Math.max(0, dev.progressPercent));
     const itemPreview = dev.items;
     const testPassRate = dev.testMetrics.total ? Math.round((dev.testMetrics.pass / dev.testMetrics.total) * 100) : 0;
+    // Papel cadastrado da pessoa (accessLevel e a fonte de verdade; cai pros
+    // booleans isDev/isQa/isManagement se accessLevel nao estiver disponivel,
+    // ex.: atribuido do Azure sem colaborador vinculado). QA mostra metricas
+    // de teste; Gestao/Gerente mostram como Dev por enquanto (pedido explicito).
+    const roleLevel = dev.person?.accessLevel || dev.person?.linkedProfile?.accessLevel
+      || (dev.person?.isManagement ? "gestao" : dev.person?.isQa ? "qa" : dev.person?.isDev ? "dev" : null);
+    const useTestMetrics = roleLevel === accessLevels.qa;
     return (
       <article key={dev.key} className={`mbdhc-dev-card status-${dev.goalStatus} ${dev.goalStatus === "above" ? "pulse-over" : ""} ${pinned ? "mbdhc-dev-card-pinned" : ""}`}>
         {pinned && <div className="mbdhc-dev-pinned-label"><i className="bi bi-person-fill" /> Seu card</div>}
         <div className="mbdhc-dev-head">
           <AvatarDot person={dev.person || { azureName: dev.displayName, imageUrl: dev.avatarUrl, color: dev.color }} name={dev.displayName} />
+          {roleLevel && <span className={`mbdhc-role-pill role-${roleLevel}`}><RoleBadgeIcon level={roleLevel} /> {accessLevelLabels[roleLevel] || roleLevel}</span>}
           <div className="mbdhc-dev-status"><strong>{formatHours(dev.completed)}</strong><span>de {formatHours(dev.goalHours)}</span><em>{statusLabel}</em></div>
         </div>
         <div className="mbdhc-country-pills">
@@ -1534,11 +1566,15 @@ export function HoursWorkbench() {
         <div className="mbdhc-progress"><span style={{ width: `${progressWidth}%` }} /></div>
         {useTestMetrics ? (
           <div className="mbdhc-dev-metrics">
-            <div><span>Cards testados</span><strong>{dev.testMetrics.total}</strong></div>
-            <div><span>Approved</span><strong>{dev.testMetrics.pass}</strong></div>
+            <div><span>Testando</span><strong>{dev.qaResponsibleCount}</strong></div>
+            <div><span>Atribuido Azure</span><strong>{dev.azureAssignedCount}</strong></div>
+            <div><span>P/ testar</span><strong>{dev.pendingToTestCount}</strong></div>
             <div><span>Fail</span><strong>{dev.testMetrics.fail}</strong></div>
             <div><span>Limitation</span><strong>{dev.testMetrics.limitation}</strong></div>
             <div><span>Pass rate</span><strong>{testPassRate}%</strong></div>
+            {["DEV", "QA", "BETA", "PROD"].map((environment) => (
+              <div key={environment}><span>Aprovado {environment}</span><strong>{dev.testMetrics.byEnv[environment]?.pass || 0}</strong></div>
+            ))}
           </div>
         ) : (
           <div className="mbdhc-dev-metrics">
@@ -1588,7 +1624,7 @@ export function HoursWorkbench() {
           propria pessoa com metricas de meta de horas sem sentido pra quem
           nao e Dev. */}
       {ownIsQaOnly && (ownDev
-        ? <div className="mbdhc-own-card-wrap">{renderDeveloper(ownDev, { pinned: true, useTestMetrics: true })}</div>
+        ? <div className="mbdhc-own-card-wrap">{renderDeveloper(ownDev, { pinned: true })}</div>
         : <EmptyState title="Sua conta ainda nao foi vinculada a um colaborador" />)}
       {!ownIsQaOnly && (
       <>

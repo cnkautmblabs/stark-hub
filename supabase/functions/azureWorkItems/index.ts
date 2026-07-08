@@ -116,12 +116,16 @@ function detectEvidenceResult(htmlOrText) {
 }
 
 function detectEvidenceEnvironments(htmlOrText, fallbackEnv) {
-  const normalized = stripHtmlText(htmlOrText).toUpperCase().replace(/READY\s*TO\s*/g, "").replace(/[\-_]/g, " ");
+  const normalized = stripHtmlText(htmlOrText)
+    .toUpperCase()
+    .replace(/READY\s*TO\s*/g, "")
+    .replace(/:(DEV|QA|BETA|PROD)-TAG:/g, " $1 ")
+    .replace(/[\-_]/g, " ");
   const found = ["DEV", "QA", "BETA", "PROD"].filter((environment) =>
     new RegExp("(^|[^A-Z])" + environment + "([^A-Z]|$)", "i").test(normalized)
   );
   if (found.length) return found;
-  return fallbackEnv ? [String(fallbackEnv).toUpperCase()] : ["N/A"];
+  return [];
 }
 
 function normalizeEvidenceComment(comment, item) {
@@ -223,20 +227,23 @@ async function fetchDiscussionsForItem(item, projectPath, authHeader) {
       continuationToken = data.continuationToken || "";
       if (!continuationToken) break;
     }
-    if (!comments.length) {
-      const updateResponse = await fetch(
-        `${projectPath}/_apis/wit/workItems/${encodeURIComponent(item.id)}/updates?$top=200&api-version=7.1`,
-        { headers: { Authorization: authHeader }, signal: controller.signal }
-      );
-      if (updateResponse.ok) {
-        const updateData = await updateResponse.json();
-        comments.push(...((updateData.value || []).map((update) => normalizeDiscussionUpdate(update, item)).filter(Boolean)));
-      }
+    const updateResponse = await fetch(
+      `${projectPath}/_apis/wit/workItems/${encodeURIComponent(item.id)}/updates?$top=200&api-version=7.1`,
+      { headers: { Authorization: authHeader }, signal: controller.signal }
+    );
+    if (updateResponse.ok) {
+      const updateData = await updateResponse.json();
+      comments.push(...((updateData.value || []).map((update) => normalizeDiscussionUpdate(update, item)).filter(Boolean)));
     }
-    return comments
+    const merged = new Map();
+    comments
       .map((comment) => comment?.workItemId && comment?.html ? comment : normalizeDiscussionComment(comment, item))
       .filter(Boolean)
-      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+      .forEach((comment) => {
+        const key = `${comment.authorName || ""}-${comment.createdAt || ""}-${comment.text || stripHtmlText(comment.html).slice(0, 120)}`;
+        if (!merged.has(key)) merged.set(key, comment);
+      });
+    return Array.from(merged.values()).sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
   } catch {
     return [];
   } finally {

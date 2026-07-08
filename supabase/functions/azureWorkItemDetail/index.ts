@@ -58,12 +58,16 @@ function detectEvidenceResult(htmlOrText) {
 }
 
 function detectEvidenceEnvironments(htmlOrText, fallbackEnv) {
-  const normalized = stripHtmlText(htmlOrText).toUpperCase().replace(/READY\s*TO\s*/g, "").replace(/[\-_]/g, " ");
+  const normalized = stripHtmlText(htmlOrText)
+    .toUpperCase()
+    .replace(/READY\s*TO\s*/g, "")
+    .replace(/:(DEV|QA|BETA|PROD)-TAG:/g, " $1 ")
+    .replace(/[\-_]/g, " ");
   const found = ["DEV", "QA", "BETA", "PROD"].filter((environment) =>
     new RegExp("(^|[^A-Z])" + environment + "([^A-Z]|$)", "i").test(normalized)
   );
   if (found.length) return found;
-  return fallbackEnv ? [String(fallbackEnv).toUpperCase()] : ["N/A"];
+  return [];
 }
 
 function normalizeDiscussionComment(comment, itemId, fallbackEnv) {
@@ -110,7 +114,7 @@ function normalizeDiscussionUpdate(update, itemId, fallbackEnv) {
 }
 
 function normalizeEvidenceComment(comment, itemId, fallbackEnv) {
-  const environments = comment.environments?.length ? comment.environments : [comment.environment || fallbackEnv || "N/A"];
+  const environments = comment.environments?.length ? comment.environments : comment.environment ? [comment.environment] : [];
   return {
     id: `discussion-${itemId}-${comment.commentId || comment.id}`,
     commentId: comment.commentId,
@@ -154,22 +158,26 @@ async function fetchAllDiscussions(itemId, projectPath, authHeader, fallbackEnv)
       page += 1;
     } while (continuationToken && page < 40);
 
-    if (!comments.length) {
-      const updateResponse = await fetch(
-        `${projectPath}/_apis/wit/workItems/${encodeURIComponent(itemId)}/updates?$top=200&api-version=7.1`,
-        { headers: { Authorization: authHeader }, signal: controller.signal }
-      );
-      if (updateResponse.ok) {
-        const updateData = await updateResponse.json();
-        const fromUpdates = (updateData.value || [])
-          .map((update) => normalizeDiscussionUpdate(update, itemId, fallbackEnv))
-          .filter(Boolean);
-        return fromUpdates.sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
-      }
+    const updateResponse = await fetch(
+      `${projectPath}/_apis/wit/workItems/${encodeURIComponent(itemId)}/updates?$top=200&api-version=7.1`,
+      { headers: { Authorization: authHeader }, signal: controller.signal }
+    );
+    const fromUpdates = [];
+    if (updateResponse.ok) {
+      const updateData = await updateResponse.json();
+      fromUpdates.push(...(updateData.value || [])
+        .map((update) => normalizeDiscussionUpdate(update, itemId, fallbackEnv))
+        .filter(Boolean));
     }
 
-    return comments
-      .map((comment) => normalizeDiscussionComment(comment, itemId, fallbackEnv))
+    const fromComments = comments
+      .map((comment) => normalizeDiscussionComment(comment, itemId, fallbackEnv));
+    const merged = new Map();
+    [...fromComments, ...fromUpdates].forEach((comment) => {
+      const key = `${comment.authorName || ""}-${comment.createdAt || ""}-${comment.text || stripHtmlText(comment.html).slice(0, 120)}`;
+      if (!merged.has(key)) merged.set(key, comment);
+    });
+    return Array.from(merged.values())
       .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
   } catch {
     return [];
