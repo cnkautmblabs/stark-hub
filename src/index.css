@@ -424,6 +424,36 @@ body {
 @keyframes starkShimmer { 100% { transform: translateX(100%); } }
 
 .stark-card { background: var(--starkSurface); border: 1px solid var(--starkBorder); border-radius: 9px; padding: 12px 14px; }
+
+.stark-error-boundary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin: 24px auto;
+  padding: 24px;
+  max-width: 480px;
+  text-align: center;
+  background: var(--starkSurface);
+  border: 1px solid var(--starkBorder);
+  border-radius: 10px;
+  color: var(--starkText);
+}
+.stark-error-boundary p {
+  color: var(--starkMuted);
+  font-size: 13px;
+  margin: 0;
+}
+.stark-error-boundary button {
+  border: 1px solid var(--starkAccent);
+  background: var(--starkAccent);
+  color: #fff;
+  border-radius: 7px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
 .stark-badge-demo { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: #fef3c7; color: #92400e; }
 
 .stark-onboarding-hint {
@@ -5384,6 +5414,24 @@ body {
   border: 1px solid #dbe4ef;
   border-radius: 8px;
   background: #fff;
+}
+.mbaz-new-modal-rich-html a.mbaz-broken-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px dashed #93c5fd;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #005a9e;
+  font-size: 12px;
+  font-weight: 800;
+}
+.mbaz-new-modal-rich-html a.mbaz-broken-attachment img {
+  display: none;
+}
+.mbaz-new-modal-rich-html a.mbaz-broken-attachment::before {
+  content: "🖼️ Abrir anexo no Azure";
 }
 .mbaz-new-modal-rich-html table {
   width: max-content;

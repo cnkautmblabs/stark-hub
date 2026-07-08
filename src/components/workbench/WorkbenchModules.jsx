@@ -7,6 +7,7 @@ import {
   FiUpload
 } from "react-icons/fi";
 import AzureConnectionForm from "../common/AzureConnectionForm.jsx";
+import { ErrorBoundary } from "../common/ErrorBoundary.jsx";
 import {
   AvatarDot,
   Button,
@@ -653,14 +654,26 @@ export function QaBoardWorkbench() {
         </div>
       </aside>
       {activeItem && (
-        <AzureWorkItemModal
-          profile={profile}
-          item={items.find((entry) => entry.id === activeItem.id) || activeItem}
-          evidence={evidence}
-          onClose={() => setActiveItem(null)}
-          onTestResult={(item, patch) => updateItem(item.id, patch)}
-          onUpdateItem={(patch) => updateItem(activeItem.id, patch)}
-        />
+        <ErrorBoundary
+          fallback={(error) => (
+            <div className="mbaz-new-modal-overlay" onClick={() => setActiveItem(null)}>
+              <div className="stark-error-boundary" onClick={(event) => event.stopPropagation()}>
+                <strong>Nao foi possivel abrir este Work Item.</strong>
+                <p>{error?.message || "Erro desconhecido ao renderizar o modal."}</p>
+                <button type="button" onClick={() => setActiveItem(null)}>Fechar</button>
+              </div>
+            </div>
+          )}
+        >
+          <AzureWorkItemModal
+            profile={profile}
+            item={items.find((entry) => entry.id === activeItem.id) || activeItem}
+            evidence={evidence}
+            onClose={() => setActiveItem(null)}
+            onTestResult={(item, patch) => updateItem(item.id, patch)}
+            onUpdateItem={(patch) => updateItem(activeItem.id, patch)}
+          />
+        </ErrorBoundary>
       )}
     </section>
   );
@@ -1004,14 +1017,26 @@ export function MyItemsWorkbench() {
         </main>
       </ConnectionGate>
       {activeItem && (
-        <AzureWorkItemModal
-          profile={profile}
-          item={items.find((entry) => entry.id === activeItem.id) || activeItem}
-          evidence={evidence}
-          onClose={() => setActiveItem(null)}
-          onTestResult={(item, patch) => updateItem(item.id, patch)}
-          onUpdateItem={(patch) => updateItem(activeItem.id, patch)}
-        />
+        <ErrorBoundary
+          fallback={(error) => (
+            <div className="mbaz-new-modal-overlay" onClick={() => setActiveItem(null)}>
+              <div className="stark-error-boundary" onClick={(event) => event.stopPropagation()}>
+                <strong>Nao foi possivel abrir este Work Item.</strong>
+                <p>{error?.message || "Erro desconhecido ao renderizar o modal."}</p>
+                <button type="button" onClick={() => setActiveItem(null)}>Fechar</button>
+              </div>
+            </div>
+          )}
+        >
+          <AzureWorkItemModal
+            profile={profile}
+            item={items.find((entry) => entry.id === activeItem.id) || activeItem}
+            evidence={evidence}
+            onClose={() => setActiveItem(null)}
+            onTestResult={(item, patch) => updateItem(item.id, patch)}
+            onUpdateItem={(patch) => updateItem(activeItem.id, patch)}
+          />
+        </ErrorBoundary>
       )}
       {hoursTarget && (
         <div className="mb-my-hours-overlay">

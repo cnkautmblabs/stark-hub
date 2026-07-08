@@ -216,10 +216,14 @@ function firstDisplayName(person, fallback = "") {
   return String(value).trim().split(/\s+/)[0] || "QA";
 }
 
-export function QaPicker({ value, onChange, people = [], emptyLabel = "Sem QA" }) {
+export function QaPicker({ value, onChange, people = [], emptyLabel = "Sem QA", showEmptyAvatar = false, emptyImageUrl = "" }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
   const current = people.find((person) => person.id === value);
+  // Quando a pessoa atribuida no Azure nao esta cadastrada como colaborador
+  // no Stark Hub, `current` fica vazio — mas o nome real (emptyLabel) ainda
+  // deve aparecer com um avatar (iniciais), nao so texto puro sem foto.
+  const fallbackPerson = !current && showEmptyAvatar ? { azureName: emptyLabel, imageUrl: emptyImageUrl } : null;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -238,10 +242,10 @@ export function QaPicker({ value, onChange, people = [], emptyLabel = "Sem QA" }
   return (
     <div ref={rootRef} className="mbw-qa-picker">
       <button type="button" className="mbw-qa-picker-trigger" onClick={() => setOpen((value) => !value)} title={current?.azureName || emptyLabel}>
-        {current ? (
+        {current || fallbackPerson ? (
           <>
-            <AvatarDot person={current} compact />
-            <span className="mbw-qa-picker-name">{firstDisplayName(current)}</span>
+            <AvatarDot person={current || fallbackPerson} compact />
+            <span className="mbw-qa-picker-name">{firstDisplayName(current || fallbackPerson, emptyLabel)}</span>
           </>
         ) : <span className="mbw-qa-picker-empty">{emptyLabel}</span>}
         <i className={`bi ${open ? "bi-chevron-up" : "bi-chevron-down"}`} />

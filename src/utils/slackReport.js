@@ -4,15 +4,19 @@ import { countries as countryCatalog, environments as environmentCatalog } from 
 // enviada pelo usuario): tags de emoji por tipo de work item (:bug-tag:,
 // :task-tag:, etc.) e aviso de horas por colaborador pronto para copiar ou
 // enviar via Slack incoming webhook.
+// Aliases exatamente iguais aos configurados no Slack pelo tampermonkey —
+// ":feat-tag:" (usado antes aqui) nao existe como emoji custom real, so
+// ":feature-tag:" existe; qualquer alias que nao bata exatamente aparece
+// como texto cru `:algo:` sem virar emoji, tanto na previa quanto no Slack.
 export function workItemSlackTag(type) {
   const normalized = String(type || "").trim().toLowerCase();
-  if (normalized === "bug") return ":bug-tag:";
+  if (normalized === "bug" || normalized === "defect") return ":bug-tag:";
   if (normalized === "task") return ":task-tag:";
-  if (normalized === "user story" || normalized === "userstory") return ":us-tag:";
-  if (normalized === "feature") return ":feat-tag:";
+  if (normalized === "user story" || normalized === "userstory" || normalized === "us") return ":us-tag:";
+  if (normalized === "feature") return ":feature-tag:";
   if (normalized === "epic") return ":epic-tag:";
   if (normalized === "test case" || normalized === "testcase") return ":test-tag:";
-  return `:${normalized.replace(/\s+/g, "-") || "workitem"}-tag:`;
+  return ":task-tag:";
 }
 
 function mention(person) {
@@ -78,17 +82,16 @@ function envPillHtml(env) {
   return `<span style="display:inline-block;vertical-align:middle;margin-left:5px;padding:2px 9px;border-radius:999px;background:${info.background};color:${info.color};font-weight:700;font-size:11px;line-height:16px;">${escapeHtml(info.label || key)}</span>`;
 }
 
+// Bandeira real (.png via flagcdn, mesma fonte usada em CountryVisual no
+// app) em vez de um badge SVG generico — pedido explicito para bater com o
+// que aparece no resto do Stark Hub e no comentario postado no Azure.
 function countryPillHtml(country) {
   const key = normalizeCountry(country);
   const info = countryCatalog[key];
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="58" height="22" viewBox="0 0 58 22"><rect width="58" height="22" rx="11" fill="#f8fafc"/><rect x=".5" y=".5" width="57" height="21" rx="10.5" fill="none" stroke="#d7dde8"/><rect x="7" y="6" width="18" height="10" rx="2" fill="${info?.iso2 ? "#dbeafe" : "#e0f2fe"}"/><text x="16" y="14" text-anchor="middle" font-family="Segoe UI,Arial" font-size="7" font-weight="800" fill="#005a9e">${escapeHtml(key)}</text><text x="39" y="14" text-anchor="middle" font-family="Segoe UI,Arial" font-size="11" font-weight="800" fill="#111827">${escapeHtml(key)}</text></svg>`;
-  return `<img src="data:image/svg+xml;utf8,${encodeURIComponent(svg)}" width="58" height="22" style="display:inline-block;vertical-align:middle;margin-left:5px;border:0;" alt="${escapeHtml(key)}" />`;
-/*
   if (info?.iso2) {
-    return `<span style="display:inline-flex;vertical-align:middle;align-items:center;gap:4px;margin-left:5px;padding:2px 7px;border:1px solid #d7dde8;border-radius:999px;background:#f8fafc;color:#111827;font-weight:700;font-size:11px;line-height:16px;"><img src="https://flagcdn.com/h14/${info.iso2}.png" width="20" height="14" style="border:0;border-radius:2px;vertical-align:middle;" />${escapeHtml(key)}</span>`;
+    return `<span style="display:inline-flex;vertical-align:middle;align-items:center;gap:4px;margin-left:5px;padding:2px 7px;border:1px solid #d7dde8;border-radius:999px;background:#f8fafc;color:#111827;font-weight:700;font-size:11px;line-height:16px;"><img src="https://flagcdn.com/h20/${info.iso2}.png" width="20" height="14" style="border:0;border-radius:2px;vertical-align:middle;" alt="${escapeHtml(key)}" />${escapeHtml(key)}</span>`;
   }
   return `<span style="display:inline-block;vertical-align:middle;margin-left:5px;padding:2px 7px;border:1px solid #d7dde8;border-radius:999px;background:#eef6ff;color:#005a9e;font-weight:800;font-size:11px;line-height:16px;">${escapeHtml(key)}</span>`;
-*/
 }
 
 function breakpointText(breakpoints = []) {

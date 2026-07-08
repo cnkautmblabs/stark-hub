@@ -18,15 +18,30 @@ function azureEditableUrl(profile, item) {
   return url.includes("?") ? `${url}&_a=edit` : `${url}?_a=edit`;
 }
 
+// Imagens anexadas ao Work Item (_apis/wit/attachments/...) exigem o mesmo
+// Basic auth (PAT) de qualquer outra chamada do Azure DevOps — mas um <img
+// src> do navegador nunca manda esse header, entao a imagem sempre quebra
+// (icone de imagem quebrada). Sem um proxy autenticado no backend nao da
+// pra exibir a imagem inline; o proximo melhor passo e deixar clicavel para
+// abrir direto no Azure, onde a sessao do navegador ja autentica.
+function wrapAzureAttachmentImages(html) {
+  return html.replace(/<img\b([^>]*?)\bsrc=(["'])([^"']*_apis[^"']*)\2([^>]*)>/gi, (match, before, quote, src, after) => {
+    if (/<a\s/i.test(before)) return match;
+    return `<a href="${src}" target="_blank" rel="noopener noreferrer" title="Abrir anexo no Azure (imagens do Azure nao carregam aqui por exigirem autenticacao)"><img${before}src=${quote}${src}${quote}${after} onerror="this.closest('a').classList.add('mbaz-broken-attachment')"></a>`;
+  });
+}
+
 function sanitizeAzureHtml(value) {
-  return String(value || "")
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/\son\w+="[^"]*"/gi, "")
-    .replace(/\son\w+='[^']*'/gi, "")
-    .replace(/\s(href|src)=["']javascript:[^"']*["']/gi, "")
-    .replace(/<a\s/gi, '<a target="_blank" rel="noopener noreferrer" ')
-    .trim();
+  return wrapAzureAttachmentImages(
+    String(value || "")
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/\son\w+="[^"]*"/gi, "")
+      .replace(/\son\w+='[^']*'/gi, "")
+      .replace(/\s(href|src)=["']javascript:[^"']*["']/gi, "")
+      .replace(/<a\s/gi, '<a target="_blank" rel="noopener noreferrer" ')
+      .trim()
+  );
 }
 
 function RichAzureHtml({ html }) {
@@ -55,7 +70,7 @@ function SlackPreview({ text }) {
     ":us-tag:": <img src={typeIconSrc("User Story")} alt="US" />,
     ":bug-tag:": <img src={typeIconSrc("Bug")} alt="Bug" />,
     ":task-tag:": <img src={typeIconSrc("Task")} alt="Task" />,
-    ":feat-tag:": <img src={typeIconSrc("Feature")} alt="Feature" />,
+    ":feature-tag:": <img src={typeIconSrc("Feature")} alt="Feature" />,
     ":epic-tag:": <img src={typeIconSrc("Epic")} alt="Epic" />,
     ":test-tag:": <img src={typeIconSrc("Test Case")} alt="Test" />,
     ":qa-tag:": <img src={envIconSrc("QA")} alt="QA" />,
@@ -64,11 +79,15 @@ function SlackPreview({ text }) {
     ":prod-tag:": <img src={envIconSrc("PROD")} alt="PROD" />
   };
   const flagMatch = /^:flag-([a-z]{2}):$/i;
+  // Split pelo proprio delimitador ":token:" (nao por espaco) — assim um
+  // ":flag-br:." (flag colada num ponto final, sem espaco, como a propria
+  // mensagem gera) ainda separa o token da pontuacao em vez de falhar o
+  // match exato e mostrar o alias cru na previa.
   return (
     <div className="mbaz-slack-preview">
       {String(text || "").split("\n").map((line, index) => (
         <p key={`${line}-${index}`}>
-          {line.split(/(\s+)/).map((part, partIndex) => {
+          {line.split(/(:[a-z0-9-]+:)/gi).map((part, partIndex) => {
             if (tokenMap[part]) return <span key={partIndex} className="mbaz-slack-token">{tokenMap[part]}</span>;
             const match = part.match(flagMatch);
             if (match) return <span key={partIndex} className="mbaz-slack-token"><CountryVisual code={match[1].toUpperCase()} compact /></span>;
@@ -342,6 +361,8 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
                     <QaPicker
                       value={item.assigneeId || ""}
                       emptyLabel={item.assigneeName || item.assignedTo || "Nao atribuido"}
+                      showEmptyAvatar={Boolean(item.assigneeName || item.assignedTo)}
+                      emptyImageUrl={item.assigneeImageUrl}
                       people={devPeople}
                       onChange={(assigneeId) => {
                         const person = devPeople.find((entry) => String(entry.id) === String(assigneeId));

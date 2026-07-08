@@ -282,6 +282,30 @@ function pullRequestFromRelations(relations, projectPath) {
   return {};
 }
 
+const KNOWN_CONTENT_FIELDS = new Set([
+  "system.description",
+  "microsoft.vsts.tcm.reprosteps",
+  "microsoft.vsts.common.acceptancecriteria"
+]);
+
+// Processos customizados (comum em orgs grandes) as vezes renomeiam ou
+// substituem os campos padrao de conteudo por um campo proprio (ex.: Bug sem
+// System.Description usando um campo tipo "Custom.Descricao"). Quando os 3
+// campos padrao vem todos vazios, procura o primeiro campo HTML-like cujo
+// nome sugira ser o conteudo principal, em vez de mostrar "sem conteudo"
+// para um item que na verdade tem descricao só que em outro campo.
+function findFallbackDescription(fields) {
+  for (const [key, value] of Object.entries(fields || {})) {
+    const lowerKey = key.toLowerCase();
+    if (KNOWN_CONTENT_FIELDS.has(lowerKey)) continue;
+    if (!/description|reprosteps|repro_steps|symptom|findingandrootcause|root.?cause/i.test(key)) continue;
+    if (typeof value !== "string") continue;
+    const text = value.trim();
+    if (text.length > 10) return text;
+  }
+  return "";
+}
+
 const WORK_ITEM_FIELDS = [
   "System.Id",
   "System.Title",
@@ -442,16 +466,22 @@ Deno.serve(async (req) => {
   const rawWorkItems = [];
   for (let offset = 0; offset < ids.length; offset += 200) {
     const chunk = ids.slice(offset, offset + 200);
+    // Sem restringir a uma lista fixa de campos: processos customizados (ex.:
+    // Bug sem System.Description, com um campo proprio renomeado para o
+    // conteudo principal) fariam a UI mostrar "sem conteudo" mesmo com a
+    // descricao preenchida no Azure. $expand "All" traz todos os campos +
+    // relations, e o mapeamento abaixo ainda usa os nomes padrao quando
+    // existem, com fallback generico para os demais processos.
     let batchResponse = await fetch(`${baseUrl}/_apis/wit/workitemsbatch?api-version=7.1`, {
       method: "POST",
       headers: { Authorization: authHeader, "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: chunk, fields: WORK_ITEM_FIELDS, errorPolicy: "Omit", $expand: "Relations" })
+      body: JSON.stringify({ ids: chunk, errorPolicy: "Omit", $expand: "All" })
     });
     if (!batchResponse.ok) {
       batchResponse = await fetch(`${baseUrl}/_apis/wit/workitemsbatch?api-version=7.1`, {
         method: "POST",
         headers: { Authorization: authHeader, "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: chunk, fields: WORK_ITEM_FIELDS, errorPolicy: "Omit" })
+        body: JSON.stringify({ ids: chunk, fields: WORK_ITEM_FIELDS, errorPolicy: "Omit", $expand: "Relations" })
       });
     }
     if (!batchResponse.ok) continue;
@@ -514,7 +544,7 @@ Deno.serve(async (req) => {
       tags: tagsList(fields["System.Tags"]),
       sprint: sprintFromIterationPath(fields["System.IterationPath"]),
       areaPath: fields["System.AreaPath"] || null,
-      description: fields["System.Description"] || "",
+      description: fields["System.Description"] || (!fields["Microsoft.VSTS.TCM.ReproSteps"] && !fields["Microsoft.VSTS.Common.AcceptanceCriteria"] ? findFallbackDescription(fields) : "") || "",
       createdAt: fields["System.CreatedDate"] || null,
       createdBy: fields["System.CreatedBy"]?.displayName || null,
       changedBy: fields["System.ChangedBy"]?.displayName || null,
