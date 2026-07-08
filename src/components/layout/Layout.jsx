@@ -3,7 +3,7 @@ import { Link, Outlet } from "react-router-dom";
 import { FiLogOut, FiUser } from "react-icons/fi";
 import Sidebar from "./Sidebar.jsx";
 import { useAuth } from "../../contexts/AuthContext.jsx";
-import { accessLevelLabels } from "../../utils/constants.js";
+import { accessLevelLabels, accessLevels } from "../../utils/constants.js";
 import { IdentityAvatar } from "../workbench/ui/WorkbenchPrimitives.jsx";
 
 function MBLabsMark() {
@@ -22,7 +22,10 @@ export default function Layout() {
   const { profile, user, demoMode, signOut } = useAuth();
   const displayName = profile?.displayName || profile?.fullName || user?.email || "Stark Hub";
   const email = profile?.email || user?.email || (demoMode ? "modo.demo@starkhub.local" : "");
-  const accessLabel = accessLevelLabels[profile?.accessLevel] || "Acesso";
+  const isAdmin = Boolean(profile?.isAdmin || profile?.accessLevel === accessLevels.admin);
+  const accessLabel = isAdmin && profile?.accessLevel && profile?.accessLevel !== accessLevels.admin
+    ? `${accessLevelLabels[profile.accessLevel] || profile.accessLevel} (Admin)`
+    : accessLevelLabels[profile?.accessLevel] || "Acesso";
 
   function handleToggle() {
     setCollapsed((current) => {

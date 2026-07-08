@@ -4,7 +4,7 @@ import { azureWorkItemUrl } from "../../../utils/azure.js";
 import { countries, formatWorkItemCode } from "../../../utils/constants.js";
 import { compactSprintLabel } from "../../../utils/sprints.js";
 import { buildLegacyQaResultSlackText, buildQaResultDiscussionHtml, legacyMention } from "../../../utils/slackReport.js";
-import { evidenceEnv, evidenceEnvironmentOrder, evidenceResultInfo } from "../../../utils/workbench/formatters.js";
+import { evidenceDedupeKey, evidenceEnvironmentOrder, evidenceEnvironments, evidenceResultInfo, isQaEvidenceEntry } from "../../../utils/workbench/formatters.js";
 import { useCollaborators } from "../../../hooks/useCollaborators.js";
 import { CountryVisual, EnvBadge, IdentityAvatar, QaPicker, ResultBadge, TypeBadge, envIconSrc, typeIconSrc } from "./WorkbenchPrimitives.jsx";
 
@@ -111,6 +111,87 @@ function SlackPreview({ text }) {
   );
 }
 
+// Enhanced Slack preview that supports clickable Slack links, attachments and
+// a raw-toggle to show the underlying Slack text (tokens like :us-tag:).
+function EnhancedSlackPreview({ text, item, environments = [], countries = [], attachments = [], assignee, fyi = [], reporter, showRaw = false, collaborators = [] }) {
+  const tokenMap = {
+    ":us-tag:": <img src={typeIconSrc("User Story")} alt="US" />,
+    ":bug-tag:": <img src={typeIconSrc("Bug")} alt="Bug" />,
+    ":task-tag:": <img src={typeIconSrc("Task")} alt="Task" />,
+    ":feature-tag:": <img src={typeIconSrc("Feature")} alt="Feature" />,
+    ":epic-tag:": <img src={typeIconSrc("Epic")} alt="Epic" />,
+    ":test-tag:": <img src={typeIconSrc("Test Case")} alt="Test" />,
+    ":qa-tag:": <img src={envIconSrc("QA")} alt="QA" />,
+    ":dev-tag:": <img src={envIconSrc("DEV")} alt="DEV" />,
+    ":beta-tag:": <img src={envIconSrc("BETA")} alt="BETA" />,
+    ":prod-tag:": <img src={envIconSrc("PROD")} alt="PROD" />
+  };
+
+  const flagMatch = /^:flag-([a-z]{2}):$/i;
+
+  function resolveMemberName(memberId) {
+    if (!memberId) return memberId;
+    const found = (collaborators || []).find((p) => String(p.slackMemberId) === String(memberId) || String(p.slackId) === String(memberId));
+    return found ? (found.azureName || found.slackName || found.email || memberId) : memberId;
+  }
+
+  function renderPart(part, i) {
+    // Slack link syntax: <url|label>
+    const linkMatch = part.match(/^<([^|>]+)\|([^>]+)>$/);
+    if (linkMatch) {
+      const href = linkMatch[1];
+      const label = linkMatch[2];
+      return <a key={i} href={href} target="_blank" rel="noopener noreferrer">{label}</a>;
+    }
+    if (tokenMap[part]) return <span key={i} className="mbaz-slack-token">{tokenMap[part]}</span>;
+    const fm = part.match(flagMatch);
+    if (fm) return <span key={i} className="mbaz-slack-token"><CountryVisual code={fm[1].toUpperCase()} compact /></span>;
+    // mentions like <@U12345>
+    const mentionMatch = part.match(/^<@([^>]+)>$/);
+    if (mentionMatch) {
+      const memberId = mentionMatch[1];
+      const name = resolveMemberName(memberId);
+      const href = `https://slack.com/team/${memberId}`;
+      return (
+        <a key={i} className="mbaz-slack-mention" href={href} target="_blank" rel="noopener noreferrer">@{name}</a>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  }
+
+  if (showRaw) return <pre className="mbaz-slack-raw">{String(text || "")}</pre>;
+
+  return (
+    <div className="mbaz-slack-preview enhanced">
+      {String(text || "").split("\n").map((line, idx) => (
+        <p key={idx}>
+          {line.split(/(:[a-z0-9-]+:|<[^>]+>)/gi).filter(Boolean).map((part, i) => renderPart(part, i))}
+        </p>
+      ))}
+      {attachments && attachments.length > 0 && (
+        <div className="mbaz-slack-attachments">
+          {attachments.map((url) => (
+            <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="mbaz-slack-attachment">
+              <img src={url} alt="evidence" />
+            </a>
+          ))}
+        </div>
+      )}
+      <div className="mbaz-slack-meta">
+        {environments && environments.length > 0 && (
+          <div><strong>Ambientes:</strong> {environments.join(", ")}</div>
+        )}
+        {countries && countries.length > 0 && (
+          <div><strong>Paises:</strong> {countries.join(", ")}</div>
+        )}
+        {assignee && <div><strong>Assignee:</strong> {assignee.azureName || assignee.slackName || assignee.email}</div>}
+        {fyi && fyi.length > 0 && <div><strong>FYI:</strong> {fyi.map((p) => p.azureName || p.slackName || p.email).join(", ")}</div>}
+        {reporter && <div><strong>Reported by:</strong> {reporter.azureName || reporter.slackName || reporter.email}</div>}
+      </div>
+    </div>
+  );
+}
+
 export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpdateItem, evidence = [] }) {
   const { collaborators = [] } = useCollaborators();
   const fileInputRef = useRef(null);
@@ -123,6 +204,7 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
   const [attachments, setAttachments] = useState([]);
   const [dragActive, setDragActive] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showRawSlack, setShowRawSlack] = useState(true);
   const [liveDiscussions, setLiveDiscussions] = useState(null);
   const [liveDiscussionEvidence, setLiveDiscussionEvidence] = useState(null);
   const [discussionsLoading, setDiscussionsLoading] = useState(false);
@@ -171,10 +253,16 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
   const tagList = item.tags?.length ? item.tags : (item.countries || []).map((country) => `0-${country}`);
   const evidenceHistory = [
     ...evidence.filter((entry) => String(entry.workItemId) === String(item.id)),
-    ...discussionEvidence
-  ].sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+    ...discussionEvidence.filter(isQaEvidenceEntry)
+  ];
+  const dedupedEvidenceHistory = Array.from(evidenceHistory.reduce((map, entry) => {
+    const key = evidenceDedupeKey({ ...entry, workItemId: entry.workItemId || item.id });
+    const current = map.get(key);
+    if (!current || String(entry.createdAt || "").localeCompare(String(current.createdAt || "")) > 0) map.set(key, entry);
+    return map;
+  }, new Map()).values()).sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
   const evidenceByEnv = evidenceEnvironmentOrder
-    .map((env) => ({ env, records: evidenceHistory.filter((entry) => evidenceEnv(entry) === env) }))
+    .map((env) => ({ env, records: dedupedEvidenceHistory.filter((entry) => evidenceEnvironments(entry).includes(env)) }))
     .filter((group) => group.records.length);
   const attachmentPreviewUrls = attachments.map((attachment) => typeof attachment === "string" ? attachment : attachment.dataUrl).filter(Boolean);
   const discussionPreviewHtml = result ? buildQaResultDiscussionHtml({
@@ -436,12 +524,12 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
                 ) : <span className="mbaz-new-modal-muted">Sem resultados</span>}
               </div>
             </summary>
-            {evidenceHistory.length ? (
+            {dedupedEvidenceHistory.length ? (
               <ul className="mbaz-new-modal-result-list">
-                {evidenceHistory.map((entry) => (
+                {dedupedEvidenceHistory.map((entry) => (
                   <li key={entry.id || `${entry.workItemId}-${entry.createdAt}`}>
                     <ResultBadge result={entry.result || entry.status} />
-                    {(entry.environments?.length ? entry.environments : entry.environment ? [entry.environment] : []).map((env) => <EnvBadge key={env} env={String(env).toLowerCase()} />)}
+                    {evidenceEnvironments(entry).map((env) => <EnvBadge key={env} env={String(env).toLowerCase()} />)}
                     <IdentityAvatar name={entry.authorName || "QA"} imageUrl={entry.avatarUrl} size={22} />
                     <span className="mbaz-new-modal-result-author">{entry.authorName || "QA nao identificado"}</span>
                     <span className="mbaz-new-modal-result-date">{entry.createdAt ? new Date(entry.createdAt).toLocaleString("pt-BR") : ""}</span>
@@ -531,8 +619,24 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
                   <RichAzureHtml html={discussionPreviewHtml} />
                 </div>
                 <div className="mbaz-new-modal-preview-column">
-                  <strong>Previa Slack</strong>
-                  <SlackPreview text={slackPreviewText} />
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                    <strong>Previa Slack</strong>
+                    <div>
+                      <button type="button" className="mbaz-btn" onClick={() => setShowRawSlack((v) => !v)}>{showRawSlack ? 'Ocultar codigo' : 'Ver codigo Slack'}</button>
+                    </div>
+                  </div>
+                  <EnhancedSlackPreview
+                    text={slackPreviewText}
+                    item={item}
+                    environments={selectedEnvironments}
+                    countries={selectedCountries}
+                    attachments={attachmentPreviewUrls}
+                    assignee={assigneePerson}
+                    fyi={fixedFyi}
+                    reporter={qaResponsible}
+                    collaborators={collaborators}
+                    showRaw={showRawSlack}
+                  />
                 </div>
               </div>
             </div>

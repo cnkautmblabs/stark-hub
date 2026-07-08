@@ -4,8 +4,8 @@ import { useWorkItems } from "../../../hooks/useWorkItems.js";
 import { useCollaborators } from "../../../hooks/useCollaborators.js";
 import { useTestEvidence } from "../../../hooks/useTestEvidence.js";
 import { compactSprintLabel } from "../../../utils/sprints.js";
-import { evidenceResultInfo } from "../../../utils/workbench/formatters.js";
-import { AvatarDot, FilterCombobox, Kpi, KpiSkeleton, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
+import { evidenceDedupeKey, evidenceEnvironments, isQaEvidenceEntry, normalizeResult } from "../../../utils/workbench/formatters.js";
+import { AvatarDot, ChartSkeleton, FilterCombobox, Kpi, KpiSkeleton, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
 
 const monthOrder = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
@@ -82,16 +82,30 @@ export function ManagementDashboardWorkbench() {
       const own = filteredItems.filter((item) => item.assigneeId === dev.id || item.assigneeName === dev.azureName);
       const tasks = own.filter((item) => item.type === "Task").length;
       const bugs = own.filter((item) => item.type === "Bug").length;
-      return { id: dev.id, name: dev.azureName || "Sem nome", color: dev.color, imageUrl: dev.imageUrl || dev.avatarUrl || dev.linkedProfile?.avatarUrl || "", tasks, bugs, total: own.length };
+      return { id: dev.id, name: dev.azureName || "Sem nome", color: dev.color, imageUrl: dev.imageUrl || dev.avatarUrl || dev.linkedProfile?.avatarUrl || "", tasks, bugs, total: tasks + bugs };
     }).filter((row) => row.total > 0).sort((a, b) => b.total - a.total);
   }, [filteredItems, collaborators]);
 
   const testMetrics = useMemo(() => {
-    const filteredIds = new Set(filteredItems.map((item) => Number(item.id)));
-    const relevant = evidence.filter((entry) => filteredIds.has(Number(entry.workItemId)));
-    const pass = relevant.filter((entry) => entry.result === "pass").length;
-    const fail = relevant.filter((entry) => entry.result === "fail").length;
-    const limitation = relevant.filter((entry) => entry.result === "limitation").length;
+    const localByItem = new Map();
+    evidence.forEach((entry) => {
+      const id = Number(entry.workItemId);
+      if (!localByItem.has(id)) localByItem.set(id, []);
+      localByItem.get(id).push(entry);
+    });
+    const relevant = filteredItems.flatMap((item) => {
+      const discussion = (item.discussionEvidence || []).filter(isQaEvidenceEntry).map((entry) => ({ ...entry, workItemId: item.id }));
+      return discussion.length ? discussion : localByItem.get(Number(item.id)) || [];
+    }).filter((entry) => evidenceEnvironments(entry).length);
+    const uniqueRelevant = Array.from(relevant.reduce((map, entry) => {
+      const key = evidenceDedupeKey(entry);
+      const current = map.get(key);
+      if (!current || String(entry.createdAt || "").localeCompare(String(current.createdAt || "")) > 0) map.set(key, entry);
+      return map;
+    }, new Map()).values());
+    const pass = uniqueRelevant.filter((entry) => normalizeResult(entry.result || entry.status) === "pass").length;
+    const fail = uniqueRelevant.filter((entry) => normalizeResult(entry.result || entry.status) === "fail").length;
+    const limitation = uniqueRelevant.filter((entry) => normalizeResult(entry.result || entry.status) === "limitation").length;
     const total = pass + fail + limitation;
     return { pass, fail, limitation, total, passRate: total ? Math.round((pass / total) * 100) : 0 };
   }, [filteredItems, evidence]);
@@ -103,7 +117,7 @@ export function ManagementDashboardWorkbench() {
       name: qa.azureName || "Sem nome",
       color: qa.color,
       imageUrl: qa.imageUrl || qa.avatarUrl || qa.linkedProfile?.avatarUrl || "",
-      count: filteredItems.filter((item) => item.qaCollaboratorId === qa.id).length
+      count: filteredItems.filter((item) => item.qaCollaboratorId === qa.id && ["Bug", "User Story"].includes(item.type)).length
     })).filter((row) => row.count > 0).sort((a, b) => b.count - a.count);
   }, [filteredItems, collaborators]);
 
@@ -142,7 +156,7 @@ export function ManagementDashboardWorkbench() {
       <div className="mb-mgmt-grid">
         <section className="mb-mgmt-card">
           <header><strong>Entregas de Feature por sprint</strong><small>Total x entregue (env prod)</small></header>
-          {loading ? <WorkbenchCardSkeleton rows={4} /> : (
+          {loading ? <ChartSkeleton rows={6} /> : (
             <div className="mb-mgmt-bars">
               {featuresPerSprint.map((row) => (
                 <div key={row.sprint} className="mb-mgmt-bar-row">
@@ -158,7 +172,7 @@ export function ManagementDashboardWorkbench() {
 
         <section className="mb-mgmt-card">
           <header><strong>Bugs por sprint</strong><small>Volume total de Bug work items</small></header>
-          {loading ? <WorkbenchCardSkeleton rows={4} /> : (
+          {loading ? <ChartSkeleton rows={6} /> : (
             <div className="mb-mgmt-bars">
               {bugsPerSprint.map((row) => (
                 <div key={row.sprint} className="mb-mgmt-bar-row">
@@ -192,7 +206,7 @@ export function ManagementDashboardWorkbench() {
 
         <section className="mb-mgmt-card">
           <header><strong>Metricas de testes</strong><small>Resultados registrados no periodo</small></header>
-          {loading ? <WorkbenchCardSkeleton rows={3} /> : (
+          {loading ? <ChartSkeleton rows={3} /> : (
             <>
               <div className="mb-mgmt-test-summary">
                 <span className="approved">{testMetrics.pass} Approved</span>

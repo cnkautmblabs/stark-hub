@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase, isSupabaseConfigured } from "../lib/supabaseClient.js";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import { getDemoCollaborators, updateDemoCollaborator, addDemoCollaborator, deleteDemoCollaborator } from "../utils/demoStore.js";
+import { buildApiCacheKey, readApiCache, stableSignature, withInflight, writeApiCache } from "../utils/localApiCache.js";
+
+const COLLABORATORS_CACHE_TTL_MS = 2 * 60 * 1000;
 
 // Fonte do diretório de colaboradores (tabela `collaborators`). No modo
 // demo, vem do localStorage e as edições ficam salvas localmente. Fora do
@@ -9,12 +12,20 @@ import { getDemoCollaborators, updateDemoCollaborator, addDemoCollaborator, dele
 // (somente Gestão pode escrever — ver policy collaborators_write_management).
 export function useCollaborators() {
   const { demoMode, profile } = useAuth();
-  const [collaborators, setCollaborators] = useState(() => (demoMode ? getDemoCollaborators() : []));
-  const [loading, setLoading] = useState(!demoMode);
+  const cacheKey = buildApiCacheKey("collaborators", profile?.id || profile?.email || "anonymous", profile?.accessLevel);
+  const initialCache = !demoMode ? readApiCache(cacheKey, COLLABORATORS_CACHE_TTL_MS) : null;
+  const [collaborators, setCollaborators] = useState(() => (demoMode ? getDemoCollaborators() : initialCache?.data || []));
+  const [loading, setLoading] = useState(!demoMode && !initialCache?.data);
 
-  useEffect(() => {
+  const persistCollaborators = useCallback((rows) => {
+    writeApiCache(cacheKey, rows);
+  }, [cacheKey]);
+
+  const load = useCallback(async ({ force = false } = {}) => {
     if (demoMode) {
-      setCollaborators(getDemoCollaborators());
+      const demo = getDemoCollaborators();
+      const deduped = Array.from(new Map((demo || []).map((r) => [r.id, r])).values());
+      setCollaborators(deduped);
       setLoading(false);
       return;
     }
@@ -22,8 +33,15 @@ export function useCollaborators() {
       setLoading(false);
       return;
     }
-    setLoading(true);
-    supabase.from("collaborators").select("*").then(async ({ data, error }) => {
+    const cached = readApiCache(cacheKey, COLLABORATORS_CACHE_TTL_MS);
+    if (cached?.data) {
+      setCollaborators(cached.data);
+      setLoading(false);
+      if (!force && cached.fresh) return;
+    } else {
+      setLoading(true);
+    }
+    const { data, error } = await withInflight(cacheKey, () => supabase.from("collaborators").select("*"));
       if (!error && data) {
         let rows = data;
         // A policy "profiles_select_own_or_management" so deixa ler o proprio
@@ -36,16 +54,23 @@ export function useCollaborators() {
         if (profileIds.length) {
           const { data: profiles } = await supabase
             .from("profiles")
-            .select('id, email, "fullName", "displayName", "accessLevel", "aliasAzure", "aliasSlack", "aliasVariations", "slackMemberId", "avatarUrl"')
+            .select('id, email, "fullName", "displayName", "accessLevel", "isAdmin", "aliasAzure", "aliasSlack", "aliasVariations", "slackMemberId", "avatarUrl"')
             .in("id", profileIds);
           const byId = new Map((profiles || []).map((row) => [row.id, row]));
           rows = data.map((person) => ({ ...person, linkedProfile: byId.get(person.profileId) || null, accessLevel: byId.get(person.profileId)?.accessLevel || person.accessLevel }));
         }
-        setCollaborators(rows);
+        // Remover duplicidades (caso o banco retorne linhas repetidas)
+        rows = Array.from(new Map((rows || []).map((r) => [r.id, r])).values());
+        const nextSignature = stableSignature(rows);
+        if (nextSignature !== cached?.signature) setCollaborators(rows);
+        writeApiCache(cacheKey, rows, nextSignature);
       }
       setLoading(false);
-    });
-  }, [demoMode, profile?.accessLevel]);
+  }, [demoMode, cacheKey]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   async function updateCollaborator(id, patch) {
     if (demoMode) {
@@ -54,22 +79,38 @@ export function useCollaborators() {
     }
     if (!isSupabaseConfigured) return { error: new Error("Supabase não configurado") };
 
-    // accessLevel mora em `profiles`, não em `collaborators` (schema.sql) —
-    // precisa de uma escrita separada quando o colaborador tem conta vinculada.
-    const { accessLevel, ...collaboratorPatch } = patch;
-    if (accessLevel !== undefined) {
-      const collaborator = collaborators.find((person) => person.id === id);
-      if (collaborator?.profileId) {
+    // accessLevel e isAdmin moram em `profiles`, não em `collaborators` (schema.sql).
+    const { accessLevel, isAdmin, ...collaboratorPatch } = patch;
+    const collaborator = collaborators.find((person) => person.id === id);
+    if (collaborator?.profileId) {
+      if (accessLevel !== undefined) {
         const { error } = await supabase.from("profiles").update({ accessLevel }).eq("id", collaborator.profileId);
         if (error) return { error };
-        setCollaborators((current) => current.map((person) => (person.id === id ? { ...person, accessLevel, linkedProfile: { ...(person.linkedProfile || {}), accessLevel } } : person)));
+        setCollaborators((current) => {
+          const next = current.map((person) => (person.id === id ? { ...person, accessLevel, linkedProfile: { ...(person.linkedProfile || {}), accessLevel } } : person));
+          persistCollaborators(next);
+          return next;
+        });
+      }
+      if (isAdmin !== undefined) {
+        const { error } = await supabase.from("profiles").update({ isAdmin }).eq("id", collaborator.profileId);
+        if (error) return { error };
+        setCollaborators((current) => {
+          const next = current.map((person) => (person.id === id ? { ...person, isAdmin, linkedProfile: { ...(person.linkedProfile || {}), isAdmin } } : person));
+          persistCollaborators(next);
+          return next;
+        });
       }
     }
 
     if (!Object.keys(collaboratorPatch).length) return { error: null };
     const { data, error } = await supabase.from("collaborators").update(collaboratorPatch).eq("id", id).select().maybeSingle();
     if (!error && data) {
-      setCollaborators((current) => current.map((person) => (person.id === id ? { ...person, ...data } : person)));
+      setCollaborators((current) => {
+        const next = current.map((person) => (person.id === id ? { ...person, ...data } : person));
+        persistCollaborators(next);
+        return next;
+      });
       // `profiles` e `collaborators` guardam os mesmos campos de identidade
       // (nome/Slack/avatar) com nomes diferentes — sem espelhar aqui, editar
       // pelo Perfil so atualiza collaborators e profiles fica com o valor
@@ -85,7 +126,11 @@ export function useCollaborators() {
         if ("imageUrl" in collaboratorPatch) profilePatch.avatarUrl = collaboratorPatch.imageUrl;
         if (Object.keys(profilePatch).length) {
           await supabase.from("profiles").update(profilePatch).eq("id", collaborator.profileId);
-          setCollaborators((current) => current.map((person) => (person.id === id ? { ...person, linkedProfile: { ...(person.linkedProfile || {}), ...profilePatch } } : person)));
+          setCollaborators((current) => {
+            const next = current.map((person) => (person.id === id ? { ...person, linkedProfile: { ...(person.linkedProfile || {}), ...profilePatch } } : person));
+            persistCollaborators(next);
+            return next;
+          });
         }
       }
     }
@@ -108,7 +153,13 @@ export function useCollaborators() {
       const { error: profileError } = await supabase.from("profiles").update({ accessLevel }).eq("id", data.profileId);
       if (profileError) return { error: profileError, data };
     }
-    if (!error && data) setCollaborators((current) => [...current, { ...data, accessLevel }]);
+    if (!error && data) {
+      setCollaborators((current) => {
+        const next = [...current, { ...data, accessLevel }];
+        persistCollaborators(next);
+        return next;
+      });
+    }
     return { error, data };
   }
 
@@ -119,9 +170,15 @@ export function useCollaborators() {
     }
     if (!isSupabaseConfigured) return { error: new Error("Supabase não configurado") };
     const { error } = await supabase.from("collaborators").delete().eq("id", id);
-    if (!error) setCollaborators((current) => current.filter((person) => person.id !== id));
+    if (!error) {
+      setCollaborators((current) => {
+        const next = current.filter((person) => person.id !== id);
+        persistCollaborators(next);
+        return next;
+      });
+    }
     return { error };
   }
 
-  return { collaborators, loading, updateCollaborator, addCollaborator, deleteCollaborator };
+  return { collaborators, loading, updateCollaborator, addCollaborator, deleteCollaborator, reload: () => load({ force: true }) };
 }

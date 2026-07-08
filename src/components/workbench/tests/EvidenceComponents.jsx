@@ -2,6 +2,7 @@ import React from "react";
 import { workItemTypes } from "../../../utils/constants.js";
 import {
   evidenceEnvironmentOrder,
+  evidenceEnvironments,
   normalizeEvidenceEnvironment,
   normalizeFilterClass,
   resultInfo
@@ -54,7 +55,7 @@ export function EvidenceCard({ group, profile, visibleEnvironments, resolveWorkI
         <div className="mbaz-evidence-card-context"><span>{authors.length <= 1 ? (authors[0] || "QA nao informado") : `${authors[0]} +${authors.length - 1}`}</span><span>-</span><time>{latest?.createdAt ? new Date(latest.createdAt).toLocaleString("pt-BR") : "-"}</time></div>
       </div>
       <div className="mbaz-evidence-environments">
-        {envs.map((env) => <EvidenceJourney key={env} env={env} records={group.records.filter((entry) => (entry.environments || [entry.environment]).map(normalizeEvidenceEnvironment).includes(env))} />)}
+        {envs.map((env) => <EvidenceJourney key={env} env={env} records={group.records.filter((entry) => evidenceEnvironments(entry).includes(normalizeEvidenceEnvironment(env)))} />)}
       </div>
       <span className={`mbaz-evidence-last-status ${info.className}`}><ResultIcon result={latest?.result} /> {info.label}</span>
       {latest?.note && <p className="mbaz-evidence-note">{latest.note}</p>}

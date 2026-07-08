@@ -12,7 +12,7 @@ const roleDefs = [
   { key: "isManagement", level: "gestao", label: "Gestao" }
 ];
 
-const accessLevelOptions = [accessLevels.dev, accessLevels.qa, accessLevels.gestao, accessLevels.gerente];
+const accessLevelOptions = [accessLevels.dev, accessLevels.qa, accessLevels.gestao, accessLevels.gerente, accessLevels.admin];
 
 // Perfil (onboarding) e Colaboradores nunca ficaram 100% sincronizados
 // (gravacoes historicas podem ter falhado antes das correcoes de RLS) —
@@ -26,6 +26,29 @@ function withProfileFallback(person) {
   const imageUrl = person?.imageUrl || person?.avatarUrl || linked?.avatarUrl || "";
   const aliases = Array.from(new Set([...(person?.aliases || []), ...(linked?.aliasVariations || [])]));
   return { ...person, azureName, slackName, slackMemberId, imageUrl, aliases };
+}
+
+function getEffectiveAccessLevel(person) {
+  return person.accessLevel || person.linkedProfile?.accessLevel || "";
+}
+
+function hasRoleFlag(person, role) {
+  if (person[role.key]) return true;
+  const accessLevel = getEffectiveAccessLevel(person);
+  if (!accessLevel) return false;
+  if (role.level === accessLevels.dev) return accessLevel === accessLevels.dev;
+  if (role.level === accessLevels.qa) return accessLevel === accessLevels.qa;
+  if (role.level === accessLevels.gestao) return accessLevel === accessLevels.gestao || accessLevel === accessLevels.gerente;
+  return false;
+}
+
+function isRoleDerivedFromAccessLevel(person, role) {
+  const accessLevel = getEffectiveAccessLevel(person);
+  if (!accessLevel) return false;
+  if (role.level === accessLevels.dev) return accessLevel === accessLevels.dev;
+  if (role.level === accessLevels.qa) return accessLevel === accessLevels.qa;
+  if (role.level === accessLevels.gestao) return accessLevel === accessLevels.gestao || accessLevel === accessLevels.gerente;
+  return false;
 }
 
 function RolePill({ level, label, active, onToggle, disabled }) {
@@ -79,12 +102,19 @@ function AliasTagInput({ values = [], onChange, readOnly }) {
   );
 }
 
-function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpdate, onDelete }) {
+function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpdate, onDelete, canEditRoles = false, canChangeAdmin = false }) {
   const canEdit = isGestao || isOwn;
   const editable = isEditing && canEdit;
-  const currentAccessLevel = person.accessLevel || person.linkedProfile?.accessLevel || "";
+  const currentAccessLevel = getEffectiveAccessLevel(person);
   const effectivePerson = withProfileFallback(person);
   const { azureName: effectiveAzureName, slackName: effectiveSlackName, slackMemberId: effectiveSlackMemberId, imageUrl: effectiveImageUrl, aliases: effectiveAliases } = effectivePerson;
+  const hasAdminTag = Boolean(person.isAdmin || person.linkedProfile?.isAdmin || currentAccessLevel === accessLevels.admin);
+  // Determine which role/access pills to show: prefer role pills when present
+  // Build role pills including accessLevel-derived roles (gerente/admin) and explicit admin flag
+  const rolePills = [...roleDefs.filter((role) => hasRoleFlag(person, role))];
+  if (currentAccessLevel === "gerente" && !rolePills.some((r) => r.level === "gerente")) rolePills.push({ key: "isGerente", level: "gerente", label: "Gerente" });
+  if ((currentAccessLevel === "admin" || hasAdminTag) && !rolePills.some((r) => r.level === "admin")) rolePills.push({ key: "isAdmin", level: "admin", label: "Admin" });
+  const showAccessLevelPill = !(rolePills && rolePills.length > 0) && Boolean(currentAccessLevel);
 
   return (
     <div className="mb-profile-card">
@@ -92,19 +122,15 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
         <AvatarDot person={effectivePerson} />
         <div className="mb-profile-card-heading">
           <strong>{effectiveAzureName || "Sem nome"}</strong>
-          <div className="mb-profile-role-row">
-            {currentAccessLevel && <RolePill level={currentAccessLevel} label={accessLevelLabels[currentAccessLevel] || currentAccessLevel} active disabled />}
-            {roleDefs.filter((role) => person[role.key]).map((role) => <RolePill key={role.key} level={role.level} label={role.label} active disabled />)}
-          </div>
+          {/* Hide role row inside the card for management view; it will appear in the accordion summary */}
+          {!isGestao && (
+            <div className="mb-profile-role-row">
+              {showAccessLevelPill && <RolePill level={currentAccessLevel} label={accessLevelLabels[currentAccessLevel] || currentAccessLevel} active disabled />}
+              {rolePills.map((role) => <RolePill key={role.key} level={role.level} label={role.label} active disabled />)}
+            </div>
+          )}
         </div>
-        {canEdit && (
-          <div className="mb-profile-card-actions">
-            {editable
-              ? <Button tone="primary" onClick={onDone}><i className="bi bi-check-lg" /> Concluir</Button>
-              : <Button onClick={onEdit}><i className="bi bi-pencil" /> Editar</Button>}
-            {isGestao && <Button tone="danger" onClick={() => onDelete(person.id)}><i className="bi bi-trash" /> Excluir</Button>}
-          </div>
-        )}
+        {/* actions intentionally rendered outside for consistent placement */}
       </div>
       <div className="mbw-form-grid">
         <TextField label="Nome Azure" value={effectiveAzureName} onChange={(value) => onUpdate({ azureName: value })} readOnly={!editable} />
@@ -146,7 +172,9 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
                 });
               }}
             >
-              {accessLevelOptions.map((level) => <option key={level} value={level}>{accessLevelLabels[level]}</option>)}
+              {accessLevelOptions.map((level) => (
+                <option key={level} value={level} disabled={level === accessLevels.admin && !canChangeAdmin}>{accessLevelLabels[level]}</option>
+              ))}
             </select>
           </label>
         )}
@@ -158,11 +186,33 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
                 key={role.key}
                 level={role.level}
                 label={role.label}
-                active={Boolean(person[role.key])}
-                disabled={!isGestao || !editable}
-                onToggle={() => onUpdate({ [role.key]: !person[role.key] })}
+                active={hasRoleFlag(person, role)}
+                disabled={!editable || !canEditRoles || isRoleDerivedFromAccessLevel(person, role)}
+                onToggle={() => onUpdate({ [role.key]: !Boolean(person[role.key]) })}
               />
             ))}
+            <RolePill
+              key="role-gerente"
+              level="gerente"
+              label="Gerente"
+              active={currentAccessLevel === accessLevels.gerente}
+              disabled={!editable || !canEditRoles}
+              onToggle={() => onUpdate({ accessLevel: currentAccessLevel === accessLevels.gerente ? accessLevels.gestao : accessLevels.gerente, isManagement: true })}
+            />
+            <RolePill
+              key="role-admin"
+              level="admin"
+              label="Admin"
+              active={Boolean(person.isAdmin || person.linkedProfile?.isAdmin || currentAccessLevel === accessLevels.admin)}
+              disabled={!editable || !canChangeAdmin}
+              onToggle={() => {
+                if (currentAccessLevel === accessLevels.admin) {
+                  onUpdate({ accessLevel: accessLevels.gestao });
+                } else {
+                  onUpdate({ isAdmin: !Boolean(person.isAdmin || person.linkedProfile?.isAdmin) });
+                }
+              }}
+            />
           </div>
         </label>
         <label className="mb-profile-check">
@@ -203,6 +253,9 @@ function PendingApprovalRow({ profile, onApprove }) {
 
 export function CollaboratorsWorkbench() {
   const { profile, demoMode } = useAuth();
+  const currentUserAccess = profile?.accessLevel;
+  const canEditRolesGlobal = currentUserAccess === accessLevels.admin || hasManagementAccess(currentUserAccess);
+  const canChangeAdminGlobal = currentUserAccess === accessLevels.admin;
   const { collaborators, loading, updateCollaborator, addCollaborator, deleteCollaborator } = useCollaborators();
   const { profiles, loading: profilesLoading } = useProfiles();
   const [search, setSearch] = useState("");
@@ -213,10 +266,10 @@ export function CollaboratorsWorkbench() {
     || collaborators.find((person) => String(person.azureName || "").toLowerCase() === String(profile?.displayName || profile?.fullName || "").toLowerCase());
   const baseCollaborators = isGestao ? collaborators : ownCollaborator ? [ownCollaborator] : [];
   const visibleCollaborators = baseCollaborators.filter((person) => {
-    if (roleFilter === "dev" && !person.isDev) return false;
-    if (roleFilter === "qa" && !person.isQa) return false;
-    if (roleFilter === "gestao" && !person.isManagement) return false;
-    if (roleFilter === "gerente" && (person.accessLevel || person.linkedProfile?.accessLevel) !== "gerente") return false;
+    if (roleFilter === "dev" && !hasRoleFlag(person, roleDefs[0])) return false;
+    if (roleFilter === "qa" && !hasRoleFlag(person, roleDefs[1])) return false;
+    if (roleFilter === "gestao" && !hasRoleFlag(person, roleDefs[2])) return false;
+    if (roleFilter === "gerente" && getEffectiveAccessLevel(person) !== "gerente") return false;
     if (search && !normalize(`${person.azureName || ""} ${person.email || ""} ${person.slackId || ""} ${person.slackName || ""} ${(person.aliases || []).join(" ")}`).includes(normalize(search))) return false;
     return true;
   });
@@ -229,9 +282,9 @@ export function CollaboratorsWorkbench() {
     : [];
   const metrics = useMemo(() => ({
     total: baseCollaborators.length,
-    dev: baseCollaborators.filter((person) => person.isDev).length,
-    qa: baseCollaborators.filter((person) => person.isQa).length,
-    gestao: baseCollaborators.filter((person) => person.isManagement).length,
+    dev: baseCollaborators.filter((person) => hasRoleFlag(person, roleDefs[0])).length,
+    qa: baseCollaborators.filter((person) => hasRoleFlag(person, roleDefs[1])).length,
+    gestao: baseCollaborators.filter((person) => hasRoleFlag(person, roleDefs[2])).length,
     linked: baseCollaborators.filter((person) => person.profileId).length
   }), [baseCollaborators]);
 
@@ -292,39 +345,67 @@ export function CollaboratorsWorkbench() {
           </section>
         )}
         {loading && <WorkbenchCardSkeleton rows={3} mode="list" />}
-        {!isGestao && visibleCollaborators.map((person) => (
-          <ProfileCard
-            key={person.id}
-            person={person}
-            isGestao={isGestao}
-            isOwn
-            isEditing={editingId === person.id}
-            onEdit={() => setEditingId(person.id)}
-            onDone={() => setEditingId(null)}
-            onUpdate={(patch) => updateCollaborator(person.id, patch)}
-            onDelete={removePerson}
-          />
-        ))}
-        {isGestao && visibleCollaborators.map((person) => (
-          <details key={person.id} className="mb-collaborator-card-react" open={editingId === person.id}>
-            <summary>
-              <AvatarDot person={withProfileFallback(person)} />
-              <div className="mb-profile-role-row">
-                {roleDefs.filter((role) => person[role.key]).map((role) => <RolePill key={role.key} level={role.level} label={role.label} active disabled />)}
+        {!isGestao && visibleCollaborators.map((person) => {
+          const editing = editingId === person.id;
+          return (
+            <div key={person.id} className="mb-collaborator-single">
+              <div className="mb-profile-card-actions mb-profile-card-actions-outer">
+                {editing
+                  ? <Button tone="primary" onClick={() => setEditingId(null)}><i className="bi bi-check-lg" /> Concluir</Button>
+                  : <Button onClick={() => setEditingId(person.id)}><i className="bi bi-pencil" /> Editar</Button>}
               </div>
-            </summary>
-            <ProfileCard
-              person={person}
-              isGestao={isGestao}
-              isOwn={person.id === ownCollaborator?.id}
-              isEditing={editingId === person.id}
-              onEdit={() => setEditingId(person.id)}
-              onDone={() => setEditingId(null)}
-              onUpdate={(patch) => updateCollaborator(person.id, patch)}
-              onDelete={removePerson}
-            />
-          </details>
-        ))}
+              <ProfileCard
+                person={person}
+                isGestao={isGestao}
+                isOwn
+                isEditing={editing}
+                canEditRoles={canEditRolesGlobal}
+                canChangeAdmin={canChangeAdminGlobal}
+                onEdit={() => setEditingId(person.id)}
+                onDone={() => setEditingId(null)}
+                onUpdate={(patch) => updateCollaborator(person.id, patch)}
+                onDelete={removePerson}
+              />
+            </div>
+          );
+        })}
+        {isGestao && visibleCollaborators.map((person) => {
+          const currentAccessLevel = getEffectiveAccessLevel(person);
+          const rolePills = [...roleDefs.filter((role) => hasRoleFlag(person, role))];
+          if (currentAccessLevel === "gerente" && !rolePills.some((r) => r.level === "gerente")) rolePills.push({ key: "isGerente", level: "gerente", label: "Gerente" });
+          if (currentAccessLevel === "admin" && !rolePills.some((r) => r.level === "admin")) rolePills.push({ key: "isAdmin", level: "admin", label: "Admin" });
+          const showAccessLevelPill = !(rolePills && rolePills.length > 0) && Boolean(currentAccessLevel);
+          const editing = editingId === person.id;
+          return (
+            <details key={person.id} className="mb-collaborator-card-react" open={editing}>
+              <summary>
+                <AvatarDot person={withProfileFallback(person)} />
+                <div className="mb-profile-role-row">
+                  {showAccessLevelPill && <RolePill level={currentAccessLevel} label={accessLevelLabels[currentAccessLevel] || currentAccessLevel} active disabled />}
+                  {rolePills.map((role) => <RolePill key={role.key} level={role.level} label={role.label} active disabled />)}
+                </div>
+                <div className="mb-profile-card-actions">
+                  {editing
+                    ? <Button tone="primary" onClick={() => setEditingId(null)}><i className="bi bi-check-lg" /> Concluir</Button>
+                    : <Button onClick={() => setEditingId(person.id)}><i className="bi bi-pencil" /> Editar</Button>}
+                  <Button tone="danger" onClick={() => removePerson(person.id)}><i className="bi bi-trash" /> Excluir</Button>
+                </div>
+              </summary>
+              <ProfileCard
+                person={person}
+                isGestao={isGestao}
+                isOwn={person.id === ownCollaborator?.id}
+                isEditing={editing}
+                canEditRoles={canEditRolesGlobal}
+                canChangeAdmin={canChangeAdminGlobal}
+                onEdit={() => setEditingId(person.id)}
+                onDone={() => setEditingId(null)}
+                onUpdate={(patch) => updateCollaborator(person.id, patch)}
+                onDelete={removePerson}
+              />
+            </details>
+          );
+        })}
         {!visibleCollaborators.length && !pendingProfiles.length && <EmptyState title={isGestao ? "Nenhum colaborador cadastrado" : "Sua conta ainda nao foi vinculada a um colaborador"} />}
       </div>
     </section>

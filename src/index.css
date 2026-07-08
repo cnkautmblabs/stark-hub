@@ -5151,6 +5151,8 @@ body {
 }
 .mbaz-new-modal-collapse {
   margin: 0 12px 12px;
+  display: block;
+  width: auto;
 }
 .mbaz-new-modal-description-body {
   padding: 10px 12px;
@@ -5294,6 +5296,8 @@ body {
   border: 1px solid #cbd5e1;
   border-radius: 12px;
   background: #fff;
+  display: block;
+  width: auto;
 }
 .mbaz-new-modal-result-history > summary {
   display: flex;
@@ -6872,6 +6876,51 @@ body {
 .mbw-kpi.skeleton .mbw-kpi-icon {
   border-radius: 8px;
 }
+.mbw-chart-skeleton {
+  min-height: 108px;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  width: 100%;
+}
+.mbw-chart-skeleton-head,
+.mbw-chart-skeleton-row,
+.mbw-chart-skeleton-donut {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mbw-chart-skeleton-head {
+  justify-content: space-between;
+}
+.mbw-chart-skeleton-bars {
+  display: grid;
+  gap: 9px;
+}
+.mbw-chart-skeleton-row > span:nth-child(2) {
+  flex: 1;
+  border-radius: 999px;
+}
+.mbw-chart-skeleton-donut {
+  min-height: 76px;
+}
+.mbw-chart-skeleton-donut > span {
+  width: 70px;
+  height: 70px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+.mbw-chart-skeleton-donut > div {
+  display: grid;
+  gap: 9px;
+  width: 100%;
+}
+.mbw-chart-skeleton-donut > div span {
+  height: 10px;
+}
+.mbw-chart-skeleton-donut > div span:nth-child(1) { width: 72%; }
+.mbw-chart-skeleton-donut > div span:nth-child(2) { width: 54%; }
+.mbw-chart-skeleton-donut > div span:nth-child(3) { width: 62%; }
 .mb-my-qa-board-card {
   gap: 0;
   border: 1px solid #d7dde8;
@@ -8460,6 +8509,36 @@ body {
 .mbdhc-work-test-panel .mbaz-evidence-run-group.limitation { background: #fef3c7; color: #9a6700; }
 .mbdhc-work-test-panel .mbaz-evidence-pending-icon {
   color: #94a3b8;
+}
+.mbaz-react-shell .mbaz-card-test-details,
+.mb-my-qa-board-card .mbaz-card-test-details,
+.mbdhc-work-test-panel.mbaz-card-test-details {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(86px, 1fr);
+  grid-template-columns: none;
+  scrollbar-width: thin;
+}
+.mbaz-react-shell .mbaz-card-test-details > *,
+.mb-my-qa-board-card .mbaz-card-test-details > *,
+.mbdhc-work-test-panel.mbaz-card-test-details > * {
+  min-width: 86px;
+}
+.mbdhc-governance .mbdhc-work-card,
+.mbdhc-governance .mbdhc-work-card * {
+  max-width: 100%;
+}
+.mbdhc-governance .mbdhc-work-card-link {
+  min-width: 0;
+}
+.mbdhc-work-test-toggle {
+  flex-wrap: wrap;
+}
+.mbdhc-work-test-toggle > i:last-child {
+  margin-left: 0;
 }
 .mbaz-react-shell .mbaz-chart-toggle {
   width: auto;

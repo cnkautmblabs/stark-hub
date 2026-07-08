@@ -197,6 +197,37 @@ export function KpiSkeleton({ count = 4 }) {
   );
 }
 
+export function ChartSkeleton({ rows = 4, variant = "bars", className = "" }) {
+  return (
+    <div className={`mbw-chart-skeleton ${variant} ${className}`}>
+      <div className="mbw-chart-skeleton-head">
+        <span className="mbw-skeleton-block" style={{ width: 150, height: 12 }} />
+        <span className="mbw-skeleton-block" style={{ width: 54, height: 10 }} />
+      </div>
+      {variant === "donut" ? (
+        <div className="mbw-chart-skeleton-donut">
+          <span className="mbw-skeleton-block" />
+          <div>
+            <span className="mbw-skeleton-block" />
+            <span className="mbw-skeleton-block" />
+            <span className="mbw-skeleton-block" />
+          </div>
+        </div>
+      ) : (
+        <div className="mbw-chart-skeleton-bars">
+          {Array.from({ length: rows }).map((_, index) => (
+            <div key={index} className="mbw-chart-skeleton-row">
+              <span className="mbw-skeleton-block" style={{ width: 42, height: 10 }} />
+              <span className="mbw-skeleton-block" style={{ width: `${92 - (index % 4) * 12}%`, height: 12 }} />
+              <span className="mbw-skeleton-block" style={{ width: 28, height: 10 }} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AvatarDot({ person, name, compact = false }) {
   const displayName = person?.azureName || person?.full_name || person?.name || name || "Sem responsavel";
   const imageUrl = person?.imageUrl || person?.avatarUrl || person?.avatar_url || person?.photoUrl || person?.photo_url || "";

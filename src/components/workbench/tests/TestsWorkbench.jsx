@@ -6,7 +6,10 @@ import { useWorkItems } from "../../../hooks/useWorkItems.js";
 import { compactSprintLabel, findCurrentSprint } from "../../../utils/sprints.js";
 import {
   evidenceDateRangeForPreset,
+  evidenceDedupeKey,
+  evidenceEnvironments,
   evidenceEnvironmentOrder,
+  isQaEvidenceEntry,
   isEvidenceInsideRange,
   normalize,
   normalizeEvidenceEnvironment,
@@ -14,7 +17,7 @@ import {
   resultInfo
 } from "../../../utils/workbench/formatters.js";
 import { AzureWorkItemModal, workItemUrl } from "../ui/AzureWorkItemModal.jsx";
-import { Button, EmptyState, IconButton, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
+import { Button, ChartSkeleton, EmptyState, IconButton, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
 import { EvidenceCard, EvidenceFilterBox, EvidenceMultiFilterBox, ResultIcon } from "./EvidenceComponents.jsx";
 
 export function TestsWorkbench() {
@@ -34,7 +37,7 @@ export function TestsWorkbench() {
   const [viewMode, setViewMode] = useState("list");
   const [activeItem, setActiveItem] = useState(null);
   const byId = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
-  const discussionRecords = items.flatMap((item) => (item.discussionEvidence || []).map((entry) => ({
+  const discussionRecords = items.flatMap((item) => (item.discussionEvidence || []).filter(isQaEvidenceEntry).map((entry) => ({
     ...entry,
     result: entry.result === "approved" ? "pass" : entry.result,
     source: entry.source || "azure-discussion",
@@ -43,17 +46,23 @@ export function TestsWorkbench() {
   const records = [
     ...evidence.map((entry) => ({ ...entry, item: byId.get(entry.workItemId), source: entry.source || "stark-hub" })),
     ...discussionRecords
-  ].sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
-  const recordsInsidePeriod = records.filter((entry) => isEvidenceInsideRange(entry, dateFrom, dateTo));
-  const qaOptions = Array.from(new Set(records.map((entry) => entry.authorName).filter(Boolean))).sort((a, b) => a.localeCompare(b, "pt-BR"));
-  const typeOptions = Array.from(new Set(records.map((entry) => entry.item?.type).filter(Boolean))).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  ];
+  const dedupedRecords = Array.from(records.reduce((map, entry) => {
+    const key = evidenceDedupeKey(entry);
+    const current = map.get(key);
+    if (!current || String(entry.createdAt || "").localeCompare(String(current.createdAt || "")) > 0) map.set(key, entry);
+    return map;
+  }, new Map()).values()).sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+  const recordsInsidePeriod = dedupedRecords.filter((entry) => isEvidenceInsideRange(entry, dateFrom, dateTo));
+  const qaOptions = Array.from(new Set(dedupedRecords.map((entry) => entry.authorName).filter(Boolean))).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const typeOptions = Array.from(new Set(dedupedRecords.map((entry) => entry.item?.type).filter(Boolean))).sort((a, b) => a.localeCompare(b, "pt-BR"));
   const envOptions = evidenceEnvironmentOrder;
-  const sprintOptions = Array.from(new Set(records.map((entry) => entry.item?.sprint || entry.item?.iteration).filter(Boolean))).sort((a, b) => b.localeCompare(a, "pt-BR"));
+  const sprintOptions = Array.from(new Set(dedupedRecords.map((entry) => entry.item?.sprint || entry.item?.iteration).filter(Boolean))).sort((a, b) => b.localeCompare(a, "pt-BR"));
   const currentSprint = findCurrentSprint(sprintOptions);
   const effectiveSprint = sprint === "all" && currentSprint ? currentSprint : sprint;
-  const rows = records.filter((entry) => {
+  const rows = dedupedRecords.filter((entry) => {
     const entryResult = normalizeResult(entry.result);
-    const entryEnvs = entry.environments || [entry.environment];
+    const entryEnvs = evidenceEnvironments(entry);
     if (result !== "all" && entryResult !== result) return false;
     if (environmentsFilter.length && !entryEnvs.some((env) => environmentsFilter.includes(normalizeEvidenceEnvironment(env)))) return false;
     if (type !== "all" && entry.item?.type !== type) return false;
@@ -98,7 +107,7 @@ export function TestsWorkbench() {
   function copyRows() {
     const lines = rows.map((entry) => {
       const item = entry.item || byId.get(entry.workItemId) || {};
-      return `${entry.createdAt || ""} - ${item.type || "Work Item"} ${entry.workItemId} - ${item.title || ""} - ${entry.authorName || "QA"} - ${(entry.environments || [entry.environment || "N/A"]).join("/")} - ${resultInfo(entry.result).label}`;
+      return `${entry.createdAt || ""} - ${item.type || "Work Item"} ${entry.workItemId} - ${item.title || ""} - ${entry.authorName || "QA"} - ${(evidenceEnvironments(entry).length ? evidenceEnvironments(entry) : ["N/A"]).join("/")} - ${resultInfo(entry.result).label}`;
     });
     navigator.clipboard?.writeText(lines.join("\n"));
   }
@@ -145,7 +154,7 @@ export function TestsWorkbench() {
           <span><strong>{groupedRows.length}</strong> Work Item(s)</span>
           <span><strong>{rows.length}</strong> evidencias</span>
           <span><strong>{recordsInsidePeriod.length}</strong> no periodo</span>
-          <span><strong>{records.length}</strong> carregadas</span>
+          <span><strong>{dedupedRecords.length}</strong> carregadas</span>
           <span style={{ color: "#166534" }}><strong>{counts.pass || 0}</strong> approved</span>
           <span style={{ color: "#991b1b" }}><strong>{counts.fail || 0}</strong> fail</span>
           <span style={{ color: "#9a6700" }}><strong>{counts.limitation || 0}</strong> limitation</span>
@@ -154,14 +163,18 @@ export function TestsWorkbench() {
         </div>
         <div className="mbaz-evidence-env-summary">
           {["DEV", "QA", "BETA", "PROD"].map((env) => {
-            const envRows = rows.filter((entry) => (entry.environments || [entry.environment]).map(normalizeEvidenceEnvironment).includes(env));
+            const envRows = rows.filter((entry) => evidenceEnvironments(entry).includes(env));
             const envCounts = envRows.reduce((acc, entry) => ({ ...acc, [normalizeResult(entry.result)]: (acc[normalizeResult(entry.result)] || 0) + 1 }), {});
             return <span key={env} className="mbaz-evidence-env-chip"><strong>{env}</strong><span><ResultIcon result="pass" /> {envCounts.pass || 0}</span><span><ResultIcon result="fail" /> {envCounts.fail || 0}</span><span><ResultIcon result="limitation" /> {envCounts.limitation || 0}</span><span>Total {envRows.length}</span></span>;
           })}
         </div>
         <div className="mbaz-evidence-chart">
-          <div className="mbaz-evidence-chart-bar">{["pass", "fail", "limitation"].map((key) => counts[key] ? <span key={key} className={`mbaz-evidence-chart-segment ${resultInfo(key).className}`} style={{ width: `${Math.max(4, (counts[key] / Math.max(rows.length, 1)) * 100)}%` }}><ResultIcon result={key} /> {counts[key]}</span> : null)}</div>
-          <div className="mbaz-evidence-chart-legend">{["pass", "fail", "limitation"].map((key) => <span key={key}><ResultIcon result={key} /> {resultInfo(key).label}: {counts[key] || 0}</span>)}</div>
+          {loading ? <ChartSkeleton rows={3} /> : (
+            <>
+              <div className="mbaz-evidence-chart-bar">{["pass", "fail", "limitation"].map((key) => counts[key] ? <span key={key} className={`mbaz-evidence-chart-segment ${resultInfo(key).className}`} style={{ width: `${Math.max(4, (counts[key] / Math.max(rows.length, 1)) * 100)}%` }}><ResultIcon result={key} /> {counts[key]}</span> : null)}</div>
+              <div className="mbaz-evidence-chart-legend">{["pass", "fail", "limitation"].map((key) => <span key={key}><ResultIcon result={key} /> {resultInfo(key).label}: {counts[key] || 0}</span>)}</div>
+            </>
+          )}
         </div>
         <div className="mbaz-evidence-list">
           {loading && <WorkbenchCardSkeleton rows={4} mode={viewMode} />}

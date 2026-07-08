@@ -166,6 +166,78 @@ export async function copyPersonalSummaryText(payload) {
   return text;
 }
 
+function fmtDateTimeIsoToPt(value) {
+  try {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value || '');
+    return d.toLocaleDateString('pt-BR') + ', ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } catch (_) {
+    return String(value || '');
+  }
+}
+
+// Build QA Test Evidence report in the legacy textual format requested by users.
+export function buildQaTestEvidenceReportText({ generatedAt = new Date(), scope = 'Filtered records', records = [], workItems = [], collaborators = [] }) {
+  const generated = typeof generatedAt === 'string' ? new Date(generatedAt) : generatedAt;
+  const header = [];
+  header.push('QA TEST EVIDENCE REPORT');
+  header.push(`Generated: ${fmtDateTimeIsoToPt(generated)}`);
+  header.push(`Scope: ${scope}`);
+
+  // totals
+  const total = records.length;
+  const byResult = records.reduce((acc, r) => {
+    const key = String((r.result || '').toLowerCase());
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+  const approved = byResult['approved'] || byResult['pass'] || byResult['passed'] || 0;
+  const failed = byResult['fail'] || byResult['failed'] || byResult['failure'] || 0;
+  const limitation = byResult['limitation'] || 0;
+  header.push(`Total: ${total} | Approved: ${approved} | Fail: ${failed} | Limitation: ${limitation}`);
+
+  // per-environment breakdown
+  const byEnv = records.reduce((acc, r) => {
+    const env = String((r.environment || r.env || '').toUpperCase() || 'UNSPECIFIED');
+    acc[env] = acc[env] || { total: 0, approved: 0, fail: 0, limitation: 0 };
+    acc[env].total += 1;
+    const res = String((r.result || '').toLowerCase());
+    if (res === 'approved' || res === 'pass' || res === 'passed') acc[env].approved += 1;
+    else if (res === 'fail' || res === 'failed') acc[env].fail += 1;
+    else if (res === 'limitation') acc[env].limitation += 1;
+    return acc;
+  }, {});
+  Object.keys(byEnv).forEach((env) => {
+    const v = byEnv[env];
+    header.push(`${env}: Total ${v.total} | Approved ${v.approved} | Fail ${v.fail} | Limitation ${v.limitation}`);
+  });
+
+  header.push('');
+
+  // detailed lines per record
+  const lines = records.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).map((r) => {
+    const ts = fmtDateTimeIsoToPt(r.createdAt || r.updatedAt || r.timestamp || new Date());
+    const wi = workItems.find((w) => String(w.id) === String(r.workItemId)) || {};
+    const type = wi.type || (wi.workItemType || '') || '';
+    const id = wi.id || r.workItemId || '';
+    const area = wi.areaPath || wi.area || '';
+    const areaShort = area ? `[${String(area).replace(/\\/g, '/').split('/').slice(0, 2).join('/')}]` : '';
+    const title = wi.title || wi.name || '';
+    const author = r.authorName || r.author || (collaborators.find((c) => String(c.id) === String(r.authorId))?.azureName) || '';
+    const env = (r.environment || r.env || '').toUpperCase() || '';
+    const resultLabel = (r.result || '').replace(/^[a-z]/, (m) => m.toUpperCase());
+    return `${ts} - ${type || 'Item'} ${id} - ${areaShort} ${title} - ${author} - ${env} - ${resultLabel}`.replace(/  +/g, ' ').trim();
+  });
+
+  return [...header, ...lines].join('\n');
+}
+
+export async function copyQaTestEvidenceReportText(payload) {
+  const text = buildQaTestEvidenceReportText(payload);
+  await navigator.clipboard?.writeText(text);
+  return text;
+}
+
 export async function downloadPersonalSummaryPdf({ name, role, entries = [], autoEntries = [], autoLabel = "Hoje (automatico)", filename }) {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "a4" });

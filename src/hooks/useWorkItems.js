@@ -10,8 +10,10 @@ import { buildLegacyQaResultSlackText, buildQaResultDiscussionHtml } from "../ut
 import { getDemoWorkItems, updateDemoWorkItem, addDemoWorkItem } from "../utils/demoStore.js";
 import { playNotificationSound } from "../utils/notificationSounds.js";
 import { azureWorkItemUrl } from "../utils/azure.js";
+import { buildApiCacheKey, readApiCache, stableSignature, withInflight, writeApiCache } from "../utils/localApiCache.js";
 
 const MAX_TOASTS_PER_GROUP = 4;
+const WORK_ITEMS_CACHE_TTL_MS = 60 * 1000;
 
 // Compara o estado anterior (por id) com a lista fresca e dispara toast +
 // som pros 3 eventos que o usuario pediu: item novo no board, item que
@@ -79,22 +81,6 @@ export function useWorkItems({ includeClosed = false } = {}) {
   const { collaborators } = useCollaborators();
   const { isEnabled } = useFeatureFlags();
   const { pushToast } = useToast();
-  const [items, setItems] = useState(() => (demoMode ? getDemoWorkItems() : []));
-  const [loading, setLoading] = useState(!demoMode);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState(null);
-  // So a PRIMEIRA carga mostra skeleton de tela cheia. Atualizacoes depois
-  // disso (manual ou automatica a cada `azureAutoRefreshSeconds`) mantem a
-  // ultima lista boa visivel e so acendem `refreshing` — sem isso, cada
-  // auto-refresh trocava o board inteiro por skeleton por alguns segundos,
-  // mesmo quando quase nada mudou.
-  const hasLoadedRef = useRef(false);
-  // Estado (por id) da carga anterior, pra detectar item novo/entrou em QA
-  // ou BETA entre uma atualizacao e outra. So o feed padrao notifica — a
-  // busca ampla do Dash executivo (includeClosed) e historica/multi-sprint,
-  // notificar a cada refresh dela seria ruido, nao sinal.
-  const previousStateByIdRef = useRef(null);
-
   const azureReady = Boolean(profile?.azureOrgUrl && profile?.azureProject && profile?.azurePat);
   const iterationPattern = getSetting("azureIterationPattern", "");
   const customQuery = includeClosed
@@ -102,8 +88,39 @@ export function useWorkItems({ includeClosed = false } = {}) {
     : getSetting("azureCustomQuery", "");
   const maxItems = includeClosed ? Math.max(getSetting("azureMaxItems", 200), 800) : getSetting("azureMaxItems", 200);
   const autoRefreshSeconds = getSetting("azureAutoRefreshSeconds", 60);
+  const cacheKey = buildApiCacheKey(
+    "workItems",
+    profile?.id || user?.email || "anonymous",
+    profile?.azureOrgUrl,
+    profile?.azureProject,
+    profile?.azureTeam,
+    includeClosed ? "closed" : "active",
+    iterationPattern,
+    customQuery,
+    maxItems
+  );
+  const initialCache = !demoMode ? readApiCache(cacheKey, WORK_ITEMS_CACHE_TTL_MS) : null;
+  const [items, setItems] = useState(() => (demoMode ? getDemoWorkItems() : initialCache?.data || []));
+  const [loading, setLoading] = useState(!demoMode && !initialCache?.data);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
+  // So a PRIMEIRA carga mostra skeleton de tela cheia. Atualizacoes depois
+  // disso (manual ou automatica a cada `azureAutoRefreshSeconds`) mantem a
+  // ultima lista boa visivel e so acendem `refreshing` — sem isso, cada
+  // auto-refresh trocava o board inteiro por skeleton por alguns segundos,
+  // mesmo quando quase nada mudou.
+  const hasLoadedRef = useRef(Boolean(initialCache?.data));
+  // Estado (por id) da carga anterior, pra detectar item novo/entrou em QA
+  // ou BETA entre uma atualizacao e outra. So o feed padrao notifica — a
+  // busca ampla do Dash executivo (includeClosed) e historica/multi-sprint,
+  // notificar a cada refresh dela seria ruido, nao sinal.
+  const previousStateByIdRef = useRef(null);
 
-  const loadItems = useCallback(async () => {
+  const persistItems = useCallback((nextItems) => {
+    writeApiCache(cacheKey, nextItems);
+  }, [cacheKey]);
+
+  const loadItems = useCallback(async ({ force = false } = {}) => {
     if (demoMode) {
       setItems(getDemoWorkItems());
       setLoading(false);
@@ -117,20 +134,40 @@ export function useWorkItems({ includeClosed = false } = {}) {
       hasLoadedRef.current = true;
       return;
     }
+    const cached = readApiCache(cacheKey, WORK_ITEMS_CACHE_TTL_MS);
+    if (cached?.data?.length || cached?.data) {
+      if (!hasLoadedRef.current) setItems(cached.data);
+      hasLoadedRef.current = true;
+      setLoading(false);
+      if (!force && cached.fresh) return;
+    }
     if (hasLoadedRef.current) setRefreshing(true);
     else setLoading(true);
     setError(null);
-    const { data, error: invokeError } = await supabase.functions.invoke("azureWorkItems", {
-      body: {
-        orgUrl: profile.azureOrgUrl,
-        project: profile.azureProject,
-        team: profile.azureTeam,
-        iterationPattern,
-        customQuery,
-        maxItems,
-        pat: profile.azurePat
-      }
-    });
+    let data = null;
+    let invokeError = null;
+    try {
+      const timeoutPromise = new Promise((_, reject) => {
+        window.setTimeout(() => reject(new Error("Tempo limite ao consultar o Azure DevOps. Tente atualizar novamente.")), 45000);
+      });
+      ({ data, error: invokeError } = await withInflight(cacheKey, () => Promise.race([
+        supabase.functions.invoke("azureWorkItems", {
+          body: {
+            orgUrl: profile.azureOrgUrl,
+            project: profile.azureProject,
+            team: profile.azureTeam,
+            iterationPattern,
+            customQuery,
+            maxItems,
+            includeClosed,
+            pat: profile.azurePat
+          }
+        }),
+        timeoutPromise
+      ])));
+    } catch (err) {
+      invokeError = err;
+    }
     // Uma falha aqui NUNCA pode virar silenciosamente "lista vazia" — foi
     // exatamente esse silêncio que escondeu o vazamento de dados de outro
     // time (Lenio Labs) sem avisar ninguém. Isso vale pra PRIMEIRA carga
@@ -145,12 +182,19 @@ export function useWorkItems({ includeClosed = false } = {}) {
         notifyTransitions({ previousStateById: previousStateByIdRef.current, freshItems: data.items, pushToast, profile, user });
         previousStateByIdRef.current = new Map(data.items.map((item) => [item.id, String(item.state || "").toLowerCase()]));
       }
-      setItems(data.items);
+      const nextItems = data.items || [];
+      const nextSignature = stableSignature(nextItems);
+      if (nextSignature !== cached?.signature) {
+        setItems(nextItems);
+        writeApiCache(cacheKey, nextItems, nextSignature);
+      } else {
+        writeApiCache(cacheKey, cached.data, cached.signature);
+      }
     }
     hasLoadedRef.current = true;
     setLoading(false);
     setRefreshing(false);
-  }, [demoMode, azureReady, profile?.azureOrgUrl, profile?.azureProject, profile?.azureTeam, profile?.azurePat, iterationPattern, customQuery, maxItems, includeClosed, pushToast]);
+  }, [demoMode, azureReady, profile?.azureOrgUrl, profile?.azureProject, profile?.azureTeam, profile?.azurePat, iterationPattern, customQuery, maxItems, includeClosed, pushToast, cacheKey, user]);
 
   useEffect(() => {
     loadItems();
@@ -161,7 +205,7 @@ export function useWorkItems({ includeClosed = false } = {}) {
   // configurável em Configurações > Consulta Azure DevOps. 0 desativa.
   useEffect(() => {
     if (demoMode || !azureReady || !autoRefreshSeconds) return;
-    const id = setInterval(loadItems, autoRefreshSeconds * 1000);
+    const id = setInterval(() => loadItems({ force: true }), autoRefreshSeconds * 1000);
     return () => clearInterval(id);
   }, [demoMode, azureReady, autoRefreshSeconds, loadItems]);
 
@@ -183,7 +227,11 @@ export function useWorkItems({ includeClosed = false } = {}) {
         lastKnownState: item.state,
         updatedAt: new Date().toISOString()
       });
-      setItems((current) => current.map((i) => (i.id === id ? { ...i, qaCollaboratorId: patch.qaCollaboratorId } : i)));
+      setItems((current) => {
+        const next = current.map((i) => (i.id === id ? { ...i, qaCollaboratorId: patch.qaCollaboratorId } : i));
+        persistItems(next);
+        return next;
+      });
       return;
     }
 
@@ -284,7 +332,11 @@ export function useWorkItems({ includeClosed = false } = {}) {
         });
       }
       const nextPatch = { lastTestResult: patch.lastTestResult, ...(patch.state ? { state: patch.state } : {}) };
-      setItems((current) => current.map((i) => (i.id === id ? { ...i, ...nextPatch } : i)));
+      setItems((current) => {
+        const next = current.map((i) => (i.id === id ? { ...i, ...nextPatch } : i));
+        persistItems(next);
+        return next;
+      });
       if (patch.lastTestResult === "pass" && patch.state && /beta/i.test(patch.state) && isEnabled("enableReadyBetaNotifications")) {
         const webhooks = resolveSlackWebhooks(getSetting);
         if (webhooks.length) {
@@ -314,7 +366,11 @@ export function useWorkItems({ includeClosed = false } = {}) {
       }
     });
     if (!error && data?.ok) {
-      setItems((current) => current.map((i) => (i.id === id ? { ...i, ...patch } : i)));
+      setItems((current) => {
+        const next = current.map((i) => (i.id === id ? { ...i, ...patch } : i));
+        persistItems(next);
+        return next;
+      });
 
       // Notificação no Slack quando o item entra em BETA — equivalente ao
       // "Envio para o Slack" do userscript legado. Só dispara se a
@@ -350,5 +406,5 @@ export function useWorkItems({ includeClosed = false } = {}) {
     if (!error && data?.ok) await loadItems();
   }
 
-  return { items, loading, refreshing, error, updateItem, addItem, reload: loadItems, needsAzureIntegration: !demoMode && !azureReady };
+  return { items, loading, refreshing, error, updateItem, addItem, reload: () => loadItems({ force: true }), needsAzureIntegration: !demoMode && !azureReady };
 }

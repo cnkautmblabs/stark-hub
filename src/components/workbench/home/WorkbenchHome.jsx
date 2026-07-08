@@ -10,9 +10,12 @@ import { accessLevelLabels, accessLevels, defaultGoalHours, hasManagementAccess 
 import { formatHours, normalize } from "../../../utils/workbench/formatters.js";
 import { compactSprintLabel, findCurrentSprint } from "../../../utils/sprints.js";
 import {
+  buildExecutiveReportText,
   buildPersonalSummaryText,
+  buildQaTestEvidenceReportText,
   copyExecutiveReportText,
   copyPersonalSummaryText,
+  copyQaTestEvidenceReportText,
   downloadExecutiveReportPdf,
   downloadPersonalSummaryPdf
 } from "../../../utils/executiveReport.js";
@@ -328,11 +331,10 @@ function QaPanel({ loading, availableForTesting, evidenceToday, currentSprintLab
 
 const reportTypeLabels = { dev: "Dev (PRs)", qa: "QA (testes)", gestao: "Gestao (governanca)" };
 
-function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, reportType, canOverrideReportType, onReportTypeChange, onAdd, onRemove, onCopy, onPdf, onPrint, onSlack }) {
+function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, reportType, previewText, canOverrideReportType, onReportTypeChange, onAdd, onRemove, onCopy, onPdf, onPrint, onSlack }) {
   const [title, setTitle] = useState("");
   const [type, setType] = useState("temporaria");
   const [showPreview, setShowPreview] = useState(true);
-  const previewText = useMemo(() => buildPersonalSummaryText({ name, role, entries, autoEntries, autoLabel }), [name, role, entries, autoEntries, autoLabel]);
 
   function submit(event) {
     event.preventDefault();
@@ -405,17 +407,18 @@ export function WorkbenchHome() {
 
   const displayName = profile?.displayName || profile?.fullName || user?.email || "Stark Hub";
   const access = profile?.accessLevel;
-  const accessLabel = accessLevelLabels[access] || "Acesso";
   const isDev = access === accessLevels.dev;
   const isQa = access === accessLevels.qa;
   const isGestao = hasManagementAccess(access);
   const isGerente = access === accessLevels.gerente;
+  const isAdmin = Boolean(profile?.isAdmin || access === accessLevels.admin);
+  const accessLabel = isAdmin && isQa ? `${accessLevelLabels[access]} (Admin)` : accessLevelLabels[access] || "Acesso";
   const userKey = profile?.id || user?.email || "anonymous";
   const goalDefault = getSetting("defaultGoalHours", defaultGoalHours);
   const adminEmail = import.meta.env.VITE_ADMIN_EMAIL || "";
-  const canOverrideReportType = Boolean(adminEmail) && (profile?.email === adminEmail || user?.email === adminEmail);
+  const canOverrideReportType = isAdmin || (Boolean(adminEmail) && (profile?.email === adminEmail || user?.email === adminEmail));
   const defaultReportType = isDev ? "dev" : isQa ? "qa" : isGestao ? "gestao" : "dev";
-  const [reportTypeOverride, setReportTypeOverride] = useState(null);
+  const [reportTypeOverride, setReportTypeOverride] = useState(() => readLocal(storageKey("HomeReportTypeOverride", userKey), null));
   const reportType = (canOverrideReportType && reportTypeOverride) || defaultReportType;
   const today = now.toISOString().slice(0, 10);
 
@@ -424,6 +427,11 @@ export function WorkbenchHome() {
 
   useEffect(() => { writeLocal(storageKey("HomeWidgets", userKey), widgets); }, [widgets, userKey]);
   useEffect(() => { writeLocal(storageKey("HomeSummary", userKey), summaryEntries); }, [summaryEntries, userKey]);
+  useEffect(() => {
+    if (canOverrideReportType) {
+      writeLocal(storageKey("HomeReportTypeOverride", userKey), reportTypeOverride);
+    }
+  }, [canOverrideReportType, reportTypeOverride, userKey]);
 
   const quickLinks = [
     { to: "/dev", label: "Meus itens", icon: FiUser, show: [accessLevels.dev, accessLevels.qa, accessLevels.gestao, accessLevels.gerente].includes(access) },
@@ -542,13 +550,45 @@ export function WorkbenchHome() {
     setSummaryEntries((current) => current.filter((entry) => entry.id !== id));
   }
   function copySummary() {
-    copyPersonalSummaryText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel });
+    if (reportType === 'qa') {
+      return copyQaTestEvidenceReportText({ generatedAt: now, scope: 'Filtered records', records: evidence, workItems: items, collaborators });
+    }
+    if (reportType === 'gestao') {
+      return copyExecutiveReportText({
+        title: 'Governanca da equipe — Resumo rapido',
+        period: 'Atual',
+        totals: governanceTotals,
+        rows: developerRows
+      });
+    }
+    return copyPersonalSummaryText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel });
   }
   function pdfSummary() {
-    downloadPersonalSummaryPdf({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel, filename: `stark-hub-resumo-${displayName.split(" ")[0].toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf` });
+    if (reportType === 'gestao') {
+      return downloadExecutiveReportPdf({
+        title: 'Governanca da equipe — Resumo rapido',
+        period: 'Atual',
+        totals: governanceTotals,
+        rows: developerRows,
+        filename: `stark-hub-governanca-resumo-${new Date().toISOString().slice(0, 10)}.pdf`
+      });
+    }
+    return downloadPersonalSummaryPdf({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel, filename: `stark-hub-resumo-${displayName.split(" ")[0].toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf` });
   }
   function printSummary() {
-    const text = buildPersonalSummaryText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel });
+    let text;
+    if (reportType === 'qa') {
+      text = buildQaTestEvidenceReportText({ generatedAt: now, scope: 'Filtered records', records: evidence, workItems: items, collaborators });
+    } else if (reportType === 'gestao') {
+      text = buildExecutiveReportText({
+        title: 'Governanca da equipe — Resumo rapido',
+        period: 'Atual',
+        totals: governanceTotals,
+        rows: developerRows
+      });
+    } else {
+      text = buildPersonalSummaryText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel });
+    }
     const printWindow = window.open("", "_blank", "width=640,height=800");
     if (!printWindow) return;
     const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -569,11 +609,27 @@ export function WorkbenchHome() {
     if (error) alert(`Nao foi possivel enviar ao Slack: ${error.message}`);
   }
   function slackSummary() {
+    if (reportType === 'qa') {
+      const text = buildQaTestEvidenceReportText({ generatedAt: now, scope: 'Filtered records', records: evidence, workItems: items, collaborators });
+      sendSlack(text);
+      return;
+    }
+    if (reportType === 'gestao') {
+      const text = buildGovernanceSlackText({ totals: governanceTotals, rows: developerRows });
+      sendSlack(text);
+      return;
+    }
     sendSlack(buildPersonalSummarySlackText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel }));
   }
   function slackGovernance() {
     sendSlack(buildGovernanceSlackText({ totals: governanceTotals, rows: developerRows }));
   }
+
+  const summaryPreviewText = reportType === 'qa'
+    ? buildQaTestEvidenceReportText({ generatedAt: now, scope: 'Filtered records', records: evidence, workItems: items, collaborators })
+    : reportType === 'gestao'
+      ? buildExecutiveReportText({ title: 'Governanca da equipe — Resumo rapido', period: 'Atual', totals: governanceTotals, rows: developerRows })
+      : buildPersonalSummaryText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel });
 
   return (
     <section className="mbw-page mb-home-page">
@@ -647,6 +703,7 @@ export function WorkbenchHome() {
         autoEntries={autoEntries}
         autoLabel={autoLabel}
         reportType={reportType}
+        previewText={summaryPreviewText}
         canOverrideReportType={canOverrideReportType}
         onReportTypeChange={setReportTypeOverride}
         onAdd={addSummaryEntry}

@@ -7,6 +7,8 @@ export const accessLevels = {
   qa: "qa",
   gestao: "gestao",
   gerente: "gerente"
+  ,
+  admin: "admin"
 };
 
 export const accessLevelLabels = {
@@ -15,6 +17,8 @@ export const accessLevelLabels = {
   qa: "QA",
   gestao: "Gestão",
   gerente: "Gerente"
+  ,
+  admin: "Administrador"
 };
 
 // Gerente tem tudo que Gestao tem, mais a tela exclusiva de Gerenciamento.

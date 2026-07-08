@@ -49,16 +49,53 @@ function stripHtmlText(value) {
     .trim();
 }
 
+function decodeDataSvgText(src: string) {
+  if (!/^data:image\/svg\+xml/i.test(src || "")) return "";
+  try {
+    const payload = src.split(",", 2)[1] || "";
+    const decoded = /;base64/i.test(src)
+      ? decodeURIComponent(escape(atob(payload)))
+      : decodeURIComponent(payload);
+    return stripHtmlText(decoded);
+  } catch {
+    return "";
+  }
+}
+
+function textWithImageLabels(htmlOrText) {
+  return String(htmlOrText || "").replace(/<img\b[^>]*>/gi, (tag) => {
+    const alt = tag.match(/\balt=(["'])(.*?)\1/i)?.[2] || "";
+    const title = tag.match(/\btitle=(["'])(.*?)\1/i)?.[2] || "";
+    const src = tag.match(/\bsrc=(["'])(.*?)\1/i)?.[2] || "";
+    const svgText = decodeDataSvgText(src);
+    return ` ${alt} ${title} ${svgText} `;
+  });
+}
+
+const evidenceMarkerPattern = /TEST\s+APPROVED\s+IN|TEST\s+FAILED\s+IN|TESTING\s+LIMITATION\s+IN/i;
+
+function evidenceHeadingText(htmlOrText) {
+  const text = stripHtmlText(textWithImageLabels(htmlOrText)).replace(/\s+/g, " ");
+  const marker = text.match(evidenceMarkerPattern);
+  if (!marker) return "";
+  return text
+    .slice(marker.index || 0, (marker.index || 0) + 180)
+    .split(/EVIDENCE|EVIDENCIA|MORE DETAILS|CONTEXT|CONTEXTO|BREAKPOINT|PROXIMO|NEXT STATUS/i)[0]
+    .trim();
+}
+
 function detectEvidenceResult(htmlOrText) {
-  const text = stripHtmlText(htmlOrText).toUpperCase().replace(/\s+/g, " ");
-  if (/TEST(?:ING)?\s+LIMITATION\s+IN|\bLIMITATION\s+IN\b|\bLIMITATION\b/.test(text)) return "limitation";
-  if (/TEST\s+FAILED\s+IN|\bFAIL(?:ED)?\s+IN\b|\bFAILED\b|\bFAIL\b/.test(text)) return "fail";
-  if (/TEST\s+APPROVED\s+IN|\bAPPROVED\s+IN\b|\bAPPROVED\b|\bAPROVAD[OA]\b|\bPASS(?:ED)?\b/.test(text)) return "pass";
+  const text = evidenceHeadingText(htmlOrText).toUpperCase().replace(/\s+/g, " ");
+  if (/TESTING\s+LIMITATION\s+IN/.test(text)) return "limitation";
+  if (/TEST\s+FAILED\s+IN/.test(text)) return "fail";
+  if (/TEST\s+APPROVED\s+IN/.test(text)) return "pass";
   return "";
 }
 
 function detectEvidenceEnvironments(htmlOrText, fallbackEnv) {
-  const normalized = stripHtmlText(htmlOrText)
+  const heading = evidenceHeadingText(htmlOrText);
+  if (!heading) return [];
+  const normalized = heading
     .toUpperCase()
     .replace(/READY\s*TO\s*/g, "")
     .replace(/:(DEV|QA|BETA|PROD)-TAG:/g, " $1 ")
@@ -134,6 +171,28 @@ function normalizeEvidenceComment(comment, itemId, fallbackEnv) {
   };
 }
 
+function normalizedEvidenceSignatureText(comment) {
+  const text = stripHtmlText(comment?.html || comment?.text || "")
+    .toUpperCase()
+    .replace(/\d{1,2}\/\d{1,2}\/\d{4}[,\s]+\d{1,2}:\d{2}(?::\d{2})?/g, "")
+    .replace(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.slice(0, 900);
+}
+
+function discussionDedupeKey(comment) {
+  const envs = Array.isArray(comment?.environments) ? comment.environments.slice().sort().join("/") : "";
+  const result = comment?.result || "";
+  const author = String(comment?.authorEmail || comment?.authorName || "").toLowerCase().trim();
+  const images = Array.from(String(comment?.html || "").matchAll(/<img\b[^>]*\bsrc=(["'])(.*?)\1/gi))
+    .map((match) => match[2])
+    .filter((src) => !/^data:image\/svg\+xml/i.test(src))
+    .slice(0, 4)
+    .join("|");
+  return [result, envs, author, normalizedEvidenceSignatureText(comment), images].join("::");
+}
+
 // Pagina ate acabar (sem limite artificial de paginas) — a lista de
 // comentarios de UM item nunca chega perto de ser grande o bastante para
 // isso virar um problema de performance, diferente de buscar isso para
@@ -174,8 +233,9 @@ async function fetchAllDiscussions(itemId, projectPath, authHeader, fallbackEnv)
       .map((comment) => normalizeDiscussionComment(comment, itemId, fallbackEnv));
     const merged = new Map();
     [...fromComments, ...fromUpdates].forEach((comment) => {
-      const key = `${comment.authorName || ""}-${comment.createdAt || ""}-${comment.text || stripHtmlText(comment.html).slice(0, 120)}`;
-      if (!merged.has(key)) merged.set(key, comment);
+      const key = discussionDedupeKey(comment);
+      const current = merged.get(key);
+      if (!current || String(comment.createdAt || "").localeCompare(String(current.createdAt || "")) > 0) merged.set(key, comment);
     });
     return Array.from(merged.values())
       .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));

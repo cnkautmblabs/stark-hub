@@ -107,16 +107,53 @@ function stripHtmlText(value) {
     .trim();
 }
 
+function decodeDataSvgText(src: string) {
+  if (!/^data:image\/svg\+xml/i.test(src || "")) return "";
+  try {
+    const payload = src.split(",", 2)[1] || "";
+    const decoded = /;base64/i.test(src)
+      ? decodeURIComponent(escape(atob(payload)))
+      : decodeURIComponent(payload);
+    return stripHtmlText(decoded);
+  } catch {
+    return "";
+  }
+}
+
+function textWithImageLabels(htmlOrText) {
+  return String(htmlOrText || "").replace(/<img\b[^>]*>/gi, (tag) => {
+    const alt = tag.match(/\balt=(["'])(.*?)\1/i)?.[2] || "";
+    const title = tag.match(/\btitle=(["'])(.*?)\1/i)?.[2] || "";
+    const src = tag.match(/\bsrc=(["'])(.*?)\1/i)?.[2] || "";
+    const svgText = decodeDataSvgText(src);
+    return ` ${alt} ${title} ${svgText} `;
+  });
+}
+
+const evidenceMarkerPattern = /TEST\s+APPROVED\s+IN|TEST\s+FAILED\s+IN|TESTING\s+LIMITATION\s+IN/i;
+
+function evidenceHeadingText(htmlOrText) {
+  const text = stripHtmlText(textWithImageLabels(htmlOrText)).replace(/\s+/g, " ");
+  const marker = text.match(evidenceMarkerPattern);
+  if (!marker) return "";
+  return text
+    .slice(marker.index || 0, (marker.index || 0) + 180)
+    .split(/EVIDENCE|EVIDENCIA|MORE DETAILS|CONTEXT|CONTEXTO|BREAKPOINT|PROXIMO|NEXT STATUS/i)[0]
+    .trim();
+}
+
 function detectEvidenceResult(htmlOrText) {
-  const text = stripHtmlText(htmlOrText).toUpperCase().replace(/\s+/g, " ");
-  if (/TEST(?:ING)?\s+LIMITATION\s+IN|\bLIMITATION\s+IN\b|\bLIMITATION\b/.test(text)) return "limitation";
-  if (/TEST\s+FAILED\s+IN|\bFAIL(?:ED)?\s+IN\b|\bFAILED\b|\bFAIL\b/.test(text)) return "fail";
-  if (/TEST\s+APPROVED\s+IN|\bAPPROVED\s+IN\b|\bAPPROVED\b|\bAPROVAD[OA]\b|\bPASS(?:ED)?\b/.test(text)) return "pass";
+  const text = evidenceHeadingText(htmlOrText).toUpperCase().replace(/\s+/g, " ");
+  if (/TESTING\s+LIMITATION\s+IN/.test(text)) return "limitation";
+  if (/TEST\s+FAILED\s+IN/.test(text)) return "fail";
+  if (/TEST\s+APPROVED\s+IN/.test(text)) return "pass";
   return "";
 }
 
 function detectEvidenceEnvironments(htmlOrText, fallbackEnv) {
-  const normalized = stripHtmlText(htmlOrText)
+  const heading = evidenceHeadingText(htmlOrText);
+  if (!heading) return [];
+  const normalized = heading
     .toUpperCase()
     .replace(/READY\s*TO\s*/g, "")
     .replace(/:(DEV|QA|BETA|PROD)-TAG:/g, " $1 ")
@@ -196,6 +233,28 @@ function normalizeDiscussionUpdate(update, item) {
   };
 }
 
+function normalizedEvidenceSignatureText(comment) {
+  const text = stripHtmlText(comment?.html || comment?.text || "")
+    .toUpperCase()
+    .replace(/\d{1,2}\/\d{1,2}\/\d{4}[,\s]+\d{1,2}:\d{2}(?::\d{2})?/g, "")
+    .replace(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.slice(0, 900);
+}
+
+function discussionDedupeKey(comment) {
+  const envs = Array.isArray(comment?.environments) ? comment.environments.slice().sort().join("/") : "";
+  const result = comment?.result || "";
+  const author = String(comment?.authorEmail || comment?.authorName || "").toLowerCase().trim();
+  const images = Array.from(String(comment?.html || "").matchAll(/<img\b[^>]*\bsrc=(["'])(.*?)\1/gi))
+    .map((match) => match[2])
+    .filter((src) => !/^data:image\/svg\+xml/i.test(src))
+    .slice(0, 4)
+    .join("|");
+  return [result, envs, author, normalizedEvidenceSignatureText(comment), images].join("::");
+}
+
 async function mapWithConcurrency(items, concurrency, mapper) {
   const output = new Array(items.length);
   let cursor = 0;
@@ -211,11 +270,11 @@ async function mapWithConcurrency(items, concurrency, mapper) {
 
 async function fetchDiscussionsForItem(item, projectPath, authHeader) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 6500);
+  const timeoutId = setTimeout(() => controller.abort(), 2500);
   try {
     const comments = [];
     let continuationToken = "";
-    for (let page = 0; page < 5; page += 1) {
+    for (let page = 0; page < 1; page += 1) {
       const suffix = continuationToken ? `&continuationToken=${encodeURIComponent(continuationToken)}` : "";
       const response = await fetch(
         `${projectPath}/_apis/wit/workItems/${encodeURIComponent(item.id)}/comments?$top=200${suffix}&api-version=7.1-preview.4`,
@@ -240,8 +299,9 @@ async function fetchDiscussionsForItem(item, projectPath, authHeader) {
       .map((comment) => comment?.workItemId && comment?.html ? comment : normalizeDiscussionComment(comment, item))
       .filter(Boolean)
       .forEach((comment) => {
-        const key = `${comment.authorName || ""}-${comment.createdAt || ""}-${comment.text || stripHtmlText(comment.html).slice(0, 120)}`;
-        if (!merged.has(key)) merged.set(key, comment);
+        const key = discussionDedupeKey(comment);
+        const current = merged.get(key);
+        if (!current || String(comment.createdAt || "").localeCompare(String(current.createdAt || "")) > 0) merged.set(key, comment);
       });
     return Array.from(merged.values()).sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
   } catch {
@@ -350,7 +410,7 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: "Corpo da requisição inválido." }, 400);
   }
 
-  const { orgUrl, project, pat, team, iterationPattern, customQuery, maxItems } = payload || {};
+  const { orgUrl, project, pat, team, iterationPattern, customQuery, maxItems, includeClosed } = payload || {};
   if (!orgUrl || !project || !pat) {
     return json({ ok: false, error: "Conexão com Azure DevOps não configurada." }, 400);
   }
@@ -610,12 +670,19 @@ Deno.serve(async (req) => {
     }
   }
 
-  const discussionItems = items.slice(0, Math.min(items.length, topN));
-  const discussionsByIndex = await mapWithConcurrency(
+  const discussionLimit = includeClosed ? 0 : Math.min(items.length, 20);
+  const discussionItems = items.slice(0, discussionLimit);
+  const discussionsPromise = mapWithConcurrency(
     discussionItems,
-    8,
+    10,
     (item) => fetchDiscussionsForItem(item, projectPath, authHeader)
   );
+  const discussionsByIndex = discussionLimit
+    ? await Promise.race([
+        discussionsPromise,
+        new Promise((resolve) => setTimeout(() => resolve([]), 9000))
+      ])
+    : [];
   for (let index = 0; index < discussionsByIndex.length; index += 1) {
     const discussions = discussionsByIndex[index] || [];
     const records = discussions

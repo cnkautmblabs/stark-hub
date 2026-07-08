@@ -11,6 +11,7 @@ import { ErrorBoundary } from "../common/ErrorBoundary.jsx";
 import {
   AvatarDot,
   Button,
+  ChartSkeleton,
   ConnectionGate,
   CountryPills,
   CountryVisual,
@@ -52,7 +53,10 @@ import { buildGovernanceSlackText, buildHoursNoticeText, sendSlackWebhook } from
 import { compactSprintLabel, findCurrentSprint } from "../../utils/sprints.js";
 import {
   csvCell,
+  evidenceDedupeKey,
   evidenceEnv,
+  evidenceEnvironments as parseEvidenceEnvironments,
+  isQaEvidenceEntry,
   evidenceResultInfo,
   formatHours,
   itemAgeDays,
@@ -219,7 +223,15 @@ function normalizeEvidenceResult(result) {
 // o fetch em lote de discussions falhava (ver azureWorkItemDetail).
 function recordsForItem(item, evidence = []) {
   const own = evidence.filter((entry) => String(entry.workItemId) === String(item.id));
-  return [...own, ...(item.discussionEvidence || item.evidence || [])];
+  const fromDiscussion = (item.discussionEvidence || item.evidence || []).filter((entry) => normalizeEvidenceResult(entry.result || entry.status) !== "pending" && isQaEvidenceEntry(entry));
+  const source = fromDiscussion.length ? fromDiscussion : own;
+  const seen = new Set();
+  return source.filter((entry) => {
+    const key = evidenceDedupeKey({ ...entry, workItemId: entry.workItemId || item.id });
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function sortedEvidenceRecords(records = []) {
@@ -241,7 +253,7 @@ function evidenceTooltip(records = []) {
   return sortedEvidenceRecords(records).map((entry) => {
     const info = evidenceResultInfo(entry.result || entry.status);
     const when = entry.createdAt || entry.createdDate ? new Date(entry.createdAt || entry.createdDate).toLocaleString("pt-BR") : "-";
-    return `${info.label} ${evidenceEnv(entry)} - ${entry.authorName || entry.author || "QA"} - ${when}`;
+    return `${info.label} ${evidenceEnvironments(entry).join("/") || "N/A"} - ${entry.authorName || entry.author || "QA"} - ${when}`;
   }).join("\n") || "Sem evidencias";
 }
 
@@ -264,7 +276,19 @@ function EvidenceRunFlow({ records = [], limit = 8 }) {
 }
 
 function environmentsWithEvidence(records = []) {
-  return ["DEV", "QA", "BETA", "PROD"].filter((environment) => records.some((entry) => evidenceEnv(entry) === environment));
+  return ["QA", "BETA", "DEV", "PROD"].filter((environment, index) => index < 2 || records.some((entry) => evidenceRecordHasEnvironment(entry, environment)));
+}
+
+function evidenceEnvironments(entry) {
+  return parseEvidenceEnvironments(entry);
+}
+
+function evidenceRecordHasEnvironment(entry, environment) {
+  return evidenceEnvironments(entry).includes(environment);
+}
+
+function evidenceRecordsForEnvironment(records = [], environment) {
+  return records.filter((entry) => evidenceRecordHasEnvironment(entry, environment));
 }
 
 export function QaBoardWorkbench() {
@@ -299,26 +323,8 @@ export function QaBoardWorkbench() {
   const qaPeople = collaborators.filter((person) => person.isQa);
   const evidenceById = useMemo(() => {
     const map = new Map();
-    const azureEvidence = items.flatMap((item) =>
-      (item.discussionEvidence || []).flatMap((entry, index) => {
-        const environments = Array.isArray(entry.environments) && entry.environments.length
-          ? entry.environments
-          : [entry.environment || entry.env || "N/A"];
-        return environments.map((environment, environmentIndex) => ({
-          id: `${entry.id || `discussion-${item.id}-${entry.commentId || index}`}-${environmentIndex}`,
-          workItemId: item.id,
-          result: entry.result || entry.status,
-          environment,
-          authorName: entry.authorName || entry.qaName,
-          createdAt: entry.createdAt || entry.createdDate,
-          note: entry.note || entry.text,
-          source: "azure-discussion"
-        }));
-      })
-    );
-    [...azureEvidence, ...evidence].forEach((entry) => {
-      const key = Number(entry.workItemId);
-      map.set(key, [...(map.get(key) || []), entry]);
+    items.forEach((item) => {
+      map.set(Number(item.id), recordsForItem(item, evidence));
     });
     map.forEach((records, key) => {
       map.set(key, records.slice().sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))));
@@ -443,7 +449,7 @@ export function QaBoardWorkbench() {
   }
 
   function renderEvidenceJourney(item, environment) {
-    const records = (evidenceById.get(Number(item.id)) || []).filter((entry) => evidenceEnv(entry) === environment);
+    const records = evidenceRecordsForEnvironment(evidenceById.get(Number(item.id)) || [], environment);
     if (!records.length) return <div className="mbaz-evidence-pending"><i className="bi bi-dash-lg mbaz-evidence-pending-icon" /></div>;
     return (
       <button type="button" className="mbaz-evidence-journey" title={`${evidenceTransitionLabel(records)}\n\n${evidenceTooltip(records)}`}>
@@ -511,7 +517,7 @@ export function QaBoardWorkbench() {
           <div className="mbaz-card-left"><AvatarDot person={assignee} name={item.assigneeName} /></div>
           <div className="mbaz-card-right mbaz-card-test-owner">
             <button type="button" className={`mbaz-test-summary ${latestInfo.className}`} onClick={() => toggleExpanded(item.id)} aria-expanded={expanded}>
-              <i className={`bi ${latestInfo.icon}`} /><span>{latest ? evidenceEnv(latest) : "Pending"}</span>{records.length > 1 && <span>+{records.length - 1}</span>}
+              <i className={`bi ${latestInfo.icon}`} /><span>{latest ? evidenceEnvironments(latest)[0] || "N/A" : "Pending"}</span>{records.length > 1 && <span>+{records.length - 1}</span>}
             </button>
             <QaPicker value={item.qaCollaboratorId || ""} onChange={(qaCollaboratorId) => updateItem(item.id, { qaCollaboratorId: qaCollaboratorId || null })} people={qaPeople} />
           </div>
@@ -519,7 +525,7 @@ export function QaBoardWorkbench() {
         <div className="mbaz-card-expand-panel" hidden={!expanded}>
           <div className="mbaz-card-test-details mbaz-card-test-journeys">
             {environmentsWithEvidence(records).map((environment) => {
-              const envRecords = records.filter((entry) => evidenceEnv(entry) === environment);
+              const envRecords = evidenceRecordsForEnvironment(records, environment);
               return (
                 <div key={environment} className="mbaz-evidence-env-block mbaz-card-test-env" data-env={environment}>
                   <div className="mbaz-evidence-env-label">
@@ -632,7 +638,7 @@ export function QaBoardWorkbench() {
                 )}
               </div>
               {loading ? (
-                <div className="mbaz-chart"><div className="mbaz-chart-head"><span className="mbw-skeleton-block" style={{ width: 140, height: 12 }} /></div><span className="mbw-skeleton-block" style={{ height: 24, borderRadius: 999 }} /></div>
+                <div className="mbaz-chart"><ChartSkeleton rows={3} /></div>
               ) : (
                 <div id="mbaz-chart" className="mbaz-chart">
                   <div className="mbaz-chart-head"><h3>Distribuicao por status</h3><span>{filtered.length} item(s)</span></div>
@@ -650,7 +656,7 @@ export function QaBoardWorkbench() {
                 </div>
               )}
               {loading ? (
-                <div className="mbaz-qa-metrics"><div className="mbaz-chart-head"><span className="mbw-skeleton-block" style={{ width: 110, height: 12 }} /></div><span className="mbw-skeleton-block" style={{ height: 24, borderRadius: 999 }} /></div>
+                <div className="mbaz-qa-metrics"><ChartSkeleton rows={3} /></div>
               ) : (
                 <div id="mbaz-qa-metrics" className="mbaz-qa-metrics">
                   <div className="mbaz-chart-head"><h3>Carga por QA</h3><span>{filtered.length} item(s)</span></div>
@@ -668,7 +674,7 @@ export function QaBoardWorkbench() {
                 </div>
               )}
               {loading ? (
-                <div className="mbaz-country-state"><span className="mbw-skeleton-block" style={{ height: 90, borderRadius: 8 }} /></div>
+                <div className="mbaz-country-state"><ChartSkeleton rows={5} /></div>
               ) : (
                 <CountryStateMatrix countriesInBoard={countriesInBoard} items={filtered} statusOrder={qaStatusOrder} statusConfig={qaStatusConfig} resolveStatus={qaStatusInfo} />
               )}
@@ -785,20 +791,16 @@ export function MyItemsWorkbench() {
     : [];
   const qaTestedByMe = isQaUser
     ? items.filter((item) => {
-      const records = [...(item.discussionEvidence || []), ...(localEvidenceByWorkItem.get(String(item.id)) || [])];
+      const records = recordsForItem(item, evidence);
       return records.some((entry) => evidenceMatchesTokens(entry, qaTokens));
     })
     : [];
   const mineById = new Map();
   function addMine(item, source) {
     const current = mineById.get(item.id);
-    const localRecords = localEvidenceByWorkItem.get(String(item.id)) || [];
-    const existingRecords = current?.discussionEvidence || item.discussionEvidence || item.evidence || [];
-    const mergedEvidence = Array.from(new Map([...existingRecords, ...localRecords].map((entry, index) => [entry.id || `${entry.workItemId}-${entry.createdAt || index}-${entry.result || "result"}`, entry])).values());
     mineById.set(item.id, {
       ...(current || item),
       ...item,
-      discussionEvidence: mergedEvidence,
       myItemSources: Array.from(new Set([...(current?.myItemSources || []), source]))
     });
   }
@@ -822,7 +824,7 @@ export function MyItemsWorkbench() {
   const visibleItems = allMine.filter((item) => {
     const itemRecords = recordsForItem(item, evidence);
     const itemResults = itemRecords.length ? itemRecords.map((entry) => normalizeResult(entry.result || entry.status)) : ["pending"];
-    const itemEnvironments = itemRecords.flatMap((entry) => entry.environments || [entry.environment || entry.env]).map((env) => evidenceEnv({ environment: env }));
+    const itemEnvironments = itemRecords.flatMap(evidenceEnvironments);
     if (search && !normalize(`${item.id} ${item.title}`).includes(normalize(search))) return false;
     if (types.length && !types.includes(item.type)) return false;
     if (countryFilter.length && !(item.countries || []).some((country) => countryFilter.includes(country))) return false;
@@ -849,7 +851,8 @@ export function MyItemsWorkbench() {
   const filteredTestCounts = visibleItems.reduce((acc, item) => {
     recordsForItem(item, evidence).forEach((entry) => {
       const result = normalizeResult(entry.result || entry.status);
-      const envs = entry.environments || [entry.environment || entry.env || "N/A"];
+      const envs = evidenceEnvironments(entry);
+      if (!envs.length) return;
       acc.total += 1;
       acc[result] = (acc[result] || 0) + 1;
       envs.forEach((env) => {
@@ -1115,12 +1118,15 @@ function testSummaryForItem(item, evidence = []) {
   const records = recordsForItem(item, evidence);
   return records.reduce((acc, entry) => {
     const key = normalizeEvidenceResult(entry.result || entry.status);
-    const env = evidenceEnv(entry);
+    const envs = evidenceEnvironments(entry);
+    if (!envs.length) return acc;
     acc.total += 1;
     acc[key] = (acc[key] || 0) + 1;
-    acc.byEnv[env] = acc.byEnv[env] || { total: 0, pass: 0, fail: 0, limitation: 0, pending: 0 };
-    acc.byEnv[env].total += 1;
-    acc.byEnv[env][key] = (acc.byEnv[env][key] || 0) + 1;
+    envs.forEach((env) => {
+      acc.byEnv[env] = acc.byEnv[env] || { total: 0, pass: 0, fail: 0, limitation: 0, pending: 0 };
+      acc.byEnv[env].total += 1;
+      acc.byEnv[env][key] = (acc.byEnv[env][key] || 0) + 1;
+    });
     return acc;
   }, { total: 0, pass: 0, fail: 0, limitation: 0, pending: 0, byEnv: {} });
 }
@@ -1184,7 +1190,7 @@ function MyQaBoardItemCard({ item, collaboratorsById, qaPeople, onOpen, onQaChan
         <div className="mbaz-card-left"><AvatarDot person={assignee} name={item.assigneeName} /></div>
         <div className="mbaz-card-right mbaz-card-test-owner">
           <button type="button" className={`mbaz-test-summary ${latestInfo.className}`} onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
-            <i className={`bi ${latestInfo.icon}`} /><span>{latest ? evidenceEnv(latest) : "Pending"}</span>{records.length > 1 && <span>+{records.length - 1}</span>}
+            <i className={`bi ${latestInfo.icon}`} /><span>{latest ? evidenceEnvironments(latest)[0] || "N/A" : "Pending"}</span>{records.length > 1 && <span>+{records.length - 1}</span>}
           </button>
           <QaPicker value={item.qaCollaboratorId || ""} onChange={(qaCollaboratorId) => onQaChange(qaCollaboratorId || null)} people={qaPeople} />
         </div>
@@ -1192,7 +1198,7 @@ function MyQaBoardItemCard({ item, collaboratorsById, qaPeople, onOpen, onQaChan
       <div className="mbaz-card-expand-panel" hidden={!expanded}>
         <div className="mbaz-card-test-details mbaz-card-test-journeys">
           {environmentsWithEvidence(records).map((environment) => {
-            const envRecords = records.filter((entry) => evidenceEnv(entry) === environment);
+            const envRecords = evidenceRecordsForEnvironment(records, environment);
             return (
               <div key={environment} className="mbaz-evidence-env-block mbaz-card-test-env" data-env={environment}>
                 <div className="mbaz-evidence-env-label">
@@ -1338,15 +1344,19 @@ export function HoursWorkbench() {
     return Array.from(map.values()).map((dev) => {
       const devItems = dev.items.slice().sort((a, b) => Number(a.completedHours > 0) - Number(b.completedHours > 0) || new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
       const testMetrics = devItems.reduce((acc, item) => {
+        if (!["Bug", "User Story"].includes(item.type)) return acc;
         const records = recordsForItem(item, evidence);
         records.forEach((entry) => {
           const result = entry.result === "approved" ? "pass" : entry.result || "pending";
-          const env = evidenceEnv(entry);
+          const envs = evidenceEnvironments(entry);
+          if (!envs.length) return;
           acc.total += 1;
           acc[result] = (acc[result] || 0) + 1;
-          acc.byEnv[env] = acc.byEnv[env] || { total: 0, pass: 0, fail: 0, limitation: 0, pending: 0 };
-          acc.byEnv[env].total += 1;
-          acc.byEnv[env][result] = (acc.byEnv[env][result] || 0) + 1;
+          envs.forEach((env) => {
+            acc.byEnv[env] = acc.byEnv[env] || { total: 0, pass: 0, fail: 0, limitation: 0, pending: 0 };
+            acc.byEnv[env].total += 1;
+            acc.byEnv[env][result] = (acc.byEnv[env][result] || 0) + 1;
+          });
         });
         return acc;
       }, { total: 0, pass: 0, fail: 0, limitation: 0, pending: 0, byEnv: {} });
@@ -1361,6 +1371,8 @@ export function HoursWorkbench() {
       const completed = devItems.reduce((sum, item) => sum + Number(item.completedHours || 0), 0);
       const tasks = devItems.filter((item) => String(item.type).toLowerCase() === "task").length;
       const bugs = devItems.filter((item) => String(item.type).toLowerCase() === "bug").length;
+      const userStories = devItems.filter((item) => String(item.type).toLowerCase() === "user story").length;
+      const features = devItems.filter((item) => String(item.type).toLowerCase() === "feature").length;
       const cardsWithHours = devItems.filter((item) => Number(item.completedHours || 0) > 0).length;
       const cardsWithoutHours = devItems.length - cardsWithHours;
       const goal = Math.max(Number(dev.goalHours) || 0, 0);
@@ -1370,7 +1382,7 @@ export function HoursWorkbench() {
       const status = progressPercent < 100 ? "below" : progressPercent > 100 ? "above" : "met";
       const countryCounts = {};
       devItems.forEach((item) => (item.countries || ["N/A"]).forEach((country) => { countryCounts[country] = (countryCounts[country] || 0) + 1; }));
-      return { ...dev, items: devItems, completed, tasks, bugs, cardsWithHours, cardsWithoutHours, missingHours, extraHours, progressPercent, goalStatus: status, countries: countryCounts, testMetrics, qaResponsibleCount: qaResponsibleItems.length, azureAssignedCount, pendingToTestCount };
+      return { ...dev, items: devItems, completed, tasks, bugs, userStories, features, cardsWithHours, cardsWithoutHours, missingHours, extraHours, progressPercent, goalStatus: status, countries: countryCounts, testMetrics, qaResponsibleCount: qaResponsibleItems.length, azureAssignedCount, pendingToTestCount };
     }).sort((a, b) => a.displayName.localeCompare(b.displayName, "pt-BR"));
   }, [collaborators, goalDefault, periodItems, peopleById, peopleByName, evidence]);
 
@@ -1484,7 +1496,7 @@ export function HoursWorkbench() {
     const records = testable ? recordsForItem(item, evidence).slice().sort((a, b) => String(b.createdAt || b.createdDate || "").localeCompare(String(a.createdAt || a.createdDate || ""))) : [];
     const latest = records[0];
     const latestInfo = latest ? evidenceResultInfo(latest.result || latest.status) : null;
-    const lastEnv = latest ? evidenceEnv(latest) : null;
+    const lastEnv = latest ? evidenceEnvironments(latest)[0] || null : null;
     const isTestExpanded = expandedTests.has(itemKey);
     return (
       <article key={itemKey} className={`mbdhc-work-card ${String(item.type || "").toLowerCase()} ${noHours ? "missing-hours" : ""} ${item.qaGovernanceCard ? "qa-card" : ""}`} data-work-item-type={String(item.type || "").toLowerCase()} style={{ "--wi-type-color": type.color, "--wi-type-bg": type.bg, borderLeftColor: type.color }}>
@@ -1518,7 +1530,7 @@ export function HoursWorkbench() {
         {testable && isTestExpanded && (
           <div className="mbdhc-work-test-panel mbaz-card-test-details mbaz-card-test-journeys">
             {environmentsWithEvidence(records).map((environment) => {
-              const envRecords = records.filter((entry) => evidenceEnv(entry) === environment);
+              const envRecords = evidenceRecordsForEnvironment(records, environment);
               return (
                 <div key={environment} className="mbaz-evidence-env-block mbaz-card-test-env" data-env={environment}>
                   <div className="mbaz-evidence-env-label">
@@ -1581,6 +1593,8 @@ export function HoursWorkbench() {
             <div><span>Cards</span><strong>{dev.items.length}</strong></div>
             <div><span>Tasks</span><strong>{dev.tasks}</strong></div>
             <div><span>Bugs</span><strong>{dev.bugs}</strong></div>
+            <div><span>User Stories</span><strong>{dev.userStories}</strong></div>
+            <div><span>Features</span><strong>{dev.features}</strong></div>
             <div><span>Com horas</span><strong>{dev.cardsWithHours}</strong></div>
             <div><span>Sem horas</span><strong>{dev.cardsWithoutHours}</strong></div>
             <div><span>Saldo</span><strong>{dev.goalStatus === "above" ? `+${formatHours(dev.extraHours)}` : `-${formatHours(dev.missingHours)}`}</strong></div>
@@ -1657,10 +1671,21 @@ export function HoursWorkbench() {
       <section className={`mbdhc-section mbdhc-charts-section ${chartsCollapsed ? "collapsed" : ""}`}>
         <div className="mbdhc-section-header"><div><h3>Analises visuais</h3><p>Meta, distribuicao de status e atuacao por pais.</p></div><button className="mbdhc-icon-button" type="button" onClick={() => setChartsCollapsed((value) => !value)}><i className={`bi ${chartsCollapsed ? "bi-chevron-down" : "bi-chevron-up"}`} /></button></div>
         {!chartsCollapsed && <div className="mbdhc-dashboard-grid">
-          <section className="mbdhc-chart-card"><h3>Meta x realizado</h3><div className="mbdhc-bars">{filteredDevelopers.slice(0, 12).map((dev) => <div key={dev.key} className="mbdhc-bar-row"><span>{shortName(dev.displayName)}</span><div><b className={dev.goalStatus} style={{ width: `${Math.min(100, (Math.max(dev.completed, 1) / maxCompleted) * 100)}%` }} /></div><strong>{formatHours(dev.completed)}</strong></div>)}</div></section>
-          <section className="mbdhc-chart-card"><h3>Status das metas</h3><div className="mbdhc-donut-wrap"><div className="mbdhc-donut" style={{ "--below": totals.developers ? (goalCounts.below / totals.developers) * 100 : 0, "--met": totals.developers ? (goalCounts.met / totals.developers) * 100 : 0 }} /><div className="mbdhc-legend"><span><i className="red" />Abaixo: {goalCounts.below}</span><span><i className="blue" />Cumprida: {goalCounts.met}</span><span><i className="gold" />Acima: {goalCounts.above}</span></div></div></section>
-          <section className="mbdhc-chart-card"><h3>Distribuicao por pais</h3><div className="mbdhc-country-bars">{countryTotals.map(([country, count]) => <div key={country} className="mbdhc-country-bar"><span><CountryVisual code={country} compact /></span><i><b style={{ width: `${(count / maxCountry) * 100}%` }} /></i><strong>{count}</strong></div>)}</div></section>
-          <section className="mbdhc-chart-card mbdhc-collab-country-card"><h3>Colaborador x pais</h3><CollaboratorCountryMatrix developers={filteredDevelopers} /></section>
+          {loading ? (
+            <>
+              <section className="mbdhc-chart-card"><ChartSkeleton rows={6} /></section>
+              <section className="mbdhc-chart-card"><ChartSkeleton variant="donut" /></section>
+              <section className="mbdhc-chart-card"><ChartSkeleton rows={6} /></section>
+              <section className="mbdhc-chart-card mbdhc-collab-country-card"><ChartSkeleton rows={6} /></section>
+            </>
+          ) : (
+            <>
+              <section className="mbdhc-chart-card"><h3>Meta x realizado</h3><div className="mbdhc-bars">{filteredDevelopers.slice(0, 12).map((dev) => <div key={dev.key} className="mbdhc-bar-row"><span>{shortName(dev.displayName)}</span><div><b className={dev.goalStatus} style={{ width: `${Math.min(100, (Math.max(dev.completed, 1) / maxCompleted) * 100)}%` }} /></div><strong>{formatHours(dev.completed)}</strong></div>)}</div></section>
+              <section className="mbdhc-chart-card"><h3>Status das metas</h3><div className="mbdhc-donut-wrap"><div className="mbdhc-donut" style={{ "--below": totals.developers ? (goalCounts.below / totals.developers) * 100 : 0, "--met": totals.developers ? (goalCounts.met / totals.developers) * 100 : 0 }} /><div className="mbdhc-legend"><span><i className="red" />Abaixo: {goalCounts.below}</span><span><i className="blue" />Cumprida: {goalCounts.met}</span><span><i className="gold" />Acima: {goalCounts.above}</span></div></div></section>
+              <section className="mbdhc-chart-card"><h3>Distribuicao por pais</h3><div className="mbdhc-country-bars">{countryTotals.map(([country, count]) => <div key={country} className="mbdhc-country-bar"><span><CountryVisual code={country} compact /></span><i><b style={{ width: `${(count / maxCountry) * 100}%` }} /></i><strong>{count}</strong></div>)}</div></section>
+              <section className="mbdhc-chart-card mbdhc-collab-country-card"><h3>Colaborador x pais</h3><CollaboratorCountryMatrix developers={filteredDevelopers} /></section>
+            </>
+          )}
         </div>}
       </section>
       <section className="mbdhc-section">
