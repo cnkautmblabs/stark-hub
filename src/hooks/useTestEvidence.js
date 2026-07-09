@@ -3,6 +3,7 @@ import { supabase, isSupabaseConfigured } from "../lib/supabaseClient.js";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import { mockTestEvidence } from "../utils/mockData.js";
 import { buildApiCacheKey, readApiCache, stableSignature, withInflight, writeApiCache } from "../utils/localApiCache.js";
+import { useRevalidateOnFocus } from "./useRevalidateOnFocus.js";
 
 const TEST_EVIDENCE_CACHE_TTL_MS = 90 * 1000;
 
@@ -47,6 +48,8 @@ export function useTestEvidence() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useRevalidateOnFocus(() => load({ force: true }), { enabled: !demoMode && isSupabaseConfigured, minIntervalMs: 45000 });
 
   return { evidence, reload: () => load({ force: true }) };
 }

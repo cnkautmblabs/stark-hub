@@ -3,6 +3,7 @@ import { supabase, isSupabaseConfigured } from "../lib/supabaseClient.js";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import { getDemoCollaborators, updateDemoCollaborator, addDemoCollaborator, deleteDemoCollaborator } from "../utils/demoStore.js";
 import { buildApiCacheKey, readApiCache, stableSignature, withInflight, writeApiCache } from "../utils/localApiCache.js";
+import { useRevalidateOnFocus } from "./useRevalidateOnFocus.js";
 
 const COLLABORATORS_CACHE_TTL_MS = 2 * 60 * 1000;
 
@@ -90,6 +91,8 @@ export function useCollaborators() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useRevalidateOnFocus(() => load({ force: true }), { enabled: !demoMode && isSupabaseConfigured, minIntervalMs: 60000 });
 
   async function updateCollaborator(id, patch) {
     if (demoMode) {

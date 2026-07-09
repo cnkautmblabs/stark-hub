@@ -3,6 +3,7 @@ import { supabase, isSupabaseConfigured } from "../lib/supabaseClient.js";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import { hasManagementAccess } from "../utils/constants.js";
 import { buildApiCacheKey, readApiCache, stableSignature, withInflight, writeApiCache } from "../utils/localApiCache.js";
+import { useRevalidateOnFocus } from "./useRevalidateOnFocus.js";
 
 const PROFILES_CACHE_TTL_MS = 2 * 60 * 1000;
 
@@ -44,6 +45,8 @@ export function useProfiles() {
   useEffect(() => {
     reload();
   }, [reload]);
+
+  useRevalidateOnFocus(() => reload({ force: true }), { enabled: !demoMode && isSupabaseConfigured && canManage, minIntervalMs: 60000 });
 
   async function setAccessLevel(id, accessLevel) {
     if (!isSupabaseConfigured) return { error: new Error("Supabase nao configurado") };

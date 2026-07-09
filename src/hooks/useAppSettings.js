@@ -3,6 +3,7 @@ import { supabase, isSupabaseConfigured } from "../lib/supabaseClient.js";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import { getDemoAppSettings, setDemoAppSetting } from "../utils/demoStore.js";
 import { buildApiCacheKey, readApiCache, stableSignature, withInflight, writeApiCache } from "../utils/localApiCache.js";
+import { useRevalidateOnFocus } from "./useRevalidateOnFocus.js";
 
 const APP_SETTINGS_CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -54,6 +55,8 @@ export function useAppSettings() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useRevalidateOnFocus(() => load({ force: true }), { enabled: !demoMode && isSupabaseConfigured, minIntervalMs: 60000 });
 
   async function updateSetting(key, value) {
     if (demoMode) {
