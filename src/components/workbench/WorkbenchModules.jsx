@@ -1835,6 +1835,26 @@ export function SettingsWorkbench() {
   const [notificationSoundPrefs, setNotificationSoundPrefs] = useState(() =>
     Object.fromEntries(notificationTypes.map(({ key }) => [key, readNotificationSetting(profile, user, `notificationSound:${key}`, "ping")]))
   );
+  // Permissao do navegador e um efeito colateral imediato (nao da pra "adiar
+  // e confirmar depois" como o resto de Configuracoes) — por isso este
+  // bloco escreve direto, sem draft/dirty/Confirmar.
+  const [browserNotifPermission, setBrowserNotifPermission] = useState(() => (typeof Notification === "undefined" ? "unsupported" : Notification.permission));
+  const [browserNotifEnabled, setBrowserNotifEnabled] = useState(() => Boolean(readNotificationSetting(profile, user, "browserNotificationsEnabled", false)));
+
+  async function requestBrowserNotifications() {
+    if (typeof Notification === "undefined") return;
+    const result = await Notification.requestPermission();
+    setBrowserNotifPermission(result);
+    if (result === "granted") {
+      setBrowserNotifEnabled(true);
+      writeNotificationSetting(profile, user, "browserNotificationsEnabled", true);
+    }
+  }
+
+  function toggleBrowserNotifEnabled(value) {
+    setBrowserNotifEnabled(value);
+    writeNotificationSetting(profile, user, "browserNotificationsEnabled", value);
+  }
   const [iterationPattern, setIterationPattern] = useState(getSetting("azureIterationPattern", ""));
   const [periodStart, setPeriodStart] = useState(getSetting("governancePeriod", {})?.start || "");
   const [periodEnd, setPeriodEnd] = useState(getSetting("governancePeriod", {})?.end || "");
@@ -2531,6 +2551,28 @@ export function SettingsWorkbench() {
             );
           })()}
           {/* status shown as toast */}
+        </SettingsSection>
+
+        <SettingsSection title="Notificacoes do navegador" description="Alerta do sistema operacional quando algo relevante para o seu papel mudar, mesmo com a aba em segundo plano.">
+          {browserNotifPermission === "unsupported" && <small className="mb-settings-note">Este navegador nao suporta notificacoes.</small>}
+          {browserNotifPermission !== "unsupported" && (
+            <>
+              <label className="mb-switch-row">
+                <span>
+                  <strong>Ativar notificacoes</strong>
+                  <small>
+                    {browserNotifPermission === "denied" && "Bloqueado pelo navegador — libere manualmente nas configuracoes do site para reativar."}
+                    {browserNotifPermission === "granted" && "Permissao concedida."}
+                    {browserNotifPermission === "default" && "Ainda nao solicitado."}
+                  </small>
+                </span>
+                {browserNotifPermission === "granted"
+                  ? <span className="mb-switch"><input type="checkbox" checked={browserNotifEnabled} onChange={(event) => toggleBrowserNotifEnabled(event.target.checked)} /><span className="mb-switch-slider" /></span>
+                  : <Button tone="primary" onClick={requestBrowserNotifications} disabled={browserNotifPermission === "denied"}>Ativar</Button>}
+              </label>
+              <small className="mb-settings-note">Dev ve quando um QA pega um item seu para teste. QA ve itens que entram em In QA/In BETA/Ready Beta/HMG CNK. So funciona com o Stark Hub aberto em alguma aba do navegador.</small>
+            </>
+          )}
         </SettingsSection>
         {preview && <pre className="mb-settings-preview">{preview}</pre>}
       </div>

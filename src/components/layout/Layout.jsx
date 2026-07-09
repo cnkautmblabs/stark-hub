@@ -7,6 +7,7 @@ import { useCollaborators } from "../../hooks/useCollaborators.js";
 import { accessLevelLabels, accessLevels } from "../../utils/constants.js";
 import { normalize } from "../../utils/workbench/formatters.js";
 import { IdentityAvatar } from "../workbench/ui/WorkbenchPrimitives.jsx";
+import { BrowserNotificationWatcher } from "../common/BrowserNotificationWatcher.jsx";
 
 function MBLabsMark() {
   const base = import.meta.env.BASE_URL;
@@ -50,6 +51,7 @@ export default function Layout() {
 
   return (
     <div className={`workbench-app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
+      <BrowserNotificationWatcher />
       <Sidebar collapsed={collapsed} onToggle={handleToggle} />
       <div className="workbench-main-area">
         <header className="stark-app-topbar">
