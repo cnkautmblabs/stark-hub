@@ -2986,10 +2986,25 @@ body {
   border-radius: 12px;
   padding: 12px;
   overflow: hidden;
+  transition: box-shadow .2s ease, transform .2s ease, border-color .2s ease;
 }
-.mbdhc-governance .mbdhc-dev-card.status-below { border-left-color: #c62828; border-bottom-color: #ef9a9a; }
-.mbdhc-governance .mbdhc-dev-card.status-met { border-left-color: #0078d4; border-bottom-color: #90caf9; }
-.mbdhc-governance .mbdhc-dev-card.status-above { border-left-color: #c99a00; border-bottom-color: #e3c04f; }
+.mbdhc-governance .mbdhc-dev-card.role-qa {
+  background: linear-gradient(180deg, #fbf7ff, #f7fbff);
+  border-left-color: #7c3aed;
+}
+.mbdhc-governance .mbdhc-dev-card.role-dev {
+  border-left-color: #0078d4;
+}
+.mbdhc-governance .mbdhc-dev-card.status-below { border-left-color: var(--goal-progress-color, #c62828); }
+.mbdhc-governance .mbdhc-dev-card.status-met { border-left-color: var(--goal-progress-color, #0078d4); }
+.mbdhc-governance .mbdhc-dev-card.status-above {
+  border-left-color: #d69e00;
+  animation: mbdhcCardPulse 1.8s ease-in-out infinite;
+}
+@keyframes mbdhcCardPulse {
+  0%, 100% { box-shadow: 0 0 0 rgba(214,158,0,0), 0 4px 14px rgba(15,23,42,.06); }
+  50% { box-shadow: 0 0 0 4px rgba(214,158,0,.14), 0 12px 28px rgba(214,158,0,.16); }
+}
 .mbdhc-own-card-wrap {
   margin-bottom: 4px;
 }
@@ -3036,6 +3051,21 @@ body {
 .mbdhc-role-pill.role-qa { background: #ede9fe; color: #6d28d9; }
 .mbdhc-role-pill.role-gestao { background: #dcfce7; color: #166534; }
 .mbdhc-role-pill.role-gerente { background: #ffedd5; color: #9a3412; }
+.mbdhc-work-kind {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+.mbdhc-work-kind.role-qa { background: #f3e8ff; color: #6d28d9; }
+.mbdhc-work-kind.role-dev { background: #dbeafe; color: #1d4ed8; }
+.mbdhc-work-kind.role-gestao,
+.mbdhc-work-kind.role-gerente { background: #dcfce7; color: #166534; }
 .mbdhc-governance .mbdhc-dev-card .mbw-avatar-row { min-width: 0; }
 .mbdhc-governance .mbdhc-dev-card .mbw-avatar-row > span:last-child {
   min-width: 0;
@@ -3085,54 +3115,78 @@ body {
   color: #334155;
   font-size: 9px;
 }
+.mbdhc-governance .mbdhc-country-pill.more {
+  cursor: help;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 10px;
+  font-weight: 900;
+}
 .mbdhc-governance .mbdhc-dev-card .mbdhc-progress {
-  height: 7px;
-  margin: 2px 0 8px;
+  height: 8px;
+  margin: 4px 0 10px;
   background: #edf0f4;
   border-radius: 999px;
   overflow: hidden;
+  position: relative;
 }
 .mbdhc-governance .mbdhc-dev-card .mbdhc-progress span {
   display: block;
   height: 100%;
-  background: var(--mbdhc-blue);
+  width: var(--goal-progress, 0%);
+  background: var(--goal-progress-color, var(--mbdhc-blue));
+  border-radius: inherit;
+  transition: width .35s ease, background-color .35s ease;
 }
-.mbdhc-governance .mbdhc-dev-card.status-below .mbdhc-progress span { background: var(--mbdhc-red); }
-.mbdhc-governance .mbdhc-dev-card.status-above .mbdhc-progress span { background: var(--mbdhc-gold); }
-.mbdhc-governance .mbdhc-dev-focus-metrics,
-.mbdhc-governance .mbdhc-dev-mini-stats {
+.mbdhc-governance .mbdhc-dev-card.status-above .mbdhc-progress span { background: #d69e00; }
+.mbdhc-governance .mbdhc-dev-metric-clusters {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 7px;
+}
+.mbdhc-governance .mbdhc-metric-cluster {
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-.mbdhc-governance .mbdhc-dev-focus-metrics span,
-.mbdhc-governance .mbdhc-dev-mini-stats span {
-  min-height: 30px;
-  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
+  gap: 5px;
   border: 1px solid #dbe3ef;
-  border-radius: 999px;
-  background: rgba(255,255,255,.74);
-  color: #334155;
+  border-radius: 10px;
+  background: rgba(255,255,255,.62);
+  padding: 6px;
 }
-.mbdhc-governance .mbdhc-dev-focus-metrics small,
-.mbdhc-governance .mbdhc-dev-mini-stats small {
-  color: var(--mbdhc-muted);
-  font-size: 9px;
+.mbdhc-governance .mbdhc-metric-cluster > strong {
+  flex: 1 0 76px;
+  color: #475569;
+  font-size: 10px;
   font-weight: 900;
   text-transform: uppercase;
 }
-.mbdhc-governance .mbdhc-dev-focus-metrics b,
-.mbdhc-governance .mbdhc-dev-mini-stats b {
+.mbdhc-governance .mbdhc-metric-cluster span {
+  min-width: 42px;
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 3px;
+  border-radius: 999px;
+  background: #f8fafc;
+  padding: 3px 6px;
+  color: #334155;
+}
+.mbdhc-governance .mbdhc-metric-cluster b {
   color: #0f172a;
   font-size: 13px;
+  line-height: 1;
 }
-.mbdhc-governance .mbdhc-dev-focus-metrics .approved { border-color: #bbf7d0; background: #f0fdf4; }
-.mbdhc-governance .mbdhc-dev-focus-metrics .fail { border-color: #fecaca; background: #fff1f2; }
-.mbdhc-governance .mbdhc-dev-focus-metrics .limitation { border-color: #fde68a; background: #fffbeb; }
+.mbdhc-governance .mbdhc-metric-cluster small {
+  color: var(--mbdhc-muted);
+  font-size: 8px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.mbdhc-governance .mbdhc-metric-cluster .approved { background: #f0fdf4; color: #166534; }
+.mbdhc-governance .mbdhc-metric-cluster .fail { background: #fff1f2; color: #991b1b; }
+.mbdhc-governance .mbdhc-metric-cluster .limitation { background: #fffbeb; color: #9a6700; }
 .mbdhc-governance .mbdhc-dev-env-details {
   margin-top: 8px;
   border: 1px solid #dbe3ef;
@@ -3268,8 +3322,11 @@ body {
 }
 
 .mbdhc-governance .mbdhc-work-card.qa-card {
-  background: linear-gradient(90deg, rgba(14,165,233,.08), var(--starkSurface));
-  border-left-color: #0ea5e9;
+  background: linear-gradient(90deg, rgba(124,58,237,.08), var(--starkSurface));
+  border-left-color: #7c3aed;
+}
+.mbdhc-governance .mbdhc-work-card.dev-card {
+  background: linear-gradient(90deg, rgba(0,120,212,.06), var(--starkSurface));
 }
 .mbdhc-governance .mbdhc-work-card.bug { border-left-color: var(--starkTypeBug); }
 .mbdhc-governance .mbdhc-work-card.missing-hours {
@@ -3351,23 +3408,43 @@ body {
   font-style: normal;
   font-weight: 800;
 }
+.mbdhc-governance .mbdhc-work-hour-progress {
+  width: 58px;
+  height: 5px;
+  display: block;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8eef7;
+  position: relative;
+}
+.mbdhc-governance .mbdhc-work-hour-progress::before {
+  content: "";
+  display: block;
+  width: var(--item-progress, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--item-progress-color, #2563eb);
+  transition: width .25s ease, background-color .25s ease;
+}
 .mbdhc-governance .mbdhc-more-count {
   justify-self: end;
   color: var(--mbdhc-muted);
   font-size: 11px;
   font-weight: 800;
 }
-.mbdhc-governance .mbdhc-dev-grid.mode-compact .mbdhc-dev-card { padding: 7px; }
-.mbdhc-governance .mbdhc-dev-grid.mode-compact .mbdhc-dev-metrics { display: none; }
+.mbdhc-governance .mbdhc-dev-grid.mode-compact .mbdhc-dev-card { padding: 8px; }
+.mbdhc-governance .mbdhc-dev-grid.mode-compact .mbdhc-dev-metric-clusters { grid-template-columns: 1fr; }
+.mbdhc-governance .mbdhc-dev-grid.mode-compact .mbdhc-dev-env-details,
+.mbdhc-governance .mbdhc-dev-grid.mode-compact .mbdhc-dev-actions { display: none; }
 :root[data-theme="dark"] .mbdhc-governance :is(.mbdhc-filters,.mbdhc-kpi,.mbdhc-section,.mbdhc-chart-card,.mbdhc-dev-card,.mbdhc-work-card,.mbdhc-country-pill,.mbdhc-work-test-panel,.mbdhc-overview-card,.mbdhc-dev-env-details) {
   background: #111827;
   color: #e5e7eb;
   border-color: #334155;
 }
-:root[data-theme="dark"] .mbdhc-governance :is(.mbdhc-section-header h3,.mbdhc-kpi strong,.mbdhc-dev-status strong,.mbdhc-dev-metrics strong,.mbdhc-dev-focus-metrics b,.mbdhc-dev-mini-stats b,.mbdhc-overview-card header strong,.mbdhc-work-main h4,.mbdhc-work-hours strong) { color: #f8fafc; }
+:root[data-theme="dark"] .mbdhc-governance :is(.mbdhc-section-header h3,.mbdhc-kpi strong,.mbdhc-dev-status strong,.mbdhc-dev-metrics strong,.mbdhc-metric-cluster b,.mbdhc-overview-card header strong,.mbdhc-work-main h4,.mbdhc-work-hours strong) { color: #f8fafc; }
 :root[data-theme="dark"] .mbdhc-governance .mbdhc-work-test-toggle { color: #e5e7eb; border-top-color: #334155; }
 :root[data-theme="dark"] .mbdhc-governance .mbdhc-work-test-toggle span { background: #172033; border-color: #334155; }
-:root[data-theme="dark"] .mbdhc-governance :is(.mbdhc-field input,.mbdhc-field select,.mbdhc-button.secondary,.mbdhc-icon-button,.mbdhc-view-controls,.mbdhc-dev-metrics>div,.mbdhc-dev-focus-metrics span,.mbdhc-dev-mini-stats span,.mbdhc-dev-env-details > div > span) {
+:root[data-theme="dark"] .mbdhc-governance :is(.mbdhc-field input,.mbdhc-field select,.mbdhc-button.secondary,.mbdhc-icon-button,.mbdhc-view-controls,.mbdhc-dev-metrics>div,.mbdhc-metric-cluster,.mbdhc-metric-cluster span,.mbdhc-dev-env-details > div > span) {
   background: #172033;
   color: #e5e7eb;
   border-color: #334155;
@@ -3375,6 +3452,15 @@ body {
 :root[data-theme="dark"] .mbdhc-governance .mbdhc-donut::after { background: #111827; }
 :root[data-theme="dark"] .mbdhc-governance .mbdhc-dev-card {
   background: linear-gradient(180deg, #111827, #0f172a);
+}
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-dev-card.role-qa {
+  background: linear-gradient(180deg, #171326, #0f172a);
+}
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-work-card.qa-card {
+  background: linear-gradient(90deg, rgba(124,58,237,.16), #111827);
+}
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-work-card.dev-card {
+  background: linear-gradient(90deg, rgba(0,120,212,.12), #111827);
 }
 :root[data-theme="dark"] .mbdhc-governance :is(.mbdhc-bar-row,.mbdhc-legend,.mbdhc-dev-env-details summary,.mbdhc-dev-env-details small,.mbdhc-country-pill strong,.mbdhc-overview-card footer) {
   color: #cbd5e1;

@@ -10,6 +10,7 @@ Apresentação_Automações CNK.txt
 *.sql
 Stark Hub Refatoração.pdf
 mb-azure-workbench-config-sanitized.json
+stark-hub-config*.json
 /stark-hub-script
 /docs
 tempermonkey.js

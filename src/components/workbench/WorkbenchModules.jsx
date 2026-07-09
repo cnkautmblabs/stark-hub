@@ -37,10 +37,12 @@ import { useWorkItems } from "../../hooks/useWorkItems.js";
 import { useCollaborators } from "../../hooks/useCollaborators.js";
 import { useTestEvidence } from "../../hooks/useTestEvidence.js";
 import { useAppSettings } from "../../hooks/useAppSettings.js";
+import { useToast } from "../../contexts/ToastContext.jsx";
 import { usePersistentState } from "../../hooks/usePersistentState.js";
 import { usePersistentActiveWorkItem } from "../../hooks/usePersistentActiveWorkItem.js";
 import { consumePendingWorkItemHighlight, highlightWorkItem, readWorkItemHash } from "../../utils/workbench/highlight.js";
 import { notificationTypes, playTone, readPersonalSetting as readNotificationSetting, soundOptions, writePersonalSetting as writeNotificationSetting } from "../../utils/notificationSounds.js";
+import { readPersonalSetting as readPersonalSettingShared, writePersonalSettings as writePersonalSettingsShared } from "../../utils/personalSettings.js";
 import {
   accessLevelLabels,
   accessLevels,
@@ -1277,6 +1279,23 @@ function governanceRoleLabel(person) {
   return accessLevelLabels[level] || (person?.isQa ? "QA" : person?.isDev ? "Dev" : person?.isManagement ? "Gestao" : "Sem funcao");
 }
 
+function mixHexColor(from, to, ratio) {
+  const clamp = Math.max(0, Math.min(1, ratio));
+  const parse = (hex) => hex.replace("#", "").match(/.{1,2}/g).map((part) => parseInt(part, 16));
+  const [r1, g1, b1] = parse(from);
+  const [r2, g2, b2] = parse(to);
+  const blend = (a, b) => Math.round(a + (b - a) * clamp).toString(16).padStart(2, "0");
+  return `#${blend(r1, r2)}${blend(g1, g2)}${blend(b1, b2)}`;
+}
+
+function goalProgressColor(percent) {
+  if (percent > 100) return "#d69e00";
+  const value = Math.max(0, Math.min(100, Number(percent) || 0));
+  if (value < 45) return mixHexColor("#dc2626", "#f59e0b", value / 45);
+  if (value < 85) return mixHexColor("#f59e0b", "#22c55e", (value - 45) / 40);
+  return mixHexColor("#22c55e", "#2563eb", (value - 85) / 15);
+}
+
 export function HoursWorkbench() {
   const { profile, demoMode } = useAuth();
   const { items, error, loading, refreshing, reload } = useWorkItems();
@@ -1520,8 +1539,12 @@ export function HoursWorkbench() {
     const latestInfo = latest ? evidenceResultInfo(latest.result || latest.status) : null;
     const lastEnv = latest ? evidenceEnvironments(latest)[0] || null : null;
     const isTestExpanded = expandedTests.has(itemKey);
+    const completedHours = Number(item.completedHours || 0);
+    const remainingHours = Number(item.remainingHours || 0);
+    const itemProgress = completedHours + remainingHours > 0 ? Math.min(100, (completedHours / (completedHours + remainingHours)) * 100) : (completedHours > 0 ? 100 : 0);
+    const itemProgressColor = goalProgressColor(itemProgress);
     return (
-      <article key={itemKey} className={`mbdhc-work-card ${String(item.type || "").toLowerCase()} ${noHours ? "missing-hours" : ""} ${item.qaGovernanceCard ? "qa-card" : ""}`} data-id={item.id} data-work-item-id={item.id} data-work-item-type={String(item.type || "").toLowerCase()} style={{ "--wi-type-color": type.color, "--wi-type-bg": type.bg, borderLeftColor: type.color }}>
+      <article key={itemKey} className={`mbdhc-work-card ${String(item.type || "").toLowerCase()} ${noHours ? "missing-hours" : ""} ${item.qaGovernanceCard ? "qa-card" : "dev-card"}`} data-id={item.id} data-work-item-id={item.id} data-work-item-type={String(item.type || "").toLowerCase()} style={{ "--wi-type-color": type.color, "--wi-type-bg": type.bg, "--item-progress": `${itemProgress}%`, "--item-progress-color": itemProgressColor, borderLeftColor: type.color }}>
         <a className="mbdhc-work-card-link" href={workItemUrl(profile, item)} target="_blank" rel="noopener noreferrer">
           <div className="mbdhc-work-main">
             <div className={`mbdhc-work-type-line ${String(item.type || "").toLowerCase()}`}><img className="mbdhc-work-type-icon" src={type.image} alt={item.type} /><strong>{formatWorkItemCode(item.id, item.type)}</strong><span>{item.type}</span></div>
@@ -1533,6 +1556,7 @@ export function HoursWorkbench() {
             <strong>{formatHours(item.completedHours)}</strong>
             <span>Completed</span>
             {noHours && <em>Sem horas</em>}
+            <i className="mbdhc-work-hour-progress" aria-hidden="true" />
           </div>
         </a>
         {testable && (
@@ -1584,39 +1608,38 @@ export function HoursWorkbench() {
     const countryEntries = Object.entries(dev.countries).sort((a, b) => b[1] - a[1]);
     const visibleCountries = countryEntries.slice(0, 5);
     const hiddenCountryCount = Math.max(0, countryEntries.length - visibleCountries.length);
+    const hiddenCountryTitle = countryEntries.slice(5).map(([country, count]) => `${country}: ${count}`).join("\n");
     const envStats = ["DEV", "QA", "BETA", "PROD"].map((env) => ({ env, ...(dev.testMetrics.byEnv[env] || { total: 0, pass: 0, fail: 0, limitation: 0, pending: 0 }) })).filter((row) => row.total > 0);
+    const progressColor = goalProgressColor(dev.progressPercent);
+    const workKindLabel = useTestMetrics ? "Trilha de testes" : "Desenvolvimento";
     return (
-      <article key={dev.key} className={`mbdhc-dev-card status-${dev.goalStatus} ${dev.goalStatus === "above" ? "pulse-over" : ""} ${pinned ? "mbdhc-dev-card-pinned" : ""}`}>
+      <article key={dev.key} className={`mbdhc-dev-card role-${roleLevel || "none"} status-${dev.goalStatus} ${dev.goalStatus === "above" ? "pulse-over" : ""} ${pinned ? "mbdhc-dev-card-pinned" : ""}`} style={{ "--goal-progress": `${progressWidth}%`, "--goal-progress-color": progressColor }}>
         {pinned && <div className="mbdhc-dev-pinned-label"><i className="bi bi-person-fill" /> Seu card</div>}
         <div className="mbdhc-dev-head">
           <div className="mbdhc-dev-identity">
             <AvatarDot person={dev.person || { azureName: dev.displayName, imageUrl: dev.avatarUrl, color: dev.color }} name={dev.displayName} />
+            <span className={`mbdhc-work-kind role-${roleLevel || "none"}`}>{workKindLabel}</span>
             {roleLevel && <span className={`mbdhc-role-pill role-${roleLevel}`}><RoleBadgeIcon level={roleLevel} /> {accessLevelLabels[roleLevel] || roleLevel}</span>}
           </div>
           <div className="mbdhc-dev-status"><strong>{formatHours(dev.completed)}</strong><span>de {formatHours(dev.goalHours)}</span><em>{statusLabel}</em></div>
         </div>
         <div className="mbdhc-country-pills">
           {visibleCountries.map(([country, count]) => <span key={country} className="mbdhc-country-pill"><CountryVisual code={country} compact /><strong>{count}</strong></span>)}
-          {hiddenCountryCount > 0 && <span className="mbdhc-country-pill more">+{hiddenCountryCount}</span>}
+          {hiddenCountryCount > 0 && <span className="mbdhc-country-pill more" title={hiddenCountryTitle}>+{hiddenCountryCount}</span>}
         </div>
-        <div className="mbdhc-progress"><span style={{ width: `${progressWidth}%` }} /></div>
-        <div className="mbdhc-dev-focus-metrics">
+        <div className="mbdhc-progress" title={`${Math.round(dev.progressPercent)}% da meta`}><span /></div>
+        <div className="mbdhc-dev-metric-clusters">
           {useTestMetrics ? (
             <>
-              <span><small>Total</small><b>{dev.testMetrics.total}</b></span>
-              <span><small>Feitos</small><b>{dev.testedItems}</b></span>
-              <span className="approved"><small>Pass</small><b>{dev.testMetrics.pass}</b></span>
-              <span className="fail"><small>Fail</small><b>{dev.testMetrics.fail}</b></span>
-              <span className="limitation"><small>Limitation</small><b>{dev.testMetrics.limitation}</b></span>
+              <div className="mbdhc-metric-cluster primary"><strong>Testes</strong><span><b>{dev.testMetrics.total}</b><small>total</small></span><span><b>{dev.testedItems}</b><small>feitos</small></span></div>
+              <div className="mbdhc-metric-cluster quality"><strong>Resultado</strong><span className="approved"><b>{dev.testMetrics.pass}</b><small>pass</small></span><span className="fail"><b>{dev.testMetrics.fail}</b><small>fail</small></span><span className="limitation"><b>{dev.testMetrics.limitation}</b><small>lim.</small></span></div>
+              <div className="mbdhc-metric-cluster queue"><strong>Fila</strong><span><b>{dev.qaResponsibleCount}</b><small>QA resp.</small></span><span><b>{dev.pendingToTestCount}</b><small>pend.</small></span><span><b>{testPassRate}%</b><small>rate</small></span></div>
             </>
           ) : (
             <>
-              <span><small>Testaveis</small><b>{dev.testableItems}</b></span>
-              <span><small>Nao testaveis</small><b>{dev.nonTestableItems}</b></span>
-              <span><small>Testes</small><b>{dev.testMetrics.total}</b></span>
-              <span className="approved"><small>Pass</small><b>{dev.testMetrics.pass}</b></span>
-              <span className="fail"><small>Fail</small><b>{dev.testMetrics.fail}</b></span>
-              <span className="limitation"><small>Limitation</small><b>{dev.testMetrics.limitation}</b></span>
+              <div className="mbdhc-metric-cluster primary"><strong>Trabalho</strong><span><b>{dev.testableItems}</b><small>testaveis</small></span><span><b>{dev.nonTestableItems}</b><small>nao test.</small></span><span><b>{dev.testMetrics.total}</b><small>testes</small></span></div>
+              <div className="mbdhc-metric-cluster quality"><strong>Resultado</strong><span className="approved"><b>{dev.testMetrics.pass}</b><small>pass</small></span><span className="fail"><b>{dev.testMetrics.fail}</b><small>fail</small></span><span className="limitation"><b>{dev.testMetrics.limitation}</b><small>lim.</small></span></div>
+              <div className="mbdhc-metric-cluster queue"><strong>Entrega</strong><span><b>{dev.items.length}</b><small>cards</small></span><span><b>{dev.tasks}</b><small>tasks</small></span><span><b>{dev.bugs}</b><small>bugs</small></span><span><b>{dev.goalStatus === "above" ? `+${formatHours(dev.extraHours)}` : `-${formatHours(dev.missingHours)}`}</b><small>saldo</small></span></div>
             </>
           )}
         </div>
@@ -1630,23 +1653,6 @@ export function HoursWorkbench() {
             </div>
           </details>
         )}
-        <div className="mbdhc-dev-mini-stats">
-          {useTestMetrics ? (
-            <>
-              <span><small>QA resp.</small><b>{dev.qaResponsibleCount}</b></span>
-              <span><small>Azure</small><b>{dev.azureAssignedCount}</b></span>
-              <span><small>P/ testar</small><b>{dev.pendingToTestCount}</b></span>
-              <span><small>Pass rate</small><b>{testPassRate}%</b></span>
-            </>
-          ) : (
-            <>
-              <span><small>Cards</small><b>{dev.items.length}</b></span>
-              <span><small>Tasks</small><b>{dev.tasks}</b></span>
-              <span><small>Bugs</small><b>{dev.bugs}</b></span>
-              <span><small>Saldo</small><b>{dev.goalStatus === "above" ? `+${formatHours(dev.extraHours)}` : `-${formatHours(dev.missingHours)}`}</b></span>
-            </>
-          )}
-        </div>
         <div className="mbdhc-dev-actions">
           <button className="mbdhc-button secondary" type="button" onClick={() => copyHoursNotice(dev)} title="Copiar aviso de horas para enviar ao colaborador"><i className="bi bi-clipboard-check" /> Copiar aviso</button>
           {!pinned && <button className="mbdhc-button secondary" type="button" onClick={() => toggleDeveloper(dev.key)}>{isOpen ? "Ocultar" : "Ver mais"} <i className={`bi ${isOpen ? "bi-chevron-up" : "bi-chevron-down"}`} /></button>}
@@ -1775,30 +1781,32 @@ export function HoursWorkbench() {
 }
 
 export function SettingsWorkbench() {
-  const { profile, user, demoMode } = useAuth();
+  const { profile, user, demoMode, updateLocalAzureConnection } = useAuth();
   const { flags, isEnabled, setFlag } = useFeatureFlags();
   const { collaborators } = useCollaborators();
   const { getSetting, updateSetting, loading: settingsLoading } = useAppSettings();
   const isGestao = hasManagementAccess(profile?.accessLevel);
-  const personalSettingsKey = `starkHubPersonalConnections:${profile?.id || user?.email || "anonymous"}`;
-  function readPersonalSetting(key, fallback = "") {
-    if (typeof window === "undefined") return fallback;
-    try {
-      const data = JSON.parse(window.localStorage.getItem(personalSettingsKey) || "{}");
-      return data[key] ?? fallback;
-    } catch {
-      return fallback;
+  const { pushToast } = useToast();
+  const initialSettingsSynced = useRef(false);
+  const settingsRef = useRef(null);
+
+  // Prevent native form submissions inside the settings panel (capture phase)
+  useEffect(() => {
+    function handleSubmit(e) {
+      if (!settingsRef.current) return;
+      if (settingsRef.current.contains(e.target)) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }
     }
+    document.addEventListener("submit", handleSubmit, true);
+    return () => document.removeEventListener("submit", handleSubmit, true);
+  }, []);
+  function readPersonalSetting(key, fallback = "") {
+    return readPersonalSettingShared(profile, user, key, fallback);
   }
   function writePersonalSettings(payload) {
-    if (typeof window === "undefined") return;
-    let current = {};
-    try {
-      current = JSON.parse(window.localStorage.getItem(personalSettingsKey) || "{}");
-    } catch {
-      current = {};
-    }
-    window.localStorage.setItem(personalSettingsKey, JSON.stringify({ ...current, ...payload }));
+    writePersonalSettingsShared(profile, user, payload);
   }
   const importRef = useRef(null);
   const [productName, setProductName] = useState(getSetting("productName", "Stark Hub"));
@@ -1826,7 +1834,216 @@ export function SettingsWorkbench() {
   const [showSecrets, setShowSecrets] = useState(false);
   const [saving, setSaving] = useState("");
   const [preview, setPreview] = useState("");
-  const [saveStatus, setSaveStatus] = useState(null);
+  // global inline saveStatus removed; using toasts instead
+
+  // Local drafts for per-section confirm behavior
+  const [productDraft, setProductDraft] = useState(productName);
+  const [azureAutoRefreshDraft, setAzureAutoRefreshDraft] = useState(azureAutoRefreshSeconds);
+  const [localFlags, setLocalFlags] = useState(flags || {});
+  // per-section inline status removed in favor of toasts
+
+  // Drafts for other sections
+  const [azureMaxItemsDraft, setAzureMaxItemsDraft] = useState(azureMaxItems);
+  const [iterationPatternDraft, setIterationPatternDraft] = useState(iterationPattern);
+
+  const [pipelineQaDraft, setPipelineQaDraft] = useState(pipelineQaName);
+  const [pipelineBetaDraft, setPipelineBetaDraft] = useState(pipelineBetaName);
+
+  const [slackTestModeDraft, setSlackTestModeDraft] = useState(isGestao ? slackTestMode : personalSlackTestMode);
+  const [slackPrimaryNameDraft, setSlackPrimaryNameDraft] = useState(isGestao ? slackPrimaryWebhookName : personalSlackPrimaryWebhookName);
+  const [slackWebhookDraft, setSlackWebhookDraft] = useState(isGestao ? slackWebhookUrl : personalSlackWebhookUrl);
+  const [slackTestWebhookDraft, setSlackTestWebhookDraft] = useState(isGestao ? slackTestWebhookUrl : personalSlackTestWebhookUrl);
+
+  const [goalHoursDraft, setGoalHoursDraft] = useState(goalHours);
+
+  const [notificationSoundsMutedDraft, setNotificationSoundsMutedDraft] = useState(notificationSoundsMuted);
+  const [notificationSoundPrefsDraft, setNotificationSoundPrefsDraft] = useState(notificationSoundPrefs);
+
+  // per-section inline status removed in favor of toasts
+
+  useEffect(() => setProductDraft(productName), [productName]);
+  useEffect(() => setAzureAutoRefreshDraft(azureAutoRefreshSeconds), [azureAutoRefreshSeconds]);
+  useEffect(() => setLocalFlags(flags || {}), [flags]);
+  useEffect(() => setAzureMaxItemsDraft(azureMaxItems), [azureMaxItems]);
+  useEffect(() => setIterationPatternDraft(iterationPattern), [iterationPattern]);
+  useEffect(() => setPipelineQaDraft(pipelineQaName), [pipelineQaName]);
+  useEffect(() => setPipelineBetaDraft(pipelineBetaName), [pipelineBetaName]);
+  useEffect(() => setSlackTestModeDraft(isGestao ? slackTestMode : personalSlackTestMode), [slackTestMode, personalSlackTestMode, isGestao]);
+  useEffect(() => setSlackPrimaryNameDraft(isGestao ? slackPrimaryWebhookName : personalSlackPrimaryWebhookName), [slackPrimaryWebhookName, personalSlackPrimaryWebhookName, isGestao]);
+  useEffect(() => setSlackWebhookDraft(isGestao ? slackWebhookUrl : personalSlackWebhookUrl), [slackWebhookUrl, personalSlackWebhookUrl, isGestao]);
+  useEffect(() => setSlackTestWebhookDraft(isGestao ? slackTestWebhookUrl : personalSlackTestWebhookUrl), [slackTestWebhookUrl, personalSlackTestWebhookUrl, isGestao]);
+  useEffect(() => setGoalHoursDraft(goalHours), [goalHours]);
+  useEffect(() => setNotificationSoundsMutedDraft(notificationSoundsMuted), [notificationSoundsMuted]);
+  useEffect(() => setNotificationSoundPrefsDraft(notificationSoundPrefs), [notificationSoundPrefs]);
+
+  function applyProductSection() {
+    // Apply product draft to global state and persist via saveSettings()
+    (async () => {
+      try {
+        setProductName(productDraft);
+        setAzureAutoRefreshSeconds(Number(azureAutoRefreshDraft) || 0);
+        // update flags via API immediately
+        await Promise.all(Object.entries(localFlags).filter(([k, v]) => flags?.[k] !== v).map(([k, v]) => setFlag(k, v)));
+        await saveSettings();
+        pushToast({ title: "Configurações", body: "Alterações aplicadas com sucesso.", tone: "success" });
+      } catch (err) {
+        pushToast({ title: "Erro", body: err?.message || String(err), tone: "danger" });
+      }
+    })();
+  }
+
+  function cancelProductSection() {
+    setProductDraft(productName);
+    setAzureAutoRefreshDraft(azureAutoRefreshSeconds);
+    setLocalFlags(flags || {});
+  }
+
+  async function applyConnectionsSection() {
+    try {
+      setAzureMaxItems(Number(azureMaxItemsDraft) || 200);
+      setIterationPattern(iterationPatternDraft);
+      await saveSettings();
+      pushToast({ title: "Conexões", body: "Conexões aplicadas.", tone: "success" });
+    } catch (err) {
+      pushToast({ title: "Erro", body: err?.message || String(err), tone: "danger" });
+    }
+  }
+
+  function cancelConnectionsSection() {
+    setAzureMaxItemsDraft(azureMaxItems);
+    setIterationPatternDraft(iterationPattern);
+  }
+
+  async function applyPipelinesSection() {
+    try {
+      setPipelineQaName(pipelineQaDraft);
+      setPipelineBetaName(pipelineBetaDraft);
+      await saveSettings();
+      pushToast({ title: "Pipelines", body: "Pipelines aplicadas.", tone: "success" });
+    } catch (err) {
+      pushToast({ title: "Erro", body: err?.message || String(err), tone: "danger" });
+    }
+  }
+
+  function cancelPipelinesSection() {
+    setPipelineQaDraft(pipelineQaName);
+    setPipelineBetaDraft(pipelineBetaName);
+  }
+
+  async function applySlackSection() {
+    try {
+      if (isGestao) {
+        setSlackTestMode(slackTestModeDraft);
+        setSlackPrimaryWebhookName(slackPrimaryNameDraft);
+        setSlackWebhookUrl(slackWebhookDraft);
+        setSlackTestWebhookUrl(slackTestWebhookDraft);
+      } else {
+        setPersonalSlackTestMode(slackTestModeDraft);
+        setPersonalSlackPrimaryWebhookName(slackPrimaryNameDraft);
+        setPersonalSlackWebhookUrl(slackWebhookDraft);
+        setPersonalSlackTestWebhookUrl(slackTestWebhookDraft);
+      }
+      await saveSettings();
+      pushToast({ title: "Slack", body: "Slack aplicado.", tone: "success" });
+    } catch (err) {
+      pushToast({ title: "Erro", body: err?.message || String(err), tone: "danger" });
+    }
+  }
+
+  function cancelSlackSection() {
+    setSlackTestModeDraft(isGestao ? slackTestMode : personalSlackTestMode);
+    setSlackPrimaryNameDraft(isGestao ? slackPrimaryWebhookName : personalSlackPrimaryWebhookName);
+    setSlackWebhookDraft(isGestao ? slackWebhookUrl : personalSlackWebhookUrl);
+    setSlackTestWebhookDraft(isGestao ? slackTestWebhookUrl : personalSlackTestWebhookUrl);
+  }
+
+  async function applyGovernanceSection() {
+    try {
+      setGoalHours(goalHoursDraft);
+      await saveSettings();
+      pushToast({ title: "Governança", body: "Governança aplicada.", tone: "success" });
+    } catch (err) {
+      pushToast({ title: "Erro", body: err?.message || String(err), tone: "danger" });
+    }
+  }
+
+  function cancelGovernanceSection() {
+    setGoalHoursDraft(goalHours);
+  }
+
+  async function applyNotificationsSection() {
+    try {
+      setNotificationSoundsMuted(notificationSoundsMutedDraft);
+      setNotificationSoundPrefs(notificationSoundPrefsDraft);
+      // saveSettings writes notification preferences
+      await saveSettings();
+      pushToast({ title: "Notificações", body: "Notificações aplicadas.", tone: "success" });
+    } catch (err) {
+      pushToast({ title: "Erro", body: err?.message || String(err), tone: "danger" });
+    }
+  }
+
+  function cancelNotificationsSection() {
+    setNotificationSoundsMutedDraft(notificationSoundsMuted);
+    setNotificationSoundPrefsDraft(notificationSoundPrefs);
+  }
+
+  // Apply all drafts to global state and persist
+  async function applyAllAndSave() {
+    setSaving("settings");
+    // copy drafts into state
+    setProductName(productDraft);
+    setAzureAutoRefreshSeconds(Number(azureAutoRefreshDraft) || 0);
+    setAzureMaxItems(Number(azureMaxItemsDraft) || 200);
+    setIterationPattern(iterationPatternDraft);
+    setPipelineQaName(pipelineQaDraft);
+    setPipelineBetaName(pipelineBetaDraft);
+    if (isGestao) {
+      setSlackTestMode(slackTestModeDraft);
+      setSlackPrimaryWebhookName(slackPrimaryNameDraft);
+      setSlackWebhookUrl(slackWebhookDraft);
+      setSlackTestWebhookUrl(slackTestWebhookDraft);
+    } else {
+      setPersonalSlackTestMode(slackTestModeDraft);
+      setPersonalSlackPrimaryWebhookName(slackPrimaryNameDraft);
+      setPersonalSlackWebhookUrl(slackWebhookDraft);
+      setPersonalSlackTestWebhookUrl(slackTestWebhookDraft);
+    }
+    setGoalHours(Number(goalHoursDraft) || defaultGoalHours);
+    setNotificationSoundsMuted(notificationSoundsMutedDraft);
+    setNotificationSoundPrefs(notificationSoundPrefsDraft);
+    // apply feature flags
+    await Promise.all(Object.entries(localFlags).filter(([k, v]) => flags?.[k] !== v).map(([k, v]) => setFlag(k, v)));
+    // Persist everything
+    await saveSettings();
+    setSaving("");
+    pushToast({ title: "Configurações", body: "Todas as alterações aplicadas.", tone: "success" });
+  }
+
+  function cancelAllDrafts() {
+    // reset drafts to current state
+    setProductDraft(productName);
+    setAzureAutoRefreshDraft(azureAutoRefreshSeconds);
+    setAzureMaxItemsDraft(azureMaxItems);
+    setIterationPatternDraft(iterationPattern);
+    setPipelineQaDraft(pipelineQaName);
+    setPipelineBetaDraft(pipelineBetaName);
+    setSlackTestModeDraft(isGestao ? slackTestMode : personalSlackTestMode);
+    setSlackPrimaryNameDraft(isGestao ? slackPrimaryWebhookName : personalSlackPrimaryWebhookName);
+    setSlackWebhookDraft(isGestao ? slackWebhookUrl : personalSlackWebhookUrl);
+    setSlackTestWebhookDraft(isGestao ? slackTestWebhookUrl : personalSlackTestWebhookUrl);
+    setGoalHoursDraft(goalHours);
+    setNotificationSoundsMutedDraft(notificationSoundsMuted);
+    setNotificationSoundPrefsDraft(notificationSoundPrefs);
+    setLocalFlags(flags || {});
+    pushToast({ title: "Rascunhos", body: "Todas as alterações locais foram descartadas.", tone: "warning" });
+  }
+
+  function cancelProductSection() {
+    setProductDraft(productName);
+    setAzureAutoRefreshDraft(azureAutoRefreshSeconds);
+    setLocalFlags(flags || {});
+  }
 
   // Os campos globais (Gestao/Gerente) acima sao inicializados com
   // getSetting() no primeiro render, ANTES do useAppSettings terminar de
@@ -1838,6 +2055,7 @@ export function SettingsWorkbench() {
   // termina.
   useEffect(() => {
     if (settingsLoading) return;
+    if (initialSettingsSynced.current) return; // only resync once to avoid resetting drafts on subsequent reloads
     setProductName(getSetting("productName", "Stark Hub"));
     setGoalHours(getSetting("defaultGoalHours", defaultGoalHours));
     setAzureMaxItems(getSetting("azureMaxItems", 200));
@@ -1847,6 +2065,7 @@ export function SettingsWorkbench() {
     setSlackTestMode(Boolean(getSetting("slackTestMode", false)));
     setSlackTestWebhookUrl(getSetting("slackTestWebhookUrl", ""));
     setSlackPrimaryWebhookName(getSetting("slackPrimaryWebhookName", "Canal principal"));
+    initialSettingsSynced.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingsLoading]);
 
@@ -1864,15 +2083,23 @@ export function SettingsWorkbench() {
 
   async function saveSettings() {
     setSaving("settings");
-    setSaveStatus(null);
+    // clear any inline status; toasts will show results
     // Sons de notificacao sao preferencia individual: salvos sempre, para
     // qualquer nivel de acesso, independente do restante do formulario ser
     // pessoal (Dev/QA) ou global (Gestao).
     writeNotificationSetting(profile, user, "notificationSoundsMuted", notificationSoundsMuted);
     notificationTypes.forEach(({ key }) => writeNotificationSetting(profile, user, `notificationSound:${key}`, notificationSoundPrefs[key]));
-    if (!isGestao) {
-      try {
-        writePersonalSettings({
+    // Webhook do Slack e um segredo (qualquer um que o tenha pode postar no
+    // canal) — nunca vai para `app_settings`, tabela que qualquer usuario
+    // autenticado pode ler (ver policy app_settings_read_authenticated no
+    // schema.sql). Fica sempre so no localStorage deste navegador, seja
+    // Gestao ou nao; os demais campos nao sensiveis (nome do canal, modo
+    // teste, pipelines) continuam compartilhados via Supabase quando quem
+    // salva e Gestao.
+    try {
+      writePersonalSettings(isGestao
+        ? { slackWebhookUrl, slackTestWebhookUrl, updatedAt: new Date().toISOString() }
+        : {
           pipelineQaName,
           pipelineBetaName,
           slackWebhookUrl: personalSlackWebhookUrl,
@@ -1881,10 +2108,13 @@ export function SettingsWorkbench() {
           slackPrimaryWebhookName: personalSlackPrimaryWebhookName,
           updatedAt: new Date().toISOString()
         });
-        setSaveStatus({ type: "success", message: "Configuracoes aplicadas com sucesso." });
-      } catch (error) {
-        setSaveStatus({ type: "error", message: `Falha ao aplicar: ${error.message}` });
-      }
+    } catch (error) {
+      pushToast({ title: "Erro", body: `Falha ao aplicar: ${error.message}`, tone: "danger" });
+      setSaving("");
+      return;
+    }
+    if (!isGestao) {
+      pushToast({ title: "Configurações", body: "Configurações aplicadas com sucesso.", tone: "success" });
       setSaving("");
       return;
     }
@@ -1895,15 +2125,15 @@ export function SettingsWorkbench() {
       updateSetting("azureAutoRefreshSeconds", Number(azureAutoRefreshSeconds) || 60),
       updateSetting("azureIterationPattern", iterationPattern),
       updateSetting("azurePipelines", { qa: pipelineQaName, beta: pipelineBetaName }),
-      updateSetting("slackWebhookUrl", slackWebhookUrl),
       updateSetting("slackTestMode", slackTestMode),
-      updateSetting("slackTestWebhookUrl", slackTestWebhookUrl),
       updateSetting("slackPrimaryWebhookName", slackPrimaryWebhookName)
     ]);
     const failed = results.filter((result) => result?.error);
-    setSaveStatus(failed.length
-      ? { type: "error", message: `Falha ao aplicar ${failed.length} configuracao(oes): ${failed[0].error.message}` }
-      : { type: "success", message: "Configuracoes aplicadas com sucesso." });
+    if (failed.length) {
+      pushToast({ title: "Erro", body: `Falha ao aplicar ${failed.length} configuracao(oes): ${failed[0].error.message}`, tone: "danger" });
+    } else {
+      pushToast({ title: "Configurações", body: "Configurações aplicadas com sucesso.", tone: "success" });
+    }
     setSaving("");
   }
   function exportConfig() {
@@ -1954,6 +2184,41 @@ export function SettingsWorkbench() {
     URL.revokeObjectURL(url);
   }
 
+  // Arquivo de "primeiro acesso" pra mandar a qualquer colaborador, de
+  // qualquer nivel de acesso — organizacao/projeto/time do Azure, nomes de
+  // pipeline e os webhooks do Slack, tudo que hoje precisa ser digitado do
+  // zero por cada pessoa nova. De proposito SEM o PAT: e uma credencial
+  // pessoal, cada um gera e cola a propria (ver AzureConnectionForm.jsx).
+  function exportTeamOnboardingConfig() {
+    const payload = {
+      schema: "stark-hub-config",
+      version: 1,
+      type: "team-onboarding",
+      exportedAt: new Date().toISOString(),
+      securityNote: "Contem o webhook do Slack da equipe (sem PAT pessoal). Nao commitar em repositorio; enviar so por um canal seguro (DM) para o colaborador.",
+      azure: {
+        orgUrl: profile?.azureOrgUrl || "",
+        project: profile?.azureProject || "",
+        team: profile?.azureTeam || "",
+        pipelineQaName,
+        pipelineBetaName
+      },
+      slack: {
+        webhookUrl: isGestao ? slackWebhookUrl : personalSlackWebhookUrl,
+        testWebhookUrl: isGestao ? slackTestWebhookUrl : personalSlackTestWebhookUrl,
+        testMode: isGestao ? slackTestMode : personalSlackTestMode,
+        primaryWebhookName: isGestao ? slackPrimaryWebhookName : personalSlackPrimaryWebhookName
+      }
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "stark-hub-config-equipe.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   function exportSettingsCsv() {
     const rows = [
       ["Escopo", isGestao ? configScope : profile?.accessLevel || accessLevels.dev],
@@ -1962,8 +2227,8 @@ export function SettingsWorkbench() {
       ["Pipeline BETA", pipelineBetaName],
       ["Slack modo teste", isGestao ? slackTestMode : personalSlackTestMode],
       ["Canal Slack principal", isGestao ? slackPrimaryWebhookName : personalSlackPrimaryWebhookName],
-      ["Webhook Slack", isGestao ? "Configurado no banco (oculto)" : (personalSlackWebhookUrl ? "Configurado localmente (oculto)" : "Nao configurado")],
-      ["Webhook testes", isGestao ? (slackTestWebhookUrl ? "Configurado no banco (oculto)" : "Nao configurado") : (personalSlackTestWebhookUrl ? "Configurado localmente (oculto)" : "Nao configurado")]
+      ["Webhook Slack", (isGestao ? slackWebhookUrl : personalSlackWebhookUrl) ? "Configurado localmente (oculto)" : "Nao configurado"],
+      ["Webhook testes", (isGestao ? slackTestWebhookUrl : personalSlackTestWebhookUrl) ? "Configurado localmente (oculto)" : "Nao configurado"]
     ];
     if (isGestao) {
       rows.push(
@@ -1983,6 +2248,34 @@ export function SettingsWorkbench() {
     try {
       const payload = JSON.parse(await file.text());
       if (payload.schema !== "stark-hub-config") throw new Error("Arquivo de configuracao invalido.");
+      // "team-onboarding" e de proposito sem restricao de escopo/nivel de
+      // acesso — e o arquivo pensado pra ser mandado a qualquer colaborador
+      // novo, de qualquer papel, pra nao precisar digitar org/projeto/time/
+      // pipelines/webhook do zero.
+      if (payload.type === "team-onboarding") {
+        const azure = payload.azure || {};
+        const slack = payload.slack || {};
+        updateLocalAzureConnection({
+          azureOrgUrl: azure.orgUrl || "",
+          azureProject: azure.project || "",
+          azureTeam: azure.team || ""
+        });
+        setPipelineQaName(azure.pipelineQaName || "");
+        setPipelineBetaName(azure.pipelineBetaName || "");
+        if (isGestao) {
+          setSlackWebhookUrl(slack.webhookUrl || "");
+          setSlackTestWebhookUrl(slack.testWebhookUrl || "");
+          setSlackTestMode(Boolean(slack.testMode));
+          setSlackPrimaryWebhookName(slack.primaryWebhookName || "Canal principal");
+        } else {
+          setPersonalSlackWebhookUrl(slack.webhookUrl || "");
+          setPersonalSlackTestWebhookUrl(slack.testWebhookUrl || "");
+          setPersonalSlackTestMode(Boolean(slack.testMode));
+          setPersonalSlackPrimaryWebhookName(slack.primaryWebhookName || "Canal pessoal");
+        }
+        setPreview("Configuracao da equipe importada. Revise e clique em Salvar. Falta so colar seu PAT pessoal do Azure DevOps na tela de conexao.");
+        return;
+      }
       if (!isGestao && payload.scope !== profile?.accessLevel) throw new Error("Este arquivo pertence a outro nivel de acesso.");
       if (!isGestao && payload.type !== "personal-connections") throw new Error("Seu acesso permite importar somente conexoes pessoais.");
       if (payload.type === "personal-connections") {
@@ -2034,9 +2327,13 @@ export function SettingsWorkbench() {
   }
 
   function SettingsSection({ title, description, children, open = false }) {
+    const [isOpen, setIsOpen] = useState(Boolean(open));
     return (
-      <details className="mb-settings-accordion-card" open={open}>
-        <summary className="mb-settings-accordion-header">
+      <details className="mb-settings-accordion-card" open={isOpen}>
+        <summary
+          className="mb-settings-accordion-header"
+          onClick={(e) => { e.preventDefault(); setIsOpen((v) => !v); }}
+        >
           <span className="mb-settings-accordion-copy"><strong>{title}</strong><small>{description}</small></span>
           <span className="mb-settings-accordion-chevron" aria-hidden="true" />
         </summary>
@@ -2046,30 +2343,73 @@ export function SettingsWorkbench() {
   }
 
   return (
-    <section className="mbw-page mb-settings-page mb-settings-workbench">
-      <WorkbenchHeader
-        kicker="Produto"
-        title="Configuracoes"
-        subtitle={isGestao ? "Produto, funcionalidades, conexoes e Gestao." : "Conexoes pessoais do Azure, pipelines e Slack."}
-        demoMode={demoMode}
-        actions={<>{isGestao && <div className="mb-settings-scope"><FilterCombobox label="Escopo" options={[{ value: accessLevels.dev, label: "Dev" }, { value: accessLevels.qa, label: "QA" }, { value: accessLevels.gestao, label: "Gestao" }, { value: accessLevels.gerente, label: "Gerente" }]} values={[configScope]} multiple={false} onChange={(value) => setConfigScope(value || accessLevels.gestao)} /></div>}<Button onClick={() => importRef.current?.click()}><FiUpload /> Importar</Button><Button onClick={exportSettingsCsv}><FiDownload /> CSV</Button><Button onClick={exportConfig}><FiDownload /> Exportar</Button><Button onClick={previewSlack}><FiCopy /> Testar Slack</Button><Button onClick={saveSettings} tone="primary">{saving ? "Aplicando..." : "Aplicar"}</Button></>}
-      />
+    <section ref={settingsRef} className="mbw-page mb-settings-page mb-settings-workbench">
+      {/* determine if any draft differs from current state */}
+      {
+        (() => {
+          const flagsDirty = Object.entries(localFlags).some(([k, v]) => flags?.[k] !== v);
+          const notifDirty = notificationSoundsMutedDraft !== notificationSoundsMuted || Object.entries(notificationSoundPrefsDraft).some(([k, v]) => notificationSoundPrefs[k] !== v);
+          const anyDirty = (
+            productDraft !== productName ||
+            String(azureAutoRefreshDraft) !== String(azureAutoRefreshSeconds) ||
+            String(azureMaxItemsDraft) !== String(azureMaxItems) ||
+            iterationPatternDraft !== iterationPattern ||
+            pipelineQaDraft !== pipelineQaName ||
+            pipelineBetaDraft !== pipelineBetaName ||
+            slackTestModeDraft !== (isGestao ? slackTestMode : personalSlackTestMode) ||
+            slackPrimaryNameDraft !== (isGestao ? slackPrimaryWebhookName : personalSlackPrimaryWebhookName) ||
+            slackWebhookDraft !== (isGestao ? slackWebhookUrl : personalSlackWebhookUrl) ||
+            slackTestWebhookDraft !== (isGestao ? slackTestWebhookUrl : personalSlackTestWebhookUrl) ||
+            String(goalHoursDraft) !== String(goalHours) ||
+            flagsDirty || notifDirty
+          );
+          return (
+            <WorkbenchHeader
+              kicker="Produto"
+              title="Configuracoes"
+              subtitle={isGestao ? "Produto, funcionalidades, conexoes e Gestao." : "Conexoes pessoais do Azure, pipelines e Slack."}
+              demoMode={demoMode}
+              actions={<>
+                {isGestao && <div className="mb-settings-scope"><FilterCombobox label="Escopo" options={[{ value: accessLevels.dev, label: "Dev" }, { value: accessLevels.qa, label: "QA" }, { value: accessLevels.gestao, label: "Gestao" }, { value: accessLevels.gerente, label: "Gerente" }]} values={[configScope]} multiple={false} onChange={(value) => setConfigScope(value || accessLevels.gestao)} /></div>}
+                <Button onClick={() => importRef.current?.click()}><FiUpload /> Importar</Button>
+                <Button onClick={exportSettingsCsv}><FiDownload /> CSV</Button>
+                <Button onClick={exportConfig}><FiDownload /> Exportar</Button>
+                <Button onClick={exportTeamOnboardingConfig} title="Gera um arquivo com org/projeto/pipelines/webhook (sem PAT) pra mandar a qualquer colaborador novo"><FiDownload /> Config. p/ equipe</Button>
+                <Button onClick={previewSlack}><FiCopy /> Testar Slack</Button>
+                <Button onClick={applyAllAndSave} tone="primary" disabled={!anyDirty}>{saving ? "Aplicando..." : "Aplicar tudo"}</Button>
+                <Button onClick={cancelAllDrafts} disabled={!anyDirty}>Cancelar tudo</Button>
+              </>}
+            />
+          );
+        })()
+      }
       <input ref={importRef} type="file" accept="application/json" hidden onChange={importConfig} />
-      {saveStatus && <div className={`mb-settings-save-status ${saveStatus.type}`}><i className={`bi ${saveStatus.type === "error" ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill"}`} /> {saveStatus.message}</div>}
       <div className="mb-settings-grid">
         {isGestao && <SettingsSection title="Produto e funcionalidades" description="Identidade do produto e feature flags." open>
-          <label className="mb-form-row"><span>Nome do produto</span><input value={productName} onChange={(event) => setProductName(event.target.value)} /></label>
-          <label className="mb-form-row"><span>Intervalo de atualizacao automatica (segundos)</span><input type="number" min="0" step="10" value={azureAutoRefreshSeconds} onChange={(event) => setAzureAutoRefreshSeconds(event.target.value)} /></label>
+            <label className="mb-form-row"><span>Nome do produto</span><input value={productDraft} onChange={(event) => setProductDraft(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
+            <label className="mb-form-row"><span>Intervalo de atualizacao automatica (segundos)</span><input type="number" min="0" step="10" value={azureAutoRefreshDraft} onChange={(event) => setAzureAutoRefreshDraft(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
           <small className="mb-settings-note">Tempo entre cada atualizacao automatica do Quality Board e Meus itens. Use 0 para desativar o auto-reload.</small>
           <div className="mb-settings-subtitle">Funcionalidades</div>
           <div className="mb-featureflag-grid">
             {Object.entries(featureLabels).map(([key, [label, description]]) => (
               <label key={key} className="mb-switch-row">
                 <span><strong>{label}</strong><small>{description}</small></span>
-                <span className="mb-switch"><input type="checkbox" checked={isEnabled(key)} disabled={!isGestao} onChange={(event) => setFlag(key, event.target.checked)} /><span className="mb-switch-slider" /></span>
+                <span className="mb-switch"><input type="checkbox" checked={Boolean(localFlags?.[key])} disabled={!isGestao} onChange={(event) => setLocalFlags((prev) => ({ ...prev, [key]: event.target.checked }))} /><span className="mb-switch-slider" /></span>
               </label>
             ))}
           </div>
+          {(() => {
+            const dirty = productDraft !== productName || String(azureAutoRefreshDraft) !== String(azureAutoRefreshSeconds) || Object.entries(localFlags).some(([k, v]) => flags?.[k] !== v);
+            return (
+              dirty && (
+                <div className="mb-settings-actions" style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <Button tone="primary" onClick={applyProductSection}>Confirmar</Button>
+                  <Button onClick={cancelProductSection}>Cancelar</Button>
+                </div>
+              )
+            );
+          })()}
+          {/* success/error shown as toasts */}
         </SettingsSection>}
 
         <SettingsSection title={isGestao ? "Conexoes globais" : "Conexoes"} description={isGestao ? "Azure DevOps, pipelines e Slack compartilhados." : "Azure DevOps, pipelines e Slack locais deste usuario."} open={!isGestao}>
@@ -2083,35 +2423,78 @@ export function SettingsWorkbench() {
             <details className="mb-inner-accordion">
               <summary><span>Sincronizacao Azure</span><small>Escopo da busca de work items (todas as telas)</small></summary>
               <div className="mb-inner-accordion-body">
-                <label className="mb-form-row"><span>Limite de itens buscados</span><input type="number" min="100" step="100" value={azureMaxItems} onChange={(event) => setAzureMaxItems(event.target.value)} /></label>
-                <label className="mb-form-row"><span>Iteration pattern</span><input value={iterationPattern} onChange={(event) => setIterationPattern(event.target.value)} placeholder="MB Labs" /></label>
+                <label className="mb-form-row"><span>Limite de itens buscados</span><input type="number" min="100" step="100" value={azureMaxItemsDraft} onChange={(event) => setAzureMaxItemsDraft(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
+                <label className="mb-form-row"><span>Iteration pattern</span><input value={iterationPatternDraft} onChange={(event) => setIterationPatternDraft(event.target.value)} placeholder="MB Labs" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
                 <small className="mb-settings-note">Afeta Quality Board, Meus itens e Gestao — nao e especifico de nenhuma tela.</small>
+                {(() => {
+                  const dirty = String(azureMaxItemsDraft) !== String(azureMaxItems) || iterationPatternDraft !== iterationPattern;
+                  return dirty && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <Button tone="primary" onClick={applyConnectionsSection}>Confirmar</Button>
+                      <Button onClick={cancelConnectionsSection}>Cancelar</Button>
+                    </div>
+                  );
+                })()}
+                {/* status shown as toast */}
               </div>
             </details>
           )}
           <details className="mb-inner-accordion">
             <summary><span>Pipelines</span><small>Nomes das pipelines QA e BETA</small></summary>
             <div className="mb-inner-accordion-body">
-              <label className="mb-form-row"><span>Pipeline QA</span><input value={pipelineQaName} onChange={(event) => setPipelineQaName(event.target.value)} placeholder="Preencha nas configuracoes" /></label>
-              <label className="mb-form-row"><span>Pipeline BETA</span><input value={pipelineBetaName} onChange={(event) => setPipelineBetaName(event.target.value)} placeholder="Preencha nas configuracoes" /></label>
+              <label className="mb-form-row"><span>Pipeline QA</span><input value={pipelineQaDraft} onChange={(event) => setPipelineQaDraft(event.target.value)} placeholder="Preencha nas configuracoes" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
+              <label className="mb-form-row"><span>Pipeline BETA</span><input value={pipelineBetaDraft} onChange={(event) => setPipelineBetaDraft(event.target.value)} placeholder="Preencha nas configuracoes" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
               {!isGestao && <small className="mb-settings-note">Estas informacoes ficam salvas localmente no navegador deste usuario.</small>}
+              {(() => {
+                const dirty = pipelineQaDraft !== pipelineQaName || pipelineBetaDraft !== pipelineBetaName;
+                return dirty && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <Button tone="primary" onClick={applyPipelinesSection}>Confirmar</Button>
+                    <Button onClick={cancelPipelinesSection}>Cancelar</Button>
+                  </div>
+                );
+              })()}
+                {/* status shown as toast */}
             </div>
           </details>
           <details className="mb-inner-accordion">
             <summary><span>Slack</span><small>Webhook, teste e canal principal</small></summary>
             <div className="mb-inner-accordion-body">
-              <label className="mb-switch-row"><span><strong>Modo teste</strong><small>Usar webhook de teste quando disponivel</small></span><span className="mb-switch"><input type="checkbox" checked={isGestao ? slackTestMode : personalSlackTestMode} onChange={(event) => isGestao ? setSlackTestMode(event.target.checked) : setPersonalSlackTestMode(event.target.checked)} /><span className="mb-switch-slider" /></span></label>
-              <label className="mb-form-row"><span>Nome do canal principal</span><input value={isGestao ? slackPrimaryWebhookName : personalSlackPrimaryWebhookName} onChange={(event) => isGestao ? setSlackPrimaryWebhookName(event.target.value) : setPersonalSlackPrimaryWebhookName(event.target.value)} /></label>
-              <label className="mb-form-row"><span>Webhook principal</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={isGestao ? slackWebhookUrl : personalSlackWebhookUrl} onChange={(event) => isGestao ? setSlackWebhookUrl(event.target.value) : setPersonalSlackWebhookUrl(event.target.value)} placeholder="Cole o webhook nas configuracoes" /><button type="button" className={`mb-secret-toggle ${showSecrets ? "is-revealed" : ""}`} onClick={() => setShowSecrets((value) => !value)} /></div></label>
-              <label className="mb-form-row"><span>Webhook de teste</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={isGestao ? slackTestWebhookUrl : personalSlackTestWebhookUrl} onChange={(event) => isGestao ? setSlackTestWebhookUrl(event.target.value) : setPersonalSlackTestWebhookUrl(event.target.value)} placeholder="Cole o webhook de teste nas configuracoes" /><button type="button" className={`mb-secret-toggle ${showSecrets ? "is-revealed" : ""}`} onClick={() => setShowSecrets((value) => !value)} /></div></label>
+              <label className="mb-switch-row"><span><strong>Modo teste</strong><small>Usar webhook de teste quando disponivel</small></span><span className="mb-switch"><input type="checkbox" checked={slackTestModeDraft} onChange={(event) => setSlackTestModeDraft(event.target.checked)} /><span className="mb-switch-slider" /></span></label>
+              <label className="mb-form-row"><span>Nome do canal principal</span><input value={slackPrimaryNameDraft} onChange={(event) => setSlackPrimaryNameDraft(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
+              <label className="mb-form-row"><span>Webhook principal</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={slackWebhookDraft} onChange={(event) => setSlackWebhookDraft(event.target.value)} placeholder="Cole o webhook nas configuracoes" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /><button type="button" className={`mb-secret-toggle ${showSecrets ? "is-revealed" : ""}`} onClick={() => setShowSecrets((value) => !value)} /></div></label>
+              <label className="mb-form-row"><span>Webhook de teste</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={slackTestWebhookDraft} onChange={(event) => setSlackTestWebhookDraft(event.target.value)} placeholder="Cole o webhook de teste nas configuracoes" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /><button type="button" className={`mb-secret-toggle ${showSecrets ? "is-revealed" : ""}`} onClick={() => setShowSecrets((value) => !value)} /></div></label>
               {!isGestao && <small className="mb-settings-note">Webhooks pessoais ficam somente no localStorage deste navegador.</small>}
+              {(() => {
+                const dirty = slackTestModeDraft !== (isGestao ? slackTestMode : personalSlackTestMode)
+                  || slackPrimaryNameDraft !== (isGestao ? slackPrimaryWebhookName : personalSlackPrimaryWebhookName)
+                  || slackWebhookDraft !== (isGestao ? slackWebhookUrl : personalSlackWebhookUrl)
+                  || slackTestWebhookDraft !== (isGestao ? slackTestWebhookUrl : personalSlackTestWebhookUrl);
+                return dirty && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <Button tone="primary" onClick={applySlackSection}>Confirmar</Button>
+                    <Button onClick={cancelSlackSection}>Cancelar</Button>
+                  </div>
+                );
+              })()}
+              {/* status shown as toast */}
             </div>
           </details>
         </SettingsSection>
 
         {isGestao && <SettingsSection title="Gestao" description="Meta padrao de horas usada quando um colaborador nao tem meta propria.">
           <div className="mb-governance-grid">
-            <label className="mb-form-row"><span>Meta padrao de horas</span><input type="number" min="0" step="0.5" value={goalHours} onChange={(event) => setGoalHours(event.target.value)} /></label>
+            <label className="mb-form-row"><span>Meta padrao de horas</span><input type="number" min="0" step="0.5" value={goalHoursDraft} onChange={(event) => setGoalHoursDraft(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
+            {(() => {
+              const dirty = String(goalHoursDraft) !== String(goalHours);
+              return dirty && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <Button tone="primary" onClick={applyGovernanceSection}>Confirmar</Button>
+                  <Button onClick={cancelGovernanceSection}>Cancelar</Button>
+                </div>
+              );
+            })()}
+            {/* status shown as toast */}
           </div>
           <small className="mb-settings-note">Periodo, limite de itens e sprint agora sao filtros dentro da propria tela de Gestao da equipe, nao configuracoes globais.</small>
         </SettingsSection>}
@@ -2119,19 +2502,29 @@ export function SettingsWorkbench() {
         <SettingsSection title="Notificacoes sonoras" description="Escolha o som de cada notificacao ou desative por completo. Preferencia individual, salva neste navegador.">
           <label className="mb-switch-row">
             <span><strong>Silenciar todas</strong><small>Desliga qualquer som de notificacao para este usuario</small></span>
-            <span className="mb-switch"><input type="checkbox" checked={notificationSoundsMuted} onChange={(event) => setNotificationSoundsMuted(event.target.checked)} /><span className="mb-switch-slider" /></span>
+            <span className="mb-switch"><input type="checkbox" checked={notificationSoundsMutedDraft} onChange={(event) => setNotificationSoundsMutedDraft(event.target.checked)} /><span className="mb-switch-slider" /></span>
           </label>
           <div className="mb-notification-sound-grid">
             {notificationTypes.map(({ key, label, description }) => (
               <div key={key} className="mb-notification-sound-row">
                 <span><strong>{label}</strong><small>{description}</small></span>
-                <select value={notificationSoundPrefs[key]} disabled={notificationSoundsMuted} onChange={(event) => setNotificationSoundPrefs((current) => ({ ...current, [key]: event.target.value }))}>
+                <select value={notificationSoundPrefsDraft[key]} disabled={notificationSoundsMutedDraft} onChange={(event) => setNotificationSoundPrefsDraft((current) => ({ ...current, [key]: event.target.value }))}>
                   {soundOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
-                <Button onClick={() => playTone(notificationSoundPrefs[key])} disabled={notificationSoundsMuted || notificationSoundPrefs[key] === "none"}>Testar</Button>
+                <Button onClick={() => playTone(notificationSoundPrefsDraft[key])} disabled={notificationSoundsMutedDraft || notificationSoundPrefsDraft[key] === "none"}>Testar</Button>
               </div>
             ))}
           </div>
+          {(() => {
+            const dirty = notificationSoundsMutedDraft !== notificationSoundsMuted || Object.entries(notificationSoundPrefsDraft).some(([k, v]) => notificationSoundPrefs[k] !== v);
+            return dirty && (
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <Button tone="primary" onClick={applyNotificationsSection}>Confirmar</Button>
+                <Button onClick={cancelNotificationsSection}>Cancelar</Button>
+              </div>
+            );
+          })()}
+          {/* status shown as toast */}
         </SettingsSection>
         {preview && <pre className="mb-settings-preview">{preview}</pre>}
       </div>

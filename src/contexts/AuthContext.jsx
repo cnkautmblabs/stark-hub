@@ -2,6 +2,25 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from "
 import { supabase, isSupabaseConfigured } from "../lib/supabaseClient.js";
 import { isDomainAllowed, accessLevels } from "../utils/constants.js";
 import { mockProfiles } from "../utils/mockData.js";
+import { readPersonalSettings, writePersonalSettings } from "../utils/personalSettings.js";
+
+// Campos da conexão Azure DevOps (PAT, org, projeto, time). Isso é uma
+// credencial pessoal — nunca deve ir para o banco (RLS ou não, um PAT em
+// texto puro em Postgres é um risco real caso o banco vaze). Fica só no
+// localStorage deste navegador, por perfil, e é mesclado aqui em cima do
+// `profile` vindo do Supabase para que todo o resto do app continue lendo
+// `profile.azurePat`/`azureOrgUrl`/etc sem precisar saber de onde vem.
+const AZURE_CONNECTION_KEYS = ["azureOrgUrl", "azureProject", "azureTeam", "azurePat", "azureVerifiedAt"];
+
+function mergeLocalAzureConnection(profile, user) {
+  if (!profile) return profile;
+  const local = readPersonalSettings(profile, user);
+  const azure = {};
+  AZURE_CONNECTION_KEYS.forEach((key) => {
+    if (local[key] !== undefined) azure[key] = local[key];
+  });
+  return { ...profile, ...azure };
+}
 
 const AuthContext = createContext(null);
 
@@ -129,6 +148,20 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }
 
+  // Contador incrementado a cada gravação local da conexão Azure — o único
+  // motivo de existir é forçar o `useMemo` do value a recalcular
+  // `effectiveProfile` (que lê do localStorage) mesmo sem o `profile` do
+  // Supabase ter mudado.
+  const [azureConnectionVersion, setAzureConnectionVersion] = useState(0);
+
+  // PAT/org/projeto/time do Azure DevOps: nunca vão para o Supabase (ver
+  // AzureConnectionForm.jsx) — gravados só no localStorage deste navegador.
+  function updateLocalAzureConnection(patch) {
+    writePersonalSettings(profile, session?.user, patch);
+    setAzureConnectionVersion((v) => v + 1);
+    return { data: mergeLocalAzureConnection(profile, session?.user), error: null };
+  }
+
   async function signInWithGoogle() {
     if (!isSupabaseConfigured) return;
     sessionStorage.setItem(OAUTH_PENDING_KEY, "1");
@@ -164,7 +197,7 @@ export function AuthProvider({ children }) {
     return { data, error };
   }
 
-  const effectiveProfile = demoMode ? mockProfiles[demoRole] : profile;
+  const effectiveProfile = demoMode ? mockProfiles[demoRole] : mergeLocalAzureConnection(profile, session?.user);
 
   const value = useMemo(
     () => ({
@@ -179,10 +212,12 @@ export function AuthProvider({ children }) {
       signInWithGoogle,
       signOut,
       updateProfile,
+      updateLocalAzureConnection,
       reloadProfile: () => session?.user && loadProfile(session.user.id),
       oauthError
     }),
-    [session, profile, loading, demoMode, demoRole, effectiveProfile, oauthError]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [session, profile, loading, demoMode, demoRole, effectiveProfile, oauthError, azureConnectionVersion]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

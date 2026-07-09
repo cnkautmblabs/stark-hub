@@ -4,6 +4,9 @@
 // Configuracoes), nao em app_settings (que e compartilhado/gerido pela
 // Gestao). Os sons sao sintetizados via Web Audio API — sem precisar de
 // arquivos de audio.
+import { readPersonalSetting, writePersonalSetting } from "./personalSettings.js";
+
+export { readPersonalSetting, writePersonalSetting };
 
 export const notificationTypes = [
   { key: "newItem", label: "Novo item detectado", description: "Quando um work item novo aparece no board." },
@@ -24,31 +27,6 @@ const tonePatterns = {
   chime: [{ freq: 660, duration: 0.1 }, { freq: 990, duration: 0.16 }],
   alert: [{ freq: 440, duration: 0.09 }, { freq: 440, duration: 0.09 }, { freq: 440, duration: 0.14 }]
 };
-
-function personalSettingsKey(profile, user) {
-  return `starkHubPersonalConnections:${profile?.id || user?.email || "anonymous"}`;
-}
-
-export function readPersonalSetting(profile, user, key, fallback) {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const data = JSON.parse(window.localStorage.getItem(personalSettingsKey(profile, user)) || "{}");
-    return data[key] ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-export function writePersonalSetting(profile, user, key, value) {
-  if (typeof window === "undefined") return;
-  let current = {};
-  try {
-    current = JSON.parse(window.localStorage.getItem(personalSettingsKey(profile, user)) || "{}");
-  } catch {
-    current = {};
-  }
-  window.localStorage.setItem(personalSettingsKey(profile, user), JSON.stringify({ ...current, [key]: value }));
-}
 
 export function playTone(sound) {
   const pattern = tonePatterns[sound];

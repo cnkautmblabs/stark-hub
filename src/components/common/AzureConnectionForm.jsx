@@ -6,7 +6,7 @@ import { normalizeAzureOrgUrl } from "../../utils/azure.js";
 const DEFAULT_ORG_URL = "https://dev.azure.com/cinemarkintl";
 
 export default function AzureConnectionForm({ onSuccess, submitLabel = "Testar e salvar" }) {
-  const { profile, updateProfile } = useAuth();
+  const { profile, updateLocalAzureConnection } = useAuth();
   const [orgUrl, setOrgUrl] = useState(profile?.azureOrgUrl || DEFAULT_ORG_URL);
   const [project, setProject] = useState(profile?.azureProject || "");
   const [team, setTeam] = useState(profile?.azureTeam || "");
@@ -36,17 +36,16 @@ export default function AzureConnectionForm({ onSuccess, submitLabel = "Testar e
         return;
       }
 
-      const { error: saveError } = await updateProfile({
+      // PAT/org/projeto/time ficam só no localStorage deste navegador — nunca
+      // no Supabase (ver AuthContext.jsx updateLocalAzureConnection). Cada
+      // colaborador reconecta com o próprio PAT em qualquer navegador novo.
+      updateLocalAzureConnection({
         azureOrgUrl: orgUrl,
         azureProject: project,
         azureTeam: team,
         azurePat: effectivePat,
         azureVerifiedAt: new Date().toISOString()
       });
-      if (saveError) {
-        setStatus({ type: "error", message: `Conexão validada, mas houve erro ao salvar: ${saveError.message}` });
-        return;
-      }
 
       setStatus({ type: "success", message: `Conectado ao projeto "${data.projectName}" com sucesso.` });
       onSuccess?.();
