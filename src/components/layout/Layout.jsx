@@ -3,7 +3,9 @@ import { Link, Outlet } from "react-router-dom";
 import { FiLogOut, FiUser } from "react-icons/fi";
 import Sidebar from "./Sidebar.jsx";
 import { useAuth } from "../../contexts/AuthContext.jsx";
+import { useCollaborators } from "../../hooks/useCollaborators.js";
 import { accessLevelLabels, accessLevels } from "../../utils/constants.js";
+import { normalize } from "../../utils/workbench/formatters.js";
 import { IdentityAvatar } from "../workbench/ui/WorkbenchPrimitives.jsx";
 
 function MBLabsMark() {
@@ -20,8 +22,14 @@ export default function Layout() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("starkHubSidebarCollapsed") === "1");
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const { profile, user, demoMode, signOut } = useAuth();
+  const { collaborators } = useCollaborators();
   const displayName = profile?.displayName || profile?.fullName || user?.email || "Stark Hub";
   const email = profile?.email || user?.email || (demoMode ? "modo.demo@starkhub.local" : "");
+  const profileCollaborator = collaborators.find((person) => person.profileId === profile?.id)
+    || collaborators.find((person) => person.email && email && normalize(person.email) === normalize(email))
+    || collaborators.find((person) => normalize(person.azureName) && normalize(person.azureName) === normalize(displayName));
+  const avatarUrl = profileCollaborator?.imageUrl || profileCollaborator?.avatarUrl || profileCollaborator?.linkedProfile?.avatarUrl || profile?.avatarUrl || "";
+  const avatarColor = profileCollaborator?.color || profile?.color;
   const isAdmin = Boolean(profile?.isAdmin || profile?.accessLevel === accessLevels.admin);
   const accessLabel = isAdmin && profile?.accessLevel && profile?.accessLevel !== accessLevels.admin
     ? `${accessLevelLabels[profile.accessLevel] || profile.accessLevel} (Admin)`
@@ -51,7 +59,7 @@ export default function Layout() {
           </div>
           <div className="stark-user-menu-wrap">
             <button type="button" className="stark-user-menu-trigger" onClick={() => setUserMenuOpen((value) => !value)} aria-expanded={userMenuOpen}>
-              <IdentityAvatar name={displayName} imageUrl={profile?.avatarUrl} color={profile?.color} accessLevel={profile?.accessLevel} size={36} />
+              <IdentityAvatar name={displayName} imageUrl={avatarUrl} color={avatarColor} accessLevel={profile?.accessLevel} size={36} />
               <span className="stark-user-menu-text">
                 <strong>{displayName}</strong>
                 <small>{email}</small>

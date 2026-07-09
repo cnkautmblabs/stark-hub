@@ -38,6 +38,7 @@ import { useCollaborators } from "../../hooks/useCollaborators.js";
 import { useTestEvidence } from "../../hooks/useTestEvidence.js";
 import { useAppSettings } from "../../hooks/useAppSettings.js";
 import { usePersistentState } from "../../hooks/usePersistentState.js";
+import { usePersistentActiveWorkItem } from "../../hooks/usePersistentActiveWorkItem.js";
 import { consumePendingWorkItemHighlight, highlightWorkItem, readWorkItemHash } from "../../utils/workbench/highlight.js";
 import { notificationTypes, playTone, readPersonalSetting as readNotificationSetting, soundOptions, writePersonalSetting as writeNotificationSetting } from "../../utils/notificationSounds.js";
 import {
@@ -316,9 +317,9 @@ export function QaBoardWorkbench() {
   const [iterationTo, setIterationTo] = usePersistentState("starkHubFilters:qaBoard:iterationTo", "");
   const [sort, setSort] = usePersistentState("starkHubFilters:qaBoard:sort", "changed_desc");
   const [expandedIds, setExpandedIds] = useState(() => new Set());
-  const [chartsCollapsed, setChartsCollapsed] = useState(false);
+  const [chartsCollapsed, setChartsCollapsed] = usePersistentState("starkHubFilters:qaBoard:chartsCollapsed", false);
   const [newItem, setNewItem] = useState({ type: "Bug", country: "BR", title: "", state: "In QA" });
-  const [activeItem, setActiveItem] = useState(null);
+  const { activeItem, openItem: setActiveItem, closeItem: closeActiveItem } = usePersistentActiveWorkItem("starkHubActiveWorkItem:qaBoard", items);
 
   const byId = useMemo(() => new Map(collaborators.map((person) => [person.id, person])), [collaborators]);
   const devPeople = collaborators.filter((person) => person.isDev);
@@ -710,20 +711,20 @@ export function QaBoardWorkbench() {
       {activeItem && (
         <ErrorBoundary
           fallback={(error) => (
-            <div className="mbaz-new-modal-overlay" onClick={() => setActiveItem(null)}>
+            <div className="mbaz-new-modal-overlay">
               <div className="stark-error-boundary" onClick={(event) => event.stopPropagation()}>
                 <strong>Nao foi possivel abrir este Work Item.</strong>
                 <p>{error?.message || "Erro desconhecido ao renderizar o modal."}</p>
-                <button type="button" onClick={() => setActiveItem(null)}>Fechar</button>
+                <button type="button" onClick={closeActiveItem}>Fechar</button>
               </div>
             </div>
           )}
         >
           <AzureWorkItemModal
             profile={profile}
-            item={items.find((entry) => entry.id === activeItem.id) || activeItem}
+            item={activeItem}
             evidence={evidence}
-            onClose={() => setActiveItem(null)}
+            onClose={closeActiveItem}
             onTestResult={(item, patch) => updateItem(item.id, patch)}
             onUpdateItem={(patch) => updateItem(activeItem.id, patch)}
           />
@@ -755,7 +756,7 @@ export function MyItemsWorkbench() {
   const [viewMode, setViewMode] = usePersistentState("starkHubFilters:myItems:viewMode", "list");
   const [fullscreen, setFullscreen] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
-  const [activeItem, setActiveItem] = useState(null);
+  const { activeItem, openItem: setActiveItem, closeItem: closeActiveItem } = usePersistentActiveWorkItem("starkHubActiveWorkItem:myItems", items);
   const [hoursTarget, setHoursTarget] = useState(null);
   const [workedHours, setWorkedHours] = useState("");
   const [hoursError, setHoursError] = useState("");
@@ -1075,20 +1076,20 @@ export function MyItemsWorkbench() {
       {activeItem && (
         <ErrorBoundary
           fallback={(error) => (
-            <div className="mbaz-new-modal-overlay" onClick={() => setActiveItem(null)}>
+            <div className="mbaz-new-modal-overlay">
               <div className="stark-error-boundary" onClick={(event) => event.stopPropagation()}>
                 <strong>Nao foi possivel abrir este Work Item.</strong>
                 <p>{error?.message || "Erro desconhecido ao renderizar o modal."}</p>
-                <button type="button" onClick={() => setActiveItem(null)}>Fechar</button>
+                <button type="button" onClick={closeActiveItem}>Fechar</button>
               </div>
             </div>
           )}
         >
           <AzureWorkItemModal
             profile={profile}
-            item={items.find((entry) => entry.id === activeItem.id) || activeItem}
+            item={activeItem}
             evidence={evidence}
-            onClose={() => setActiveItem(null)}
+            onClose={closeActiveItem}
             onTestResult={(item, patch) => updateItem(item.id, patch)}
             onUpdateItem={(patch) => updateItem(activeItem.id, patch)}
           />
@@ -1763,7 +1764,7 @@ export function SettingsWorkbench() {
   const [personalSlackTestWebhookUrl, setPersonalSlackTestWebhookUrl] = useState(() => readPersonalSetting("slackTestWebhookUrl", ""));
   const [personalSlackTestMode, setPersonalSlackTestMode] = useState(() => Boolean(readPersonalSetting("slackTestMode", false)));
   const [personalSlackPrimaryWebhookName, setPersonalSlackPrimaryWebhookName] = useState(() => readPersonalSetting("slackPrimaryWebhookName", "Canal pessoal"));
-  const [configScope, setConfigScope] = useState(profile?.accessLevel || accessLevels.dev);
+  const [configScope, setConfigScope] = usePersistentState("starkHubFilters:settings:configScope", profile?.accessLevel || accessLevels.dev);
   const [showSecrets, setShowSecrets] = useState(false);
   const [saving, setSaving] = useState("");
   const [preview, setPreview] = useState("");

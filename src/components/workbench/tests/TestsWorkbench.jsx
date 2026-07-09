@@ -4,6 +4,7 @@ import { useAuth } from "../../../contexts/AuthContext.jsx";
 import { useTestEvidence } from "../../../hooks/useTestEvidence.js";
 import { useWorkItems } from "../../../hooks/useWorkItems.js";
 import { usePersistentState } from "../../../hooks/usePersistentState.js";
+import { usePersistentActiveWorkItem } from "../../../hooks/usePersistentActiveWorkItem.js";
 import { compactSprintLabel, findCurrentSprint } from "../../../utils/sprints.js";
 import {
   evidenceDateRangeForPreset,
@@ -37,7 +38,7 @@ export function TestsWorkbench() {
   const [dateFrom, setDateFrom] = usePersistentState("starkHubFilters:tests:dateFrom", initialRange.from);
   const [dateTo, setDateTo] = usePersistentState("starkHubFilters:tests:dateTo", initialRange.to);
   const [viewMode, setViewMode] = usePersistentState("starkHubFilters:tests:viewMode", "list");
-  const [activeItem, setActiveItem] = useState(null);
+  const { activeItem, openItem: setActiveItem, closeItem: closeActiveItem } = usePersistentActiveWorkItem("starkHubActiveWorkItem:tests", items);
   const byId = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
   const discussionRecords = items.flatMap((item) => (item.discussionEvidence || []).filter(isQaEvidenceEntry).map((entry) => ({
     ...entry,
@@ -191,7 +192,7 @@ export function TestsWorkbench() {
           {!groupedRows.length && <EmptyState title={loading ? "Consultando evidencias..." : "Nenhuma evidencia encontrada"} />}
         </div>
       </div>
-      {activeItem && <AzureWorkItemModal profile={profile} item={activeItem} onClose={() => setActiveItem(null)} />}
+      {activeItem && <AzureWorkItemModal profile={profile} item={activeItem} onClose={closeActiveItem} />}
     </section>
   );
 }

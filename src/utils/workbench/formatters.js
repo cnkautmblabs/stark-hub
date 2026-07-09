@@ -1,7 +1,18 @@
 export const evidenceEnvironmentOrder = ["DEV", "QA", "BETA", "PROD"];
 
+// Remove acentos e normaliza espacos alem de minusculizar — o nome do
+// assignee que vem do Azure DevOps e o azureName cadastrado no Stark Hub
+// podem ter o MESMO nome com acentuacao unicode composta de formas
+// diferentes (NFC x NFD) ou variar em "João" x "Joao", o que fazia o
+// indice de colaboradores nao bater e o assignee sumir do FYI mesmo
+// existindo um colaborador cadastrado com aquele nome.
 export function normalize(value) {
-  return String(value || "").toLowerCase();
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
 // Nome de uma pessoa pode aparecer em ordens diferentes entre Azure/Slack

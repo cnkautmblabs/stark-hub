@@ -5321,6 +5321,16 @@ body {
   display: grid;
   gap: 2px;
 }
+.mbaz-meta-created-by {
+  display: grid;
+  gap: 2px;
+}
+.mbaz-meta-created-author {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .mbaz-new-modal-meta-strip span {
   color: #64748b;
   font-size: 10px;
@@ -5771,17 +5781,65 @@ body {
 :root[data-theme="dark"] .mbaz-new-modal-fallback,
 :root[data-theme="dark"] .mbaz-new-modal-fallback button,
 :root[data-theme="dark"] .mbaz-new-modal-try-frame,
-:root[data-theme="dark"] .mbaz-new-modal-direct {
+:root[data-theme="dark"] .mbaz-new-modal-direct,
+:root[data-theme="dark"] .mbaz-new-modal-body,
+:root[data-theme="dark"] .mbaz-new-modal-workitem,
+:root[data-theme="dark"] .mbaz-new-modal-workitem-main,
+:root[data-theme="dark"] .mbaz-new-modal-meta-strip,
+:root[data-theme="dark"] .mbaz-new-modal-essential,
+:root[data-theme="dark"] .mbaz-new-modal-result-history,
+:root[data-theme="dark"] .mbaz-new-modal-result-list li,
+:root[data-theme="dark"] .mbaz-new-modal-result-list.single,
+:root[data-theme="dark"] .mbaz-new-modal-result-chip,
+:root[data-theme="dark"] .mbaz-new-modal-inline-tags > span,
+:root[data-theme="dark"] .mbaz-new-modal-inline-tags > em,
+:root[data-theme="dark"] .mbaz-new-modal-country-row > span:not(.mbw-country-visual),
+:root[data-theme="dark"] .mbaz-new-modal-tags span,
+:root[data-theme="dark"] .mbaz-new-modal-workitem-grid div,
+:root[data-theme="dark"] .mbaz-new-modal-description,
+:root[data-theme="dark"] .mbaz-new-modal-collapse,
+:root[data-theme="dark"] .mbaz-new-modal-collapse > summary,
+:root[data-theme="dark"] .mbaz-new-modal-rich-html,
+:root[data-theme="dark"] .mbaz-new-modal-discussions article,
+:root[data-theme="dark"] .mbaz-new-modal-fallback,
+:root[data-theme="dark"] .mbaz-new-modal-direct,
+:root[data-theme="dark"] .mbaz-new-modal-try-frame {
   background: #111827;
   color: #e5e7eb;
   border-color: #334155;
 }
 :root[data-theme="dark"] .mbaz-new-modal-title,
-:root[data-theme="dark"] .mbaz-new-modal-direct strong {
+:root[data-theme="dark"] .mbaz-new-modal-direct strong,
+:root[data-theme="dark"] .mbaz-new-modal-meta-strip span,
+:root[data-theme="dark"] .mbaz-new-modal-meta-strip strong,
+:root[data-theme="dark"] .mbaz-new-modal-workitem-grid span,
+:root[data-theme="dark"] .mbaz-new-modal-workitem-grid strong,
+:root[data-theme="dark"] .mbaz-new-modal-description summary,
+:root[data-theme="dark"] .mbaz-new-modal-collapse > summary span,
+:root[data-theme="dark"] .mbaz-new-modal-description summary {
   color: #f8fafc;
 }
 :root[data-theme="dark"] .mbaz-new-modal-direct p,
 :root[data-theme="dark"] .mbaz-new-modal-fallback {
+  color: #94a3b8;
+}
+:root[data-theme="dark"] .mbaz-new-modal-rich-html,
+:root[data-theme="dark"] .mbaz-new-modal-result-chip,
+:root[data-theme="dark"] .mbaz-new-modal-result-list li,
+:root[data-theme="dark"] .mbaz-new-modal-description-block,
+:root[data-theme="dark"] .mbaz-new-modal-discussions article {
+  background: #111827;
+}
+:root[data-theme="dark"] .mbaz-new-modal-rich-html a,
+:root[data-theme="dark"] .mbaz-new-modal-workitem-grid a,
+:root[data-theme="dark"] .mbaz-new-modal-description-block strong {
+  color: #93c5fd;
+}
+:root[data-theme="dark"] .mbaz-new-modal-muted,
+:root[data-theme="dark"] .mbaz-new-modal-result-date,
+:root[data-theme="dark"] .mbaz-new-modal-section-title span,
+:root[data-theme="dark"] .mbaz-new-modal-fallback,
+:root[data-theme="dark"] .mbaz-new-modal-direct p {
   color: #94a3b8;
 }
 @media (max-width: 900px) {
@@ -7680,6 +7738,22 @@ body {
 :root[data-theme="dark"] .mb-my-filter-heading strong {
   color: #f8fafc;
 }
+:root[data-theme="dark"] .mb-my-item-title-link {
+  color: #f8fafc;
+}
+:root[data-theme="dark"] .mb-my-item-status,
+:root[data-theme="dark"] .mb-country-pill,
+:root[data-theme="dark"] .mb-my-item-tags span,
+:root[data-theme="dark"] .mb-my-item-meta,
+:root[data-theme="dark"] .mb-my-source-pill,
+:root[data-theme="dark"] .mb-my-source-pill.qa-responsavel,
+:root[data-theme="dark"] .mb-my-source-pill.qa-testado,
+:root[data-theme="dark"] .mb-my-item-test-summary span,
+:root[data-theme="dark"] .mb-my-item-test-summary strong {
+  background: #1f2937;
+  color: #e5e7eb;
+  border-color: #334155;
+}
 :root[data-theme="dark"] .mb-my-summary-card-kpis small,
 :root[data-theme="dark"] .mb-my-summary-hour-kpis small,
 :root[data-theme="dark"] .mb-my-item-meta,
@@ -8614,6 +8688,9 @@ body {
 }
 .mb-my-items-content {
   background: #f4f7fb;
+}
+:root[data-theme="dark"] .mb-my-items-content {
+  background: var(--starkBg);
 }
 @media (max-width: 1180px) {
   .mb-my-summary-top,

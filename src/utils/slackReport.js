@@ -1,4 +1,4 @@
-import { countries as countryCatalog, environments as environmentCatalog } from "./constants.js";
+import { countries as countryCatalog, environments as environmentCatalog, formatWorkItemCode } from "./constants.js";
 
 // Mensagens no formato usado pelo stark-hub-script (referencia visual/textual
 // enviada pelo usuario): tags de emoji por tipo de work item (:bug-tag:,
@@ -150,7 +150,11 @@ function slackCountryLabels(countries = []) {
 function slackWorkItemLine(item, includeTitle = true) {
   if (!item?.id) return "";
   const link = item.url || "";
-  const text = `${item.id}${includeTitle && item.title ? ` - ${item.title}` : ""}`;
+  // Codigo com prefixo de tipo (ex.: "EPIC35055") direto no texto enviado ao
+  // Slack — pedido explicito do usuario apos ver o numero cru na previa e
+  // desconfiar que o envio real tambem estava sem o tipo do work item.
+  const code = formatWorkItemCode(item.id, item.type);
+  const text = `${code}${includeTitle && item.title ? ` - ${item.title}` : ""}`;
   return `${workItemSlackTag(item.type)} ${link ? `<${link}|${escapeSlackLinkText(text)}>` : escapeSlackLinkText(text)}`;
 }
 

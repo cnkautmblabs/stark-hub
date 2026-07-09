@@ -75,6 +75,9 @@ export function writeApiCache(key, data, signature = stableSignature(data)) {
       // Quota/localStorage disabled: memory cache still keeps navigation fast.
     }
   }
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("starkHubApiCacheWrite", { detail: { key, entry } }));
+  }
   return entry;
 }
 

@@ -450,7 +450,7 @@ export function WorkbenchCardSkeleton({ rows = 4, mode = "list", className = "" 
 export function WorkItemCard({ item, assignee, qa, compact = false, children }) {
   const typeStyle = workItemTypes[item.type] || {};
   return (
-    <article className={`mbaz-card ${compact ? "compact" : ""}`} style={{ "--type-color": typeStyle.color || "#64748b", "--wi-type-color": typeStyle.color || "#64748b", "--wi-type-bg": typeStyle.background || "#f8fafc" }}>
+    <article className={`mbaz-card ${compact ? "compact" : ""}`} data-id={item.id} data-work-item-id={item.id} style={{ "--type-color": typeStyle.color || "#64748b", "--wi-type-color": typeStyle.color || "#64748b", "--wi-type-bg": typeStyle.background || "#f8fafc" }}>
       <div className="mbaz-card-top">
         <div className="mbaz-card-title">
           <TypeBadge type={item.type} />

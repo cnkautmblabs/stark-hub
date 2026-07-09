@@ -146,6 +146,10 @@ export function useWorkItems({ includeClosed = false } = {}) {
     const cached = readApiCache(cacheKey, WORK_ITEMS_CACHE_TTL_MS);
     if (cached?.data?.length || cached?.data) {
       if (!hasLoadedRef.current) setItems(cached.data);
+      if (!includeClosed && Array.isArray(cached.data) && !previousStateByIdRef.current) {
+        previousStateByIdRef.current = new Map(cached.data.map((item) => [item.id, String(item.state || "").toLowerCase()]));
+        previousUpdatedByIdRef.current = new Map(cached.data.map((item) => [item.id, String(item.updatedAt || item.changedDate || item.changedAt || "")]));
+      }
       hasLoadedRef.current = true;
       setLoading(false);
       if (!force && cached.fresh) return;
@@ -294,7 +298,16 @@ export function useWorkItems({ includeClosed = false } = {}) {
         });
         if (data?.ok && data.url) attachmentUrls.push(data.url);
       }
-      const fyiPeople = collaborators.filter((person) => person.fixedMention || person.isFyiFixed || person.fyiFixed || person.fixedFyi);
+      // Dois tipos de FYI fixo: sempre (fixedMention) e so quando o
+      // resultado e Fail/Limitation (fixedMentionOnFailure) — pedido
+      // explicito do usuario pra avisar certas pessoas so quando algo da
+      // errado, sem poluir o FYI de resultados Approved.
+      const isFailureResult = patch.lastTestResult === "fail" || patch.lastTestResult === "limitation";
+      const fyiPeople = collaborators.filter((person) => {
+        if (person.fixedMention || person.isFyiFixed || person.fyiFixed || person.fixedFyi) return true;
+        if (isFailureResult && person.fixedMentionOnFailure) return true;
+        return false;
+      });
       // Nome exato so bate quando o Azure exibe o assignee EXATAMENTE igual
       // ao azureName cadastrado — indice por nome cobre aliases/slackName/
       // variacoes de ordem, pra nao perder o assignee (e a mencao dele no

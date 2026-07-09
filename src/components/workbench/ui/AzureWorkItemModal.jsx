@@ -7,6 +7,9 @@ import { buildLegacyQaResultSlackText, buildQaResultDiscussionHtml, legacyMentio
 import { buildCollaboratorNameIndex, evidenceDedupeKey, evidenceEnvironmentOrder, evidenceEnvironments, evidenceResultInfo, findCollaboratorByName, isQaEvidenceEntry } from "../../../utils/workbench/formatters.js";
 import { useCollaborators } from "../../../hooks/useCollaborators.js";
 import { CountryVisual, EnvBadge, IdentityAvatar, QaPicker, ResultBadge, TypeBadge, envIconSrc, typeIconSrc } from "./WorkbenchPrimitives.jsx";
+import { buildApiCacheKey, readApiCache, stableSignature, withInflight, writeApiCache } from "../../../utils/localApiCache.js";
+
+const WORK_ITEM_DETAIL_CACHE_TTL_MS = 2 * 60 * 1000;
 
 export function workItemUrl(profile, item) {
   return item.url || azureWorkItemUrl(profile?.azureOrgUrl, profile?.azureProject, item.id);
@@ -222,6 +225,7 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
   const [liveDiscussionEvidence, setLiveDiscussionEvidence] = useState(null);
   const [discussionsLoading, setDiscussionsLoading] = useState(false);
   const azureReady = Boolean(profile?.azureOrgUrl && profile?.azureProject && profile?.azurePat);
+  const detailCacheKey = buildApiCacheKey("workItemDetail", profile?.id || profile?.email || "anonymous", profile?.azureOrgUrl, profile?.azureProject, item?.id);
 
   // As discussions que vem junto do fetch em lote do board (item.discussions)
   // sao best-effort e frequentemente vazias em boards grandes (ver
@@ -231,21 +235,33 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
   useEffect(() => {
     if (!azureReady || !item?.id || !isSupabaseConfigured) return;
     let cancelled = false;
-    setDiscussionsLoading(true);
-    supabase.functions.invoke("azureWorkItemDetail", {
+    const cached = readApiCache(detailCacheKey, WORK_ITEM_DETAIL_CACHE_TTL_MS);
+    if (cached?.data) {
+      setLiveDiscussions(cached.data.discussions || []);
+      setLiveDiscussionEvidence(cached.data.discussionEvidence || []);
+      if (cached.fresh) return () => { cancelled = true; };
+    } else {
+      setDiscussionsLoading(true);
+    }
+    withInflight(detailCacheKey, () => supabase.functions.invoke("azureWorkItemDetail", {
       body: { orgUrl: profile.azureOrgUrl, project: profile.azureProject, pat: profile.azurePat, id: item.id, env: item.env }
-    }).then(({ data }) => {
+    })).then(({ data }) => {
       if (cancelled) return;
       if (data?.ok) {
-        setLiveDiscussions(data.discussions || []);
-        setLiveDiscussionEvidence(data.discussionEvidence || []);
+        const next = { discussions: data.discussions || [], discussionEvidence: data.discussionEvidence || [] };
+        const nextSignature = stableSignature(next);
+        if (nextSignature !== cached?.signature) {
+          setLiveDiscussions(next.discussions);
+          setLiveDiscussionEvidence(next.discussionEvidence);
+        }
+        writeApiCache(detailCacheKey, next, nextSignature);
       }
     }).finally(() => {
       if (!cancelled) setDiscussionsLoading(false);
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item?.id, azureReady]);
+  }, [item?.id, azureReady, detailCacheKey]);
 
   const discussions = liveDiscussions ?? item.discussions ?? [];
   const discussionEvidence = liveDiscussionEvidence ?? item.discussionEvidence ?? [];
@@ -258,19 +274,28 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
     { value: "mobile", label: "Mobile", icon: "bi-phone", detail: "360px" }
   ];
   const resultLabel = result === "pass" ? "Approved" : result === "fail" ? "Fail" : result === "limitation" ? "Limitation" : "";
-  const qaResponsible = collaborators.find((person) => person.id === item.qaCollaboratorId);
-  // Nome exato so bate quando o Azure exibe o assignee EXATAMENTE igual ao
-  // azureName cadastrado — qualquer variacao (ordem "Sobrenome, Nome", alias)
-  // fazia o assignee "sumir" (virava so { azureName } sem slackMemberId,
-  // sem FYI/mencao possivel). Indice por nome cobre azureName/slackName/
-  // aliases e variacoes de ordem.
   const collaboratorNameIndex = buildCollaboratorNameIndex(collaborators);
-  const assigneePerson = collaborators.find((person) => person.id === item.assigneeId)
+  const qaResponsible = collaborators.find((person) => String(person.id) === String(item.qaCollaboratorId));
+  const assigneePerson = collaborators.find((person) => String(person.id) === String(item.assigneeId))
     || findCollaboratorByName(collaboratorNameIndex, item.assigneeName)
+    || findCollaboratorByName(collaboratorNameIndex, item.assignedTo)
     || { azureName: item.assigneeName || item.assignedTo };
+  const creatorPerson = findCollaboratorByName(collaboratorNameIndex, item.createdBy) || { azureName: item.createdBy };
+  const assigneeDisplayName = assigneePerson?.azureName || assigneePerson?.name || item.assigneeName || item.assignedTo || "Nao atribuido";
+  const qaDisplayName = qaResponsible?.azureName || qaResponsible?.name || item.qaName || item.qaResponsible || "Sem QA";
+  const creatorDisplayName = creatorPerson?.azureName || creatorPerson?.name || item.createdBy || "Nao informado";
+  const creatorAvatarUrl = item.createdByImageUrl || item.createdByAvatarUrl || creatorPerson?.imageUrl || creatorPerson?.avatarUrl || "";
   const devPeople = collaborators.filter((person) => person.isDev || person.dev);
   const qaPeople = collaborators.filter((person) => person.isQa || person.qa);
-  const fixedFyi = collaborators.filter((person) => person.fixedMention || person.isFyiFixed || person.fyiFixed || person.fixedFyi);
+  // Dois tipos de FYI fixo: sempre (fixedMention) e so quando o resultado e
+  // Fail/Limitation (fixedMentionOnFailure) — mesma regra usada no envio
+  // real (useWorkItems.js), pra previa e envio nunca divergirem.
+  const isFailureResult = result === "fail" || result === "limitation";
+  const fixedFyi = collaborators.filter((person) => {
+    if (person.fixedMention || person.isFyiFixed || person.fyiFixed || person.fixedFyi) return true;
+    if (isFailureResult && person.fixedMentionOnFailure) return true;
+    return false;
+  });
   const tagList = item.tags?.length ? item.tags : (item.countries || []).map((country) => `0-${country}`);
   const evidenceHistory = [
     ...evidence.filter((entry) => String(entry.workItemId) === String(item.id)),
@@ -472,7 +497,13 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
                 <div><span>Motivo</span><strong>{item.reason || "Sem motivo"}</strong></div>
                 <div><span>Area Path</span><strong>{item.areaPath || "Sem area"}</strong></div>
                 <div><span>Sprint</span><strong>{compactSprintLabel(item.sprint || item.iteration) || "Sem sprint"}</strong></div>
-                <div><span>Criado por</span><strong>{item.createdBy || "Nao informado"}</strong></div>
+                <div className="mbaz-meta-created-by">
+                  <span>Criado por</span>
+                  <div className="mbaz-meta-created-author">
+                    <IdentityAvatar name={creatorDisplayName} imageUrl={creatorAvatarUrl} size={22} />
+                    <strong>{creatorDisplayName}</strong>
+                  </div>
+                </div>
               </div>
               <div className="mbaz-new-modal-essential">
                 <div>
@@ -497,11 +528,11 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
                         onUpdateItem({ assigneeId, assigneeName: person?.azureName || "", assigneeAlias: person?.azureName || "" });
                       }}
                     />
-                  ) : <p><IdentityAvatar name={item.assigneeName || item.assignedTo} imageUrl={item.assigneeImageUrl} size={28} /> <strong>{item.assigneeName || item.assignedTo || "Nao atribuido"}</strong></p>}
+                  ) : <p><IdentityAvatar name={assigneeDisplayName} imageUrl={item.assigneeImageUrl} size={28} /> <strong>{assigneeDisplayName}</strong></p>}
                 </div>
                 <div>
                   <span>QA responsavel</span>
-                  {onUpdateItem ? <QaPicker value={item.qaCollaboratorId || ""} onChange={(qaCollaboratorId) => onUpdateItem({ qaCollaboratorId: qaCollaboratorId || null })} people={qaPeople} /> : <p><IdentityAvatar name={qaResponsible?.azureName || qaResponsible?.name || item.qaName || "Sem QA"} imageUrl={qaResponsible?.imageUrl || qaResponsible?.avatarUrl} color={qaResponsible?.color} size={28} /> <strong>{qaResponsible?.azureName || qaResponsible?.name || item.qaName || "Sem QA"}</strong></p>}
+                  {onUpdateItem ? <QaPicker value={item.qaCollaboratorId || ""} onChange={(qaCollaboratorId) => onUpdateItem({ qaCollaboratorId: qaCollaboratorId || null })} people={qaPeople} /> : <p><IdentityAvatar name={qaDisplayName} imageUrl={qaResponsible?.imageUrl || qaResponsible?.avatarUrl} color={qaResponsible?.color} size={28} /> <strong>{qaDisplayName}</strong></p>}
                 </div>
                 <div>
                   <span>Tags</span>

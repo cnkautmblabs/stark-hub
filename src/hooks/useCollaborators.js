@@ -92,6 +92,16 @@ export function useCollaborators() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    function handleCacheWrite(event) {
+      if (event.detail?.key !== cacheKey) return;
+      if (event.detail?.entry?.data) setCollaborators(event.detail.entry.data);
+    }
+    window.addEventListener("starkHubApiCacheWrite", handleCacheWrite);
+    return () => window.removeEventListener("starkHubApiCacheWrite", handleCacheWrite);
+  }, [cacheKey]);
+
   useRevalidateOnFocus(() => load({ force: true }), { enabled: !demoMode && isSupabaseConfigured, minIntervalMs: 60000 });
 
   async function updateCollaborator(id, patch) {
