@@ -44,7 +44,7 @@ import { useToast } from "../../contexts/ToastContext.jsx";
 import { usePersistentState } from "../../hooks/usePersistentState.js";
 import { usePersistentActiveWorkItem } from "../../hooks/usePersistentActiveWorkItem.js";
 import { consumePendingWorkItemHighlight, highlightWorkItem, readWorkItemHash } from "../../utils/workbench/highlight.js";
-import { notificationTypes, playTone, readPersonalSetting as readNotificationSetting, soundOptions, writePersonalSetting as writeNotificationSetting } from "../../utils/notificationSounds.js";
+import { notificationTypes, playSoundFile, readPersonalSetting as readNotificationSetting, writePersonalSetting as writeNotificationSetting } from "../../utils/notificationSounds.js";
 import { readPersonalSetting as readPersonalSettingShared, writePersonalSettings as writePersonalSettingsShared } from "../../utils/personalSettings.js";
 import {
   accessLevelLabels,
@@ -406,8 +406,22 @@ export function QaBoardWorkbench() {
   const qaMetrics = ["", ...qaPeople.map((person) => person.id)].map((id, index) => {
     const person = byId.get(id);
     const count = filtered.filter((item) => (item.qaCollaboratorId || "") === id).length;
-    return { id, label: person?.azureName || "Nao definido", count, color: person?.color || ["#64748b", "#2563eb", "#16a34a", "#d97706", "#7c3aed"][index % 5] };
+    return { id, label: person?.azureName || "Nao definido", count, color: person?.color || ["#64748b", "#2563eb", "#16a34a", "#d97706", "#7c3aed"][index % 5], person };
   });
+  const qaBarData = [{ name: "carga", ...Object.fromEntries(qaMetrics.map((row) => [String(row.id || "none"), row.count])) }];
+  const testResultConfig = {
+    pass: { label: "Approved", color: "#16a34a" },
+    fail: { label: "Fail", color: "#dc2626" },
+    limitation: { label: "Limitation", color: "#d97706" },
+    pending: { label: "Pending", color: "#64748b" }
+  };
+  const testResultOrder = ["pass", "fail", "limitation", "pending"];
+  const testResultCounts = filtered.reduce((acc, item) => {
+    const records = evidenceById.get(Number(item.id)) || [];
+    const key = normalizeResult(records[0]?.result || item.lastTestResult || "pending");
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, { pass: 0, fail: 0, limitation: 0, pending: 0 });
   const countriesInBoard = Array.from(new Set(filtered.flatMap((item) => item.countries || []))).sort();
 
   useEffect(() => {
@@ -633,38 +647,44 @@ export function QaBoardWorkbench() {
               </div>
             </details>
             <div id="mbaz-dashboard" className={`mbaz-dashboard ${chartsCollapsed ? "collapsed" : ""}`}>
-              <div id="mbaz-summary" className="mbaz-summary">
-                {loading ? <KpiSkeleton count={6} /> : (
-                  <>
-                    <Kpi label="Total" value={filtered.length} percent={100} icon="bi-list-check" active={!statusFilter.length} onClick={() => setStatusFilter([])} />
-                    {qaStatusOrder.map((key) => <Kpi key={key} label={qaStatusConfig[key].label} value={filteredCounts[key]} percent={filtered.length ? Math.round((filteredCounts[key] / filtered.length) * 100) : 0} active={statusFilter.includes(key)} color={qaStatusConfig[key].color} icon={qaStatusConfig[key].icon} onClick={() => setStatusFilter((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key])} />)}
-                  </>
-                )}
-              </div>
               {loading ? (
                 <div className="mbaz-chart"><ChartSkeleton rows={3} /></div>
               ) : (
                 <div id="mbaz-chart" className="mbaz-chart">
                   <div className="mbaz-chart-head"><h3>Distribuicao por status</h3><span>{filtered.length} item(s)</span></div>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <PieChart>
-                      <Pie
-                        data={qaStatusOrder.map((key) => ({ key, name: qaStatusConfig[key].label, value: filteredCounts[key] }))}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius="58%"
-                        outerRadius="90%"
-                        paddingAngle={filteredCounts && filtered.length ? 2 : 0}
-                        onClick={(entry) => { const key = entry?.payload?.key; setStatusFilter((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]); }}
-                      >
-                        {qaStatusOrder.map((key) => (
-                          <Cell key={key} fill={qaStatusConfig[key].color} opacity={statusFilter.length && !statusFilter.includes(key) ? 0.3 : 1} cursor="pointer" stroke="var(--starkSurface)" strokeWidth={2} />
-                        ))}
-                      </Pie>
-                      <Tooltip content={<RechartsTooltip />} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="mbaz-legend">{qaStatusOrder.map((key) => <span key={key} className="mbaz-legend-item"><i className="mbaz-legend-dot" style={{ background: qaStatusConfig[key].color }} />{qaStatusConfig[key].label} {filteredCounts[key]}/{filtered.length ? Math.round((filteredCounts[key] / filtered.length) * 100) : 0}%</span>)}</div>
+                  <div className="mbaz-status-layout">
+                    <div className="mbaz-mini-stats">
+                      <button type="button" className={`mbaz-mini-stat ${!statusFilter.length ? "active" : ""}`} onClick={() => setStatusFilter([])}>
+                        <i style={{ background: "var(--starkMuted)" }} /><span>Total</span><b>{filtered.length}</b>
+                      </button>
+                      {qaStatusOrder.map((key) => (
+                        <button key={key} type="button" className={`mbaz-mini-stat ${statusFilter.includes(key) ? "active" : ""}`} onClick={() => setStatusFilter((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key])}>
+                          <i style={{ background: qaStatusConfig[key].color }} /><span>{qaStatusConfig[key].label}</span><b>{filteredCounts[key]}</b>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mbaz-donut-wrap">
+                      <ResponsiveContainer width="100%" height={200}>
+                        <PieChart>
+                          <Pie
+                            data={qaStatusOrder.map((key) => ({ key, name: qaStatusConfig[key].label, value: filteredCounts[key] }))}
+                            dataKey="value"
+                            nameKey="name"
+                            innerRadius="58%"
+                            outerRadius="90%"
+                            paddingAngle={filteredCounts && filtered.length ? 2 : 0}
+                            onClick={(entry) => { const key = entry?.payload?.key; setStatusFilter((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]); }}
+                          >
+                            {qaStatusOrder.map((key) => (
+                              <Cell key={key} fill={qaStatusConfig[key].color} opacity={statusFilter.length && !statusFilter.includes(key) ? 0.3 : 1} cursor="pointer" stroke="var(--starkSurface)" strokeWidth={2} />
+                            ))}
+                          </Pie>
+                          <Tooltip content={<RechartsTooltip />} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="mbaz-donut-center"><strong>{filtered.length}</strong><small>{filtered.length === 1 ? "item" : "itens"}</small></div>
+                    </div>
+                  </div>
                 </div>
               )}
               {loading ? (
@@ -672,19 +692,47 @@ export function QaBoardWorkbench() {
               ) : (
                 <div id="mbaz-qa-metrics" className="mbaz-qa-metrics">
                   <div className="mbaz-chart-head"><h3>Carga por QA</h3><span>{filtered.length} item(s)</span></div>
-                  <ResponsiveContainer width="100%" height={Math.max(140, qaMetrics.length * 40)}>
-                    <BarChart data={qaMetrics} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 4 }}>
-                      <XAxis type="number" hide />
-                      <YAxis type="category" dataKey="label" width={110} tick={{ fontSize: 11, fill: "var(--starkMuted)" }} axisLine={false} tickLine={false} />
-                      <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
-                      <Bar dataKey="count" radius={[0, 6, 6, 0]} onClick={(entry) => { const id = entry?.payload?.id; setQaFilter((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]); }} cursor="pointer">
+                  <div className="mbaz-qa-stack-wrap">
+                    <ResponsiveContainer width="100%" height={40}>
+                      <BarChart data={qaBarData} layout="vertical" margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                        <XAxis type="number" hide domain={[0, Math.max(1, filtered.length)]} />
+                        <YAxis type="category" dataKey="name" hide />
+                        <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
                         {qaMetrics.map((row) => (
-                          <Cell key={row.id || "none"} fill={row.color} opacity={qaFilter.length && !qaFilter.includes(row.id) ? 0.3 : 1} />
+                          <Bar
+                            key={row.id || "none"}
+                            dataKey={String(row.id || "none")}
+                            name={row.label}
+                            stackId="qa"
+                            fill={row.color}
+                            opacity={qaFilter.length && !qaFilter.includes(row.id) ? 0.3 : 1}
+                            cursor="pointer"
+                            onClick={() => setQaFilter((current) => current.includes(row.id) ? current.filter((item) => item !== row.id) : [...current, row.id])}
+                          />
+                        ))}
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="mbaz-qa-legend">{qaMetrics.map((row) => <button key={row.id || "none"} type="button" className={`mbaz-qa-legend-item ${qaFilter.includes(row.id) ? "active" : ""}`} onClick={() => setQaFilter((current) => current.includes(row.id) ? current.filter((item) => item !== row.id) : [...current, row.id])}>{row.id ? <AvatarDot person={row.person} name={row.label} compact /> : <i className="mbaz-legend-dot" style={{ background: row.color }} />}<span>{shortName(row.label)}</span><strong>{row.count}</strong></button>)}</div>
+                </div>
+              )}
+              {loading ? (
+                <div className="mbaz-chart"><ChartSkeleton rows={3} /></div>
+              ) : (
+                <div id="mbaz-test-results" className="mbaz-chart">
+                  <div className="mbaz-chart-head"><h3>Resultado de teste</h3><span>{filtered.length} item(s)</span></div>
+                  <ResponsiveContainer width="100%" height={180}>
+                    <BarChart data={testResultOrder.map((key) => ({ key, name: testResultConfig[key].label, value: testResultCounts[key] || 0 }))} margin={{ top: 8, right: 8, bottom: 4, left: 8 }}>
+                      <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--starkMuted)" }} axisLine={false} tickLine={false} />
+                      <YAxis hide />
+                      <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
+                      <Bar dataKey="value" radius={[6, 6, 0, 0]} cursor="pointer" onClick={(entry) => { const key = entry?.payload?.key; setResultFilter((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]); }}>
+                        {testResultOrder.map((key) => (
+                          <Cell key={key} fill={testResultConfig[key].color} opacity={resultFilter.length && !resultFilter.includes(key) ? 0.3 : 1} />
                         ))}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
-                  <div className="mbaz-qa-legend">{qaMetrics.map((row) => <button key={row.id || "none"} type="button" className={`mbaz-qa-legend-item ${qaFilter.includes(row.id) ? "active" : ""}`} onClick={() => setQaFilter((current) => current.includes(row.id) ? current.filter((item) => item !== row.id) : [...current, row.id])}><i className="mbaz-legend-dot" style={{ background: row.color }} />{row.label} <strong>{row.count}</strong></button>)}</div>
                 </div>
               )}
               {loading ? (
@@ -1862,7 +1910,7 @@ export function SettingsWorkbench() {
   const [azureAutoRefreshSeconds, setAzureAutoRefreshSeconds] = useState(getSetting("azureAutoRefreshSeconds", 60));
   const [notificationSoundsMuted, setNotificationSoundsMuted] = useState(() => Boolean(readNotificationSetting(profile, user, "notificationSoundsMuted", false)));
   const [notificationSoundPrefs, setNotificationSoundPrefs] = useState(() =>
-    Object.fromEntries(notificationTypes.map(({ key }) => [key, readNotificationSetting(profile, user, `notificationSound:${key}`, "ping")]))
+    Object.fromEntries(notificationTypes.map(({ key }) => [key, Boolean(readNotificationSetting(profile, user, `notificationSoundEnabled:${key}`, true))]))
   );
   // Permissao do navegador e um efeito colateral imediato (nao da pra "adiar
   // e confirmar depois" como o resto de Configuracoes) — por isso este
@@ -2155,7 +2203,7 @@ export function SettingsWorkbench() {
     // qualquer nivel de acesso, independente do restante do formulario ser
     // pessoal (Dev/QA) ou global (Gestao).
     writeNotificationSetting(profile, user, "notificationSoundsMuted", notificationSoundsMuted);
-    notificationTypes.forEach(({ key }) => writeNotificationSetting(profile, user, `notificationSound:${key}`, notificationSoundPrefs[key]));
+    notificationTypes.forEach(({ key }) => writeNotificationSetting(profile, user, `notificationSoundEnabled:${key}`, notificationSoundPrefs[key]));
     // Webhook do Slack e um segredo (qualquer um que o tenha pode postar no
     // canal) — nunca vai para `app_settings`, tabela que qualquer usuario
     // autenticado pode ler (ver policy app_settings_read_authenticated no
@@ -2554,7 +2602,7 @@ export function SettingsWorkbench() {
           <small className="mb-settings-note">Periodo, limite de itens e sprint agora sao filtros dentro da propria tela de Gestao da equipe, nao configuracoes globais.</small>
         </SettingsSection>}
 
-        <SettingsSection title="Notificacoes sonoras" description="Escolha o som de cada notificacao ou desative por completo. Preferencia individual, salva neste navegador.">
+        <SettingsSection title="Notificacoes sonoras" description="Ative ou desative o som de cada notificacao. Preferencia individual, salva neste navegador.">
           <label className="mb-switch-row">
             <span><strong>Silenciar todas</strong><small>Desliga qualquer som de notificacao para este usuario</small></span>
             <span className="mb-switch"><input type="checkbox" checked={notificationSoundsMutedDraft} onChange={(event) => setNotificationSoundsMutedDraft(event.target.checked)} /><span className="mb-switch-slider" /></span>
@@ -2563,10 +2611,8 @@ export function SettingsWorkbench() {
             {notificationTypes.map(({ key, label, description }) => (
               <div key={key} className="mb-notification-sound-row">
                 <span><strong>{label}</strong><small>{description}</small></span>
-                <select value={notificationSoundPrefsDraft[key]} disabled={notificationSoundsMutedDraft} onChange={(event) => setNotificationSoundPrefsDraft((current) => ({ ...current, [key]: event.target.value }))}>
-                  {soundOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
-                <Button onClick={() => playTone(notificationSoundPrefsDraft[key])} disabled={notificationSoundsMutedDraft || notificationSoundPrefsDraft[key] === "none"}>Testar</Button>
+                <span className="mb-switch"><input type="checkbox" checked={notificationSoundPrefsDraft[key]} disabled={notificationSoundsMutedDraft} onChange={(event) => setNotificationSoundPrefsDraft((current) => ({ ...current, [key]: event.target.checked }))} /><span className="mb-switch-slider" /></span>
+                <Button onClick={() => playSoundFile(key)} disabled={notificationSoundsMutedDraft}>Testar</Button>
               </div>
             ))}
           </div>

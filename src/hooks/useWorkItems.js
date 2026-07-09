@@ -61,8 +61,8 @@ function notifyTransitions({ previousStateById, previousUpdatedById, freshItems,
 
   notifyGroup(newItems, { type: "newItem", title: "Novo item no board", tone: "info" });
   notifyGroup(updatedItems.filter((item) => !newItems.includes(item)).slice(0, 3), { type: "updatedItem", title: "Work item atualizado", tone: "info" });
-  notifyGroup(enteredQa, { type: "inQa", title: "Item entrou em QA", tone: "warning" });
-  notifyGroup(enteredBeta, { type: "readyBeta", title: "Item entrou em BETA", tone: "success" });
+  notifyGroup(enteredQa, { type: "itemEnteredQaBeta", title: "Item entrou em QA", tone: "warning" });
+  notifyGroup(enteredBeta, { type: "itemEnteredQaBeta", title: "Item entrou em BETA", tone: "success" });
 }
 
 // Fiel ao userscript legado: sem member ID real do Slack nao existe fallback
@@ -391,9 +391,9 @@ export function useWorkItems({ includeClosed = false } = {}) {
           const text = buildReadyForBetaMessage({ ...item, ...nextPatch }, assignee);
           supabase.functions.invoke("slackNotify", { body: { webhooks, text } }).catch(() => {});
         }
-        playNotificationSound("readyBeta", profile, user);
+        playNotificationSound("itemEnteredQaBeta", profile, user);
       }
-      if (patch.lastTestResult) playNotificationSound("testResult", profile, user);
+      if (patch.lastTestResult) playNotificationSound(patch.lastTestResult === "pass" ? "testApproved" : "testFailed", profile, user);
       return;
     }
 
@@ -430,7 +430,7 @@ export function useWorkItems({ includeClosed = false } = {}) {
           const text = buildReadyForBetaMessage({ ...item, ...patch }, assignee);
           supabase.functions.invoke("slackNotify", { body: { webhooks, text } }).catch(() => {});
         }
-        playNotificationSound("readyBeta", profile, user);
+        playNotificationSound("itemEnteredQaBeta", profile, user);
       }
     }
   }

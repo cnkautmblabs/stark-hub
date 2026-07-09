@@ -2,12 +2,15 @@ import { useEffect, useRef } from "react";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { useWorkItems } from "../../hooks/useWorkItems.js";
 import { useCollaborators } from "../../hooks/useCollaborators.js";
+import { useTestEvidence } from "../../hooks/useTestEvidence.js";
 import { accessLevels } from "../../utils/constants.js";
-import { buildCollaboratorNameIndex, findCollaboratorByName, qaStatusInfo } from "../../utils/workbench/formatters.js";
+import { buildCollaboratorNameIndex, findCollaboratorByName, normalizeResult, qaStatusInfo } from "../../utils/workbench/formatters.js";
 import { readPersonalSetting } from "../../utils/personalSettings.js";
+import { playNotificationSound } from "../../utils/notificationSounds.js";
 import { savePendingWorkItemHighlight } from "../../utils/workbench/highlight.js";
 
 const SEEN_KEY_PREFIX = "starkHubNotifiedWorkItems:";
+const SEEN_RESULT_KEY_PREFIX = "starkHubNotifiedTestResults:";
 
 function readSeenIds(key) {
   try {
@@ -35,13 +38,20 @@ export function BrowserNotificationWatcher() {
   const { profile, user, demoMode } = useAuth();
   const { items } = useWorkItems();
   const { collaborators } = useCollaborators();
+  const { evidence } = useTestEvidence();
   const initializedRef = useRef(false);
   const seenKeyRef = useRef("");
+  const resultInitializedRef = useRef(false);
+  const resultSeenKeyRef = useRef("");
 
   const access = profile?.accessLevel;
   const isDev = access === accessLevels.dev;
   const isQa = access === accessLevels.qa;
   const userKey = profile?.id || user?.email || "anonymous";
+
+  const nameIndex = buildCollaboratorNameIndex(collaborators);
+  const myCollaborator = collaborators.find((person) => person.id === profile?.id)
+    || findCollaboratorByName(nameIndex, profile?.displayName || profile?.fullName || user?.email);
 
   useEffect(() => {
     if (demoMode || typeof window === "undefined" || typeof Notification === "undefined") return;
@@ -57,10 +67,6 @@ export function BrowserNotificationWatcher() {
       seenKeyRef.current = seenKey;
       initializedRef.current = false;
     }
-
-    const nameIndex = buildCollaboratorNameIndex(collaborators);
-    const myCollaborator = collaborators.find((person) => person.id === profile?.id)
-      || findCollaboratorByName(nameIndex, profile?.displayName || profile?.fullName || user?.email);
 
     let relevant = [];
     if (isQa) {
@@ -84,6 +90,7 @@ export function BrowserNotificationWatcher() {
 
     const fresh = relevant.filter((item) => !seen.has(item.id));
     if (fresh.length) {
+      playNotificationSound("itemEnteredQaBeta", profile, user);
       fresh.slice(0, 4).forEach((item) => {
         const qaPerson = collaborators.find((person) => person.id === item.qaCollaboratorId);
         const title = isQa ? "Novo item disponivel para teste" : "Seu item foi pego para teste";
@@ -104,7 +111,65 @@ export function BrowserNotificationWatcher() {
       });
     }
     writeSeenIds(seenKey, new Set(relevant.map((item) => item.id)));
-  }, [items, collaborators, isDev, isQa, demoMode, profile, user, userKey]);
+  }, [items, collaborators, isDev, isQa, demoMode, profile, user, userKey, myCollaborator, nameIndex]);
+
+  // Som (e notificacao, se a permissao ja foi concedida) pro Dev quando o
+  // PROPRIO item e aprovado/reprovado num teste — diferente do bloco acima
+  // (que so cobre "QA pegou pra testar"), aqui o evento e o RESULTADO do
+  // teste em si. Roda independente da permissao de notificacao (o som ja
+  // tem o proprio controle de mudo em Configuracoes), so a notificacao
+  // desktop opcional depende de permissao concedida.
+  useEffect(() => {
+    if (demoMode || !isDev || !myCollaborator || typeof window === "undefined") return;
+    if (!evidence.length) return;
+
+    const resultSeenKey = `${SEEN_RESULT_KEY_PREFIX}${userKey}`;
+    if (resultSeenKeyRef.current !== resultSeenKey) {
+      resultSeenKeyRef.current = resultSeenKey;
+      resultInitializedRef.current = false;
+    }
+
+    const myItemIds = new Set(
+      items
+        .filter((item) => item.assigneeId === myCollaborator.id || findCollaboratorByName(nameIndex, item.assigneeName)?.id === myCollaborator.id)
+        .map((item) => Number(item.id))
+    );
+    const myEvidence = evidence
+      .filter((entry) => myItemIds.has(Number(entry.workItemId)))
+      .slice()
+      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+
+    const seen = readSeenIds(resultSeenKey);
+    if (!resultInitializedRef.current) {
+      resultInitializedRef.current = true;
+      writeSeenIds(resultSeenKey, new Set(myEvidence.map((entry) => entry.id)));
+      return;
+    }
+
+    const fresh = myEvidence.filter((entry) => !seen.has(entry.id)).slice(0, 4);
+    fresh.forEach((entry) => {
+      const result = normalizeResult(entry.result);
+      const approved = result === "pass";
+      playNotificationSound(approved ? "devApproved" : "devReproved", profile, user);
+      if (typeof Notification !== "undefined" && Notification.permission === "granted" && readPersonalSetting(profile, user, "browserNotificationsEnabled", false)) {
+        const item = items.find((entry2) => Number(entry2.id) === Number(entry.workItemId));
+        try {
+          const notification = new Notification(approved ? "Seu item foi aprovado" : "Seu item foi reprovado", {
+            body: `#${entry.workItemId} ${item?.title || ""}`,
+            tag: `stark-hub-result-${entry.id}`
+          });
+          notification.onclick = () => {
+            window.focus();
+            savePendingWorkItemHighlight(entry.workItemId);
+            window.location.href = `${import.meta.env.BASE_URL}dev`;
+          };
+        } catch {
+          // idem — falha silenciosa em navegadores sem suporte.
+        }
+      }
+    });
+    writeSeenIds(resultSeenKey, new Set(myEvidence.map((entry) => entry.id)));
+  }, [evidence, items, isDev, myCollaborator, nameIndex, demoMode, profile, user, userKey]);
 
   return null;
 }

@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useRef, useState } from "react";
 import { highlightWorkItem, savePendingWorkItemHighlight } from "../utils/workbench/highlight.js";
+import { playSoundFile } from "../utils/notificationSounds.js";
 
 // Notificacoes visuais leves (toast), pedidas pelo usuario pra completar os
 // sons de notificacao que ja existiam (Configuracoes > Notificacoes sonoras):
@@ -28,6 +29,10 @@ export function ToastProvider({ children }) {
     setToasts((current) => [...current, { id, title, body, tone, href, workItemId, route }]);
     const timer = setTimeout(() => dismissToast(id), durationMs);
     timersRef.current.set(id, timer);
+    // Erro sempre soa, sem depender da preferencia por evento — nao tem um
+    // tipo configuravel proprio em Configuracoes (e generico o suficiente
+    // pra nao precisar de um toggle dedicado).
+    if (tone === "danger") playSoundFile("error");
     return id;
   }, [dismissToast]);
 
