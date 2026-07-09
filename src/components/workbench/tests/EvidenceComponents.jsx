@@ -43,7 +43,7 @@ export function EvidenceCard({ group, profile, visibleEnvironments, resolveWorkI
   const envs = evidenceEnvironmentOrder.filter((env) => (visibleEnvironments || []).includes(env));
   const authors = Array.from(new Set(group.records.map((entry) => entry.authorName).filter(Boolean)));
   return (
-    <article className={`mbaz-evidence-card has-${info.className}`} data-work-item-type={String(item.type || "work item").toLowerCase()}>
+    <article className={`mbaz-evidence-card has-${info.className}`} data-id={group.workItemId} data-work-item-id={group.workItemId} data-work-item-type={String(item.type || "work item").toLowerCase()}>
       <div className="mbaz-evidence-card-identity">
         <div className="mbaz-evidence-card-top">
           <div className="mbaz-evidence-card-id">

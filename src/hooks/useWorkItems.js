@@ -21,11 +21,12 @@ const WORK_ITEMS_CACHE_TTL_MS = 60 * 1000;
 // entrou em QA, item que entrou em BETA. So roda a partir da SEGUNDA carga
 // bem-sucedida (previousStateById != null) — na primeira carga tudo "e
 // novo", o que so criaria uma enxurrada de toasts sem sentido.
-function notifyTransitions({ previousStateById, freshItems, pushToast, profile, user }) {
+function notifyTransitions({ previousStateById, previousUpdatedById, freshItems, pushToast, profile, user }) {
   if (!previousStateById) return;
   const newItems = [];
   const enteredQa = [];
   const enteredBeta = [];
+  const updatedItems = [];
   freshItems.forEach((item) => {
     const state = String(item.state || "").toLowerCase();
     const prevState = previousStateById.get(item.id);
@@ -33,6 +34,9 @@ function notifyTransitions({ previousStateById, freshItems, pushToast, profile, 
       newItems.push(item);
       return;
     }
+    const updatedAt = String(item.updatedAt || item.changedDate || item.changedAt || "");
+    const prevUpdatedAt = previousUpdatedById?.get(item.id);
+    if (updatedAt && prevUpdatedAt && updatedAt !== prevUpdatedAt) updatedItems.push(item);
     if (prevState === state) return;
     if (state.includes("qa") && !prevState.includes("qa")) enteredQa.push(item);
     if (state.includes("beta") && !prevState.includes("beta")) enteredBeta.push(item);
@@ -46,7 +50,9 @@ function notifyTransitions({ previousStateById, freshItems, pushToast, profile, 
         title,
         body: `${item.id} - ${item.title || "Sem titulo"}`,
         tone,
-        href: item.url || azureWorkItemUrl(profile?.azureOrgUrl, profile?.azureProject, item.id)
+        href: item.url || azureWorkItemUrl(profile?.azureOrgUrl, profile?.azureProject, item.id),
+        workItemId: item.id,
+        route: `${import.meta.env.BASE_URL}qa`
       });
     });
     if (list.length > shown.length) pushToast({ title, body: `+${list.length - shown.length} outro(s) item(ns)`, tone });
@@ -54,6 +60,7 @@ function notifyTransitions({ previousStateById, freshItems, pushToast, profile, 
   }
 
   notifyGroup(newItems, { type: "newItem", title: "Novo item no board", tone: "info" });
+  notifyGroup(updatedItems.filter((item) => !newItems.includes(item)).slice(0, 3), { type: "updatedItem", title: "Work item atualizado", tone: "info" });
   notifyGroup(enteredQa, { type: "inQa", title: "Item entrou em QA", tone: "warning" });
   notifyGroup(enteredBeta, { type: "readyBeta", title: "Item entrou em BETA", tone: "success" });
 }
@@ -116,6 +123,7 @@ export function useWorkItems({ includeClosed = false } = {}) {
   // busca ampla do Dash executivo (includeClosed) e historica/multi-sprint,
   // notificar a cada refresh dela seria ruido, nao sinal.
   const previousStateByIdRef = useRef(null);
+  const previousUpdatedByIdRef = useRef(null);
 
   const persistItems = useCallback((nextItems) => {
     writeApiCache(cacheKey, nextItems);
@@ -180,8 +188,9 @@ export function useWorkItems({ includeClosed = false } = {}) {
       setError(data?.error || invokeError?.message || "Falha ao consultar o Azure DevOps.");
     } else {
       if (!includeClosed) {
-        notifyTransitions({ previousStateById: previousStateByIdRef.current, freshItems: data.items, pushToast, profile, user });
+        notifyTransitions({ previousStateById: previousStateByIdRef.current, previousUpdatedById: previousUpdatedByIdRef.current, freshItems: data.items, pushToast, profile, user });
         previousStateByIdRef.current = new Map(data.items.map((item) => [item.id, String(item.state || "").toLowerCase()]));
+        previousUpdatedByIdRef.current = new Map(data.items.map((item) => [item.id, String(item.updatedAt || item.changedDate || item.changedAt || "")]));
       }
       const nextItems = data.items || [];
       const nextSignature = stableSignature(nextItems);
@@ -209,6 +218,24 @@ export function useWorkItems({ includeClosed = false } = {}) {
     const id = setInterval(() => loadItems({ force: true }), autoRefreshSeconds * 1000);
     return () => clearInterval(id);
   }, [demoMode, azureReady, autoRefreshSeconds, loadItems]);
+
+  useEffect(() => {
+    if (demoMode || !azureReady) return undefined;
+    let lastRefresh = 0;
+    function refreshIfVisible() {
+      if (document.visibilityState === "hidden") return;
+      const current = Date.now();
+      if (current - lastRefresh < 30000) return;
+      lastRefresh = current;
+      loadItems({ force: true });
+    }
+    window.addEventListener("focus", refreshIfVisible);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+    return () => {
+      window.removeEventListener("focus", refreshIfVisible);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+    };
+  }, [demoMode, azureReady, loadItems]);
 
   async function updateItem(id, patch) {
     if (demoMode) {

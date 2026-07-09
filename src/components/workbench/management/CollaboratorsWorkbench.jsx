@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useAuth } from "../../../contexts/AuthContext.jsx";
 import { useCollaborators } from "../../../hooks/useCollaborators.js";
 import { useProfiles } from "../../../hooks/useProfiles.js";
+import { usePersistentState } from "../../../hooks/usePersistentState.js";
 import { accessLevelLabels, accessLevels, defaultGoalHours, hasManagementAccess } from "../../../utils/constants.js";
 import { normalize } from "../../../utils/workbench/formatters.js";
 import { AvatarDot, Button, EmptyState, FilterCombobox, RoleBadgeIcon, TextField, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
@@ -258,8 +259,8 @@ export function CollaboratorsWorkbench() {
   const canChangeAdminGlobal = currentUserAccess === accessLevels.admin;
   const { collaborators, loading, updateCollaborator, addCollaborator, deleteCollaborator } = useCollaborators();
   const { profiles, loading: profilesLoading } = useProfiles();
-  const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("all");
+  const [search, setSearch] = usePersistentState("starkHubFilters:collaborators:search", "");
+  const [roleFilter, setRoleFilter] = usePersistentState("starkHubFilters:collaborators:role", "all");
   const [editingId, setEditingId] = useState(null);
   const isGestao = hasManagementAccess(profile?.accessLevel);
   const ownCollaborator = collaborators.find((person) => person.profileId === profile?.id)

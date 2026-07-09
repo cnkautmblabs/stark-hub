@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FiCopy, FiRefreshCw, FiSearch } from "react-icons/fi";
 import { useAuth } from "../../../contexts/AuthContext.jsx";
 import { useTestEvidence } from "../../../hooks/useTestEvidence.js";
 import { useWorkItems } from "../../../hooks/useWorkItems.js";
+import { usePersistentState } from "../../../hooks/usePersistentState.js";
 import { compactSprintLabel, findCurrentSprint } from "../../../utils/sprints.js";
 import {
   evidenceDateRangeForPreset,
@@ -19,22 +20,23 @@ import {
 import { AzureWorkItemModal, workItemUrl } from "../ui/AzureWorkItemModal.jsx";
 import { Button, ChartSkeleton, EmptyState, IconButton, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
 import { EvidenceCard, EvidenceFilterBox, EvidenceMultiFilterBox, ResultIcon } from "./EvidenceComponents.jsx";
+import { consumePendingWorkItemHighlight, highlightWorkItem, readWorkItemHash } from "../../../utils/workbench/highlight.js";
 
 export function TestsWorkbench() {
   const { profile, demoMode } = useAuth();
   const { items, loading, error, reload: reloadItems } = useWorkItems();
   const { evidence, reload: reloadEvidence } = useTestEvidence();
-  const [search, setSearch] = useState("");
-  const [result, setResult] = useState("all");
-  const [environmentsFilter, setEnvironmentsFilter] = useState(["QA", "BETA"]);
-  const [type, setType] = useState("all");
-  const [qa, setQa] = useState("all");
-  const [sprint, setSprint] = useState("all");
-  const [periodPreset, setPeriodPreset] = useState("today");
+  const [search, setSearch] = usePersistentState("starkHubFilters:tests:search", "");
+  const [result, setResult] = usePersistentState("starkHubFilters:tests:result", "all");
+  const [environmentsFilter, setEnvironmentsFilter] = usePersistentState("starkHubFilters:tests:environment", ["QA", "BETA"]);
+  const [type, setType] = usePersistentState("starkHubFilters:tests:type", "all");
+  const [qa, setQa] = usePersistentState("starkHubFilters:tests:qa", "all");
+  const [sprint, setSprint] = usePersistentState("starkHubFilters:tests:sprint", "all");
+  const [periodPreset, setPeriodPreset] = usePersistentState("starkHubFilters:tests:periodPreset", "today");
   const initialRange = evidenceDateRangeForPreset("today");
-  const [dateFrom, setDateFrom] = useState(initialRange.from);
-  const [dateTo, setDateTo] = useState(initialRange.to);
-  const [viewMode, setViewMode] = useState("list");
+  const [dateFrom, setDateFrom] = usePersistentState("starkHubFilters:tests:dateFrom", initialRange.from);
+  const [dateTo, setDateTo] = usePersistentState("starkHubFilters:tests:dateTo", initialRange.to);
+  const [viewMode, setViewMode] = usePersistentState("starkHubFilters:tests:viewMode", "list");
   const [activeItem, setActiveItem] = useState(null);
   const byId = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
   const discussionRecords = items.flatMap((item) => (item.discussionEvidence || []).filter(isQaEvidenceEntry).map((entry) => ({
@@ -91,6 +93,11 @@ export function TestsWorkbench() {
     reloadItems();
     reloadEvidence();
   }
+
+  useEffect(() => {
+    const target = consumePendingWorkItemHighlight() || readWorkItemHash();
+    if (target) window.setTimeout(() => highlightWorkItem(target), 250);
+  }, [groupedRows.length]);
 
   function applyPeriodPreset(preset) {
     setPeriodPreset(preset);

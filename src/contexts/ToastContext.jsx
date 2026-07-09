@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useRef, useState } from "react";
+import { highlightWorkItem, savePendingWorkItemHighlight } from "../utils/workbench/highlight.js";
 
 // Notificacoes visuais leves (toast), pedidas pelo usuario pra completar os
 // sons de notificacao que ja existiam (Configuracoes > Notificacoes sonoras):
@@ -22,12 +23,26 @@ export function ToastProvider({ children }) {
     }
   }, []);
 
-  const pushToast = useCallback(({ title, body, tone = "info", durationMs = 6000, href } = {}) => {
+  const pushToast = useCallback(({ title, body, tone = "info", durationMs = 6000, href, workItemId, route } = {}) => {
     const id = ++toastSeq;
-    setToasts((current) => [...current, { id, title, body, tone, href }]);
+    setToasts((current) => [...current, { id, title, body, tone, href, workItemId, route }]);
     const timer = setTimeout(() => dismissToast(id), durationMs);
     timersRef.current.set(id, timer);
     return id;
+  }, [dismissToast]);
+
+  const openToast = useCallback((toast) => {
+    if (toast.route && window.location.pathname !== toast.route) {
+      if (toast.workItemId) savePendingWorkItemHighlight(toast.workItemId);
+      window.location.href = toast.route;
+      return;
+    }
+    if (toast.workItemId && highlightWorkItem(toast.workItemId)) {
+      dismissToast(toast.id);
+      return;
+    }
+    if (toast.href) window.open(toast.href, "_blank", "noopener,noreferrer");
+    dismissToast(toast.id);
   }, [dismissToast]);
 
   return (
@@ -41,7 +56,7 @@ export function ToastProvider({ children }) {
               {toast.body && <span>{toast.body}</span>}
             </div>
             <div className="mb-toast-actions">
-              {toast.href && <a href={toast.href} target="_blank" rel="noopener noreferrer">Abrir</a>}
+              {(toast.href || toast.workItemId) && <button type="button" onClick={() => openToast(toast)}>Ver</button>}
               <button type="button" onClick={() => dismissToast(toast.id)} aria-label="Fechar"><i className="bi bi-x" /></button>
             </div>
           </div>

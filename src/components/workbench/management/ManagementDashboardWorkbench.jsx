@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useAuth } from "../../../contexts/AuthContext.jsx";
 import { useWorkItems } from "../../../hooks/useWorkItems.js";
 import { useCollaborators } from "../../../hooks/useCollaborators.js";
 import { useTestEvidence } from "../../../hooks/useTestEvidence.js";
+import { usePersistentState } from "../../../hooks/usePersistentState.js";
 import { compactSprintLabel } from "../../../utils/sprints.js";
 import { evidenceDedupeKey, evidenceEnvironments, isQaEvidenceEntry, normalizeResult } from "../../../utils/workbench/formatters.js";
 import { AvatarDot, ChartSkeleton, FilterCombobox, Kpi, KpiSkeleton, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
@@ -27,8 +28,8 @@ export function ManagementDashboardWorkbench() {
   const { items, loading: itemsLoading } = useWorkItems({ includeClosed: true });
   const { collaborators } = useCollaborators();
   const { evidence, reload: reloadEvidence } = useTestEvidence();
-  const [sprintFrom, setSprintFrom] = useState("");
-  const [sprintTo, setSprintTo] = useState("");
+  const [sprintFrom, setSprintFrom] = usePersistentState("starkHubFilters:management:sprintFrom", "");
+  const [sprintTo, setSprintTo] = usePersistentState("starkHubFilters:management:sprintTo", "");
 
   const sprintOptions = useMemo(() => {
     const unique = Array.from(new Set(items.map((item) => compactSprintLabel(item.sprint || item.iteration)).filter(Boolean)));

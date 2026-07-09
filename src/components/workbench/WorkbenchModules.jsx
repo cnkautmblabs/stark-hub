@@ -37,6 +37,8 @@ import { useWorkItems } from "../../hooks/useWorkItems.js";
 import { useCollaborators } from "../../hooks/useCollaborators.js";
 import { useTestEvidence } from "../../hooks/useTestEvidence.js";
 import { useAppSettings } from "../../hooks/useAppSettings.js";
+import { usePersistentState } from "../../hooks/usePersistentState.js";
+import { consumePendingWorkItemHighlight, highlightWorkItem, readWorkItemHash } from "../../utils/workbench/highlight.js";
 import { notificationTypes, playTone, readPersonalSetting as readNotificationSetting, soundOptions, writePersonalSetting as writeNotificationSetting } from "../../utils/notificationSounds.js";
 import {
   accessLevelLabels,
@@ -296,23 +298,23 @@ export function QaBoardWorkbench() {
   const { items, updateItem, addItem, reload, loading, refreshing, needsAzureIntegration, error } = useWorkItems();
   const { collaborators } = useCollaborators();
   const { evidence, reload: reloadEvidence } = useTestEvidence();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = usePersistentState("starkHubFilters:qaBoard:search", "");
   const [showCreate, setShowCreate] = useState(false);
-  const [viewMode, setViewMode] = useState("grid");
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [showExcluded, setShowExcluded] = useState(false);
-  const [personFilter, setPersonFilter] = useState([]);
-  const [countryFilter, setCountryFilter] = useState([]);
-  const [qaFilter, setQaFilter] = useState([]);
-  const [statusFilter, setStatusFilter] = useState([]);
-  const [resultFilter, setResultFilter] = useState([]);
-  const [sprintFilter, setSprintFilter] = useState([]);
+  const [viewMode, setViewMode] = usePersistentState("starkHubFilters:qaBoard:viewMode", "grid");
+  const [filtersOpen, setFiltersOpen] = usePersistentState("starkHubFilters:qaBoard:filtersOpen", false);
+  const [showExcluded, setShowExcluded] = usePersistentState("starkHubFilters:qaBoard:showExcluded", false);
+  const [personFilter, setPersonFilter] = usePersistentState("starkHubFilters:qaBoard:person", []);
+  const [countryFilter, setCountryFilter] = usePersistentState("starkHubFilters:qaBoard:country", []);
+  const [qaFilter, setQaFilter] = usePersistentState("starkHubFilters:qaBoard:qa", []);
+  const [statusFilter, setStatusFilter] = usePersistentState("starkHubFilters:qaBoard:status", []);
+  const [resultFilter, setResultFilter] = usePersistentState("starkHubFilters:qaBoard:result", []);
+  const [sprintFilter, setSprintFilter] = usePersistentState("starkHubFilters:qaBoard:sprint", []);
   const [sprintSearch, setSprintSearch] = useState("");
   const [sprintOpen, setSprintOpen] = useState(false);
   const sprintFilterRef = useRef(null);
-  const [iterationFrom, setIterationFrom] = useState("");
-  const [iterationTo, setIterationTo] = useState("");
-  const [sort, setSort] = useState("changed_desc");
+  const [iterationFrom, setIterationFrom] = usePersistentState("starkHubFilters:qaBoard:iterationFrom", "");
+  const [iterationTo, setIterationTo] = usePersistentState("starkHubFilters:qaBoard:iterationTo", "");
+  const [sort, setSort] = usePersistentState("starkHubFilters:qaBoard:sort", "changed_desc");
   const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [chartsCollapsed, setChartsCollapsed] = useState(false);
   const [newItem, setNewItem] = useState({ type: "Bug", country: "BR", title: "", state: "In QA" });
@@ -395,6 +397,11 @@ export function QaBoardWorkbench() {
     return { id, label: person?.azureName || "Nao definido", count, color: person?.color || ["#64748b", "#2563eb", "#16a34a", "#d97706", "#7c3aed"][index % 5] };
   });
   const countriesInBoard = Array.from(new Set(filtered.flatMap((item) => item.countries || []))).sort();
+
+  useEffect(() => {
+    const target = consumePendingWorkItemHighlight() || readWorkItemHash();
+    if (target) window.setTimeout(() => highlightWorkItem(target), 250);
+  }, [filtered.length]);
 
   function clearFilters() {
     setPersonFilter([]);
@@ -489,7 +496,7 @@ export function QaBoardWorkbench() {
     const visibleTags = (item.tags || []).filter((tag) => !/^0-/.test(tag));
 
     return (
-      <article key={item.id} className={`mbaz-card ${expanded ? "expanded" : ""} ${age >= 7 ? "mbaz-critical-highlight" : ""}`} data-id={item.id} data-work-item-type={String(item.type || "work item").toLowerCase()} style={{ borderLeftColor: type.color, "--wi-type-color": type.color, "--wi-type-bg": type.bg }}>
+      <article key={item.id} className={`mbaz-card ${expanded ? "expanded" : ""} ${age >= 7 ? "mbaz-critical-highlight" : ""}`} data-id={item.id} data-work-item-id={item.id} data-work-item-type={String(item.type || "work item").toLowerCase()} style={{ borderLeftColor: type.color, "--wi-type-color": type.color, "--wi-type-bg": type.bg }}>
         <div className="mbaz-card-row mbaz-card-topline">
           <div className="mbaz-card-left">
             <span className={`mbaz-pill state ${status.key?.startsWith("ready") ? "ready" : ""}`} style={{ background: status.bg, color: status.color }}><i className={`bi ${status.icon}`} />{status.label}</span>
@@ -732,20 +739,20 @@ export function MyItemsWorkbench() {
   const { collaborators } = useCollaborators();
   const { evidence } = useTestEvidence();
   const { getSetting } = useAppSettings();
-  const [search, setSearch] = useState("");
-  const [hoursFilter, setHoursFilter] = useState("all");
-  const [types, setTypes] = useState(() => profile?.accessLevel === accessLevels.qa ? ["Task", "Bug", "User Story"] : ["Task", "Bug"]);
-  const [countryFilter, setCountryFilter] = useState([]);
-  const [tagFilter, setTagFilter] = useState([]);
-  const [statusFilter, setStatusFilter] = useState([]);
-  const [sprintFilter, setSprintFilter] = useState([]);
-  const [environmentFilter, setEnvironmentFilter] = useState([]);
-  const [testResultFilter, setTestResultFilter] = useState([]);
-  const [groupBy, setGroupBy] = useState("none");
-  const [summaryCollapsed, setSummaryCollapsed] = useState(false);
-  const [filtersCollapsed, setFiltersCollapsed] = useState(false);
-  const [insightsCollapsed, setInsightsCollapsed] = useState(false);
-  const [viewMode, setViewMode] = useState("list");
+  const [search, setSearch] = usePersistentState("starkHubFilters:myItems:search", "");
+  const [hoursFilter, setHoursFilter] = usePersistentState("starkHubFilters:myItems:hours", "all");
+  const [types, setTypes] = usePersistentState("starkHubFilters:myItems:types", () => profile?.accessLevel === accessLevels.qa ? ["Task", "Bug", "User Story"] : ["Task", "Bug"]);
+  const [countryFilter, setCountryFilter] = usePersistentState("starkHubFilters:myItems:country", []);
+  const [tagFilter, setTagFilter] = usePersistentState("starkHubFilters:myItems:tag", []);
+  const [statusFilter, setStatusFilter] = usePersistentState("starkHubFilters:myItems:status", []);
+  const [sprintFilter, setSprintFilter] = usePersistentState("starkHubFilters:myItems:sprint", []);
+  const [environmentFilter, setEnvironmentFilter] = usePersistentState("starkHubFilters:myItems:environment", []);
+  const [testResultFilter, setTestResultFilter] = usePersistentState("starkHubFilters:myItems:result", []);
+  const [groupBy, setGroupBy] = usePersistentState("starkHubFilters:myItems:groupBy", "none");
+  const [summaryCollapsed, setSummaryCollapsed] = usePersistentState("starkHubFilters:myItems:summaryCollapsed", false);
+  const [filtersCollapsed, setFiltersCollapsed] = usePersistentState("starkHubFilters:myItems:filtersCollapsed", false);
+  const [insightsCollapsed, setInsightsCollapsed] = usePersistentState("starkHubFilters:myItems:insightsCollapsed", false);
+  const [viewMode, setViewMode] = usePersistentState("starkHubFilters:myItems:viewMode", "list");
   const [fullscreen, setFullscreen] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [activeItem, setActiveItem] = useState(null);
@@ -866,6 +873,11 @@ export function MyItemsWorkbench() {
   }, { total: 0, pass: 0, fail: 0, limitation: 0, pending: 0, environments: {} });
   const selectedItems = visibleItems.filter((item) => selectedIds.includes(item.id));
   const isQa = isQaUser;
+
+  useEffect(() => {
+    const target = consumePendingWorkItemHighlight() || readWorkItemHash();
+    if (target) window.setTimeout(() => highlightWorkItem(target), 250);
+  }, [visibleItems.length]);
   const collaboratorById = useMemo(() => new Map(collaborators.map((person) => [person.id, person])), [collaborators]);
   const qaPeople = collaborators.filter((person) => person.isQa);
 
@@ -1151,7 +1163,7 @@ function MyQaBoardItemCard({ item, collaboratorsById, qaPeople, onOpen, onQaChan
   const prUrl = item.prUrl || item.pullRequestUrl || item.pipelineUrl || "";
 
   return (
-    <article className={`mbaz-card mb-my-qa-board-card ${expanded ? "expanded" : ""} ${age >= 7 ? "mbaz-critical-highlight" : ""}`} data-id={item.id} data-work-item-type={String(item.type || "work item").toLowerCase()} style={{ borderLeftColor: type.color, "--wi-type-color": type.color, "--wi-type-bg": type.bg }}>
+    <article className={`mbaz-card mb-my-qa-board-card ${expanded ? "expanded" : ""} ${age >= 7 ? "mbaz-critical-highlight" : ""}`} data-id={item.id} data-work-item-id={item.id} data-work-item-type={String(item.type || "work item").toLowerCase()} style={{ borderLeftColor: type.color, "--wi-type-color": type.color, "--wi-type-bg": type.bg }}>
       <div className="mbaz-card-row mbaz-card-topline">
         <div className="mbaz-card-left">
           <span className={`mbaz-pill state ${status.key?.startsWith("ready") ? "ready" : ""}`} style={{ background: status.bg, color: status.color }}><i className={`bi ${status.icon}`} />{status.label}</span>
@@ -1233,7 +1245,7 @@ function MyItemCard({ item, checked, onCheck, onOpen, onHours }) {
     "qa-testado": "Testado por mim"
   };
   return (
-    <article className={`mb-my-item-card ${typeClass} ${critical ? "is-critical" : ""}`} data-work-item-type={item.type} style={{ "--wi-type-color": typeInfo.color || "#64748b", "--wi-type-bg": typeInfo.background || "#f8fafc" }}>
+    <article className={`mb-my-item-card ${typeClass} ${critical ? "is-critical" : ""}`} data-id={item.id} data-work-item-id={item.id} data-work-item-type={item.type} style={{ "--wi-type-color": typeInfo.color || "#64748b", "--wi-type-bg": typeInfo.background || "#f8fafc" }}>
       <label className="mb-my-item-check" title="Selecionar"><input className="mb-my-item-select" type="checkbox" checked={checked} onChange={(event) => onCheck(item.id, event.target.checked)} /><span /></label>
       <div className="mb-my-item-main">
         <div className="mb-my-item-normal-content">
@@ -1280,14 +1292,14 @@ export function HoursWorkbench() {
   const { collaborators } = useCollaborators();
   const { evidence } = useTestEvidence();
   const { getSetting } = useAppSettings();
-  const [search, setSearch] = useState("");
-  const [collaboratorFilter, setCollaboratorFilter] = useState([]);
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [sprintFilter, setSprintFilter] = useState([]);
-  const [hourStatus, setHourStatus] = useState("all");
-  const [goalFilter, setGoalFilter] = useState("all");
-  const [viewMode, setViewMode] = useState("grid");
-  const [chartsCollapsed, setChartsCollapsed] = useState(false);
+  const [search, setSearch] = usePersistentState("starkHubFilters:governance:search", "");
+  const [collaboratorFilter, setCollaboratorFilter] = usePersistentState("starkHubFilters:governance:collaborator", []);
+  const [typeFilter, setTypeFilter] = usePersistentState("starkHubFilters:governance:type", "all");
+  const [sprintFilter, setSprintFilter] = usePersistentState("starkHubFilters:governance:sprint", []);
+  const [hourStatus, setHourStatus] = usePersistentState("starkHubFilters:governance:hours", "all");
+  const [goalFilter, setGoalFilter] = usePersistentState("starkHubFilters:governance:goal", "all");
+  const [viewMode, setViewMode] = usePersistentState("starkHubFilters:governance:viewMode", "grid");
+  const [chartsCollapsed, setChartsCollapsed] = usePersistentState("starkHubFilters:governance:chartsCollapsed", false);
   const [expanded, setExpanded] = useState(() => new Set());
   const [expandedTests, setExpandedTests] = useState(() => new Set());
   const goalDefault = getSetting("defaultGoalHours", defaultGoalHours);
@@ -1486,6 +1498,11 @@ export function HoursWorkbench() {
     setGoalFilter("all");
   }
 
+  useEffect(() => {
+    const target = consumePendingWorkItemHighlight() || readWorkItemHash();
+    if (target) window.setTimeout(() => highlightWorkItem(target), 250);
+  }, [filteredDevelopers.length]);
+
   function renderWorkItem(item) {
     const type = workTypeInfo(item.type);
     const noHours = Number(item.completedHours || 0) <= 0;
@@ -1499,7 +1516,7 @@ export function HoursWorkbench() {
     const lastEnv = latest ? evidenceEnvironments(latest)[0] || null : null;
     const isTestExpanded = expandedTests.has(itemKey);
     return (
-      <article key={itemKey} className={`mbdhc-work-card ${String(item.type || "").toLowerCase()} ${noHours ? "missing-hours" : ""} ${item.qaGovernanceCard ? "qa-card" : ""}`} data-work-item-type={String(item.type || "").toLowerCase()} style={{ "--wi-type-color": type.color, "--wi-type-bg": type.bg, borderLeftColor: type.color }}>
+      <article key={itemKey} className={`mbdhc-work-card ${String(item.type || "").toLowerCase()} ${noHours ? "missing-hours" : ""} ${item.qaGovernanceCard ? "qa-card" : ""}`} data-id={item.id} data-work-item-id={item.id} data-work-item-type={String(item.type || "").toLowerCase()} style={{ "--wi-type-color": type.color, "--wi-type-bg": type.bg, borderLeftColor: type.color }}>
         <a className="mbdhc-work-card-link" href={workItemUrl(profile, item)} target="_blank" rel="noopener noreferrer">
           <div className="mbdhc-work-main">
             <div className={`mbdhc-work-type-line ${String(item.type || "").toLowerCase()}`}><img className="mbdhc-work-type-icon" src={type.image} alt={item.type} /><strong>{formatWorkItemCode(item.id, item.type)}</strong><span>{item.type}</span></div>

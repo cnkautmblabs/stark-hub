@@ -132,7 +132,18 @@ function EnhancedSlackPreview({ text, item, attachments = [], collaborators = []
   function resolveMemberName(memberId) {
     if (!memberId) return memberId;
     const found = (collaborators || []).find((p) => String(p.slackMemberId) === String(memberId) || String(p.slackId) === String(memberId));
-    return found ? (found.azureName || found.slackName || found.email || memberId) : memberId;
+    // A previa e um "melhor palpite" de como a mencao vai aparecer no Slack
+    // de verdade — o nome que o Slack realmente mostra e o nome cadastrado
+    // la, entao a previa deve priorizar slackName, nao azureName.
+    return found ? (found.slackName || found.azureName || found.email || memberId) : memberId;
+  }
+
+  // Troca o numero cru pelo codigo com prefixo de tipo (ex.: "38309" ->
+  // "BUG38309") so pra ficar mais legivel na previa — o texto de verdade
+  // enviado ao Slack usa so o numero (fiel ao legado), isso nao altera isso.
+  function typedLabel(label, refItem) {
+    if (!refItem?.id || !label.startsWith(String(refItem.id))) return null;
+    return formatWorkItemCode(refItem.id, refItem.type) + label.slice(String(refItem.id).length);
   }
 
   function renderPart(part, i) {
@@ -140,14 +151,8 @@ function EnhancedSlackPreview({ text, item, attachments = [], collaborators = []
     const linkMatch = part.match(/^<([^|>]+)\|([^>]+)>$/);
     if (linkMatch) {
       const href = linkMatch[1];
-      let label = linkMatch[2];
-      // O texto de verdade enviado ao Slack usa so o numero do ID (fiel ao
-      // legado) — a previa troca o numero pelo codigo com prefixo de tipo
-      // (ex.: "38309" -> "BUG38309") so pra ficar mais legivel aqui, sem
-      // alterar o que realmente e enviado.
-      if (item?.id && label.startsWith(String(item.id))) {
-        label = formatWorkItemCode(item.id, item.type) + label.slice(String(item.id).length);
-      }
+      const rawLabel = linkMatch[2];
+      const label = typedLabel(rawLabel, item) || typedLabel(rawLabel, item?.parent) || rawLabel;
       return <a key={i} className="mbaz-slack-link" href={href} target="_blank" rel="noopener noreferrer">{label}</a>;
     }
     if (tokenMap[part]) return <span key={i} className="mbaz-slack-token">{tokenMap[part]}</span>;
@@ -163,12 +168,12 @@ function EnhancedSlackPreview({ text, item, attachments = [], collaborators = []
         <a key={i} className="mbaz-slack-mention" href={href} target="_blank" rel="noopener noreferrer">@{name}</a>
       );
     }
-    // Item sem URL (ex.: work item local/demo) vira texto puro no lugar de
-    // link — mesma troca do numero pelo codigo tipado, so que sem o <a>.
-    if (item?.id && part.trimStart().startsWith(String(item.id))) {
-      const leading = part.match(/^\s*/)[0];
-      return <span key={i}>{leading}{formatWorkItemCode(item.id, item.type)}{part.trimStart().slice(String(item.id).length)}</span>;
-    }
+    // Item/pai sem URL (ex.: work item local/demo) vira texto puro no lugar
+    // de link — mesma troca do numero pelo codigo tipado, so que sem o <a>.
+    const trimmed = part.trimStart();
+    const leading = part.match(/^\s*/)[0];
+    const plainTyped = typedLabel(trimmed, item) || typedLabel(trimmed, item?.parent);
+    if (plainTyped) return <span key={i}>{leading}{plainTyped}</span>;
     return <span key={i}>{part}</span>;
   }
 
@@ -445,7 +450,7 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
   }
 
   return (
-    <div className="mbaz-new-modal-overlay" onClick={onClose}>
+    <div className="mbaz-new-modal-overlay">
       <section className="mbaz-new-modal" onClick={(event) => event.stopPropagation()}>
         <header className="mbaz-new-modal-header">
           <div className="mbaz-new-modal-title"><TypeBadge type={item.type} /> <span>{itemCode}</span></div>
