@@ -5031,6 +5031,15 @@ body {
   gap: 2px;
   margin: 0 0 3px;
 }
+/* Sem isso, um link/mencao comprido (flex item de largura minima "auto")
+   nao quebra o proprio texto — o navegador empurra o item inteiro pra
+   linha de baixo, deixando so o icone/"└" isolados em cima. Com min-width:0
+   o texto quebra normalmente dentro do proprio item, ficando colado no
+   icone/corner na mesma linha sempre que couber. */
+.mbaz-slack-preview p > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .mbaz-slack-token {
   display: inline-flex;
   align-items: center;
@@ -8883,4 +8892,34 @@ body {
 @keyframes mbToastIn {
   from { opacity: 0; transform: translateY(-6px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+.mb-pwa-update-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 7000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 12.5px;
+  font-weight: 700;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, .35);
+  animation: mbToastIn .18s ease-out;
+}
+.mb-pwa-update-banner button {
+  flex: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 12px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
 }
