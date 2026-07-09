@@ -10,6 +10,7 @@ import { useAppSettings } from "../../../hooks/useAppSettings.js";
 import { accessLevelLabels, accessLevels, defaultGoalHours, hasManagementAccess } from "../../../utils/constants.js";
 import { buildCollaboratorNameIndex, findCollaboratorByName, formatHours, qaStatusInfo } from "../../../utils/workbench/formatters.js";
 import { compactSprintLabel, findCurrentSprint } from "../../../utils/sprints.js";
+import { savePendingWorkItemHighlight } from "../../../utils/workbench/highlight.js";
 import { dateStamp, downloadCsv } from "../../../utils/csvExport.js";
 import {
   buildPersonalSummaryText,
@@ -418,11 +419,15 @@ export function WorkbenchHome() {
   useEffect(() => { writeLocal(storageKey("HomeWidgets", userKey), widgets); }, [widgets, userKey]);
   useEffect(() => { writeLocal(storageKey("HomeSummary", userKey), summaryEntries); }, [summaryEntries, userKey]);
 
+  // Admin ignora accessLevel em toda rota protegida (ProtectedRoute.jsx) —
+  // esses atalhos precisam do mesmo bypass, senao um Admin sem nivel formal
+  // (ex.: nivel "pending") ficava sem NENHUM atalho na Home mesmo podendo
+  // acessar todas as telas pela Sidebar.
   const quickLinks = [
-    { to: "/dev", label: "Meus itens", icon: FiUser, show: [accessLevels.dev, accessLevels.qa, accessLevels.gestao, accessLevels.gerente].includes(access) },
-    { to: "/qa", label: "Quality Board", icon: FiCheckCircle, show: [accessLevels.qa, accessLevels.gestao, accessLevels.gerente].includes(access) },
+    { to: "/dev", label: "Meus itens", icon: FiUser, show: isAdmin || [accessLevels.dev, accessLevels.qa, accessLevels.gestao, accessLevels.gerente].includes(access) },
+    { to: "/qa", label: "Quality Board", icon: FiCheckCircle, show: isAdmin || [accessLevels.qa, accessLevels.gestao, accessLevels.gerente].includes(access) },
     { to: "/management", label: "Gestao da equipe", icon: FiShield, show: isGestao },
-    { to: "/management/dashboard", label: "Gerenciamento", icon: FiShield, show: isGerente },
+    { to: "/management/dashboard", label: "Gerenciamento", icon: FiShield, show: isGerente || isAdmin },
     { to: "/settings", label: "Conexoes", icon: FiPlus, show: true }
   ].filter((item) => item.show);
 
@@ -478,14 +483,18 @@ export function WorkbenchHome() {
         icon: "bi-check2-circle",
         text: `#${item.id} ${item.title}`,
         meta: `${qaStatusInfo(item.state).label || item.state || "Sem status"} · disponivel para teste`,
-        date: item.updatedAt
+        date: item.updatedAt,
+        to: "/qa",
+        workItemId: item.id
       }));
       myRecentEvidence.slice(0, 4).forEach((entry) => entries.push({
         id: `evidence-${entry.id}`,
         icon: "bi-clipboard2-check",
         text: `Novo resultado no #${entry.workItemId}`,
         meta: `${entry.result || "resultado"} · registrado por voce`,
-        date: entry.createdAt
+        date: entry.createdAt,
+        to: "/qa",
+        workItemId: entry.workItemId
       }));
     } else if (isDev) {
       myItems.slice().sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""))).slice(0, 6).forEach((item) => entries.push({
@@ -493,7 +502,9 @@ export function WorkbenchHome() {
         icon: "bi-kanban",
         text: `#${item.id} ${item.title}`,
         meta: `${item.state || "Sem status"} · ${item.sprint || "Sem sprint"}`,
-        date: item.updatedAt
+        date: item.updatedAt,
+        to: "/dev",
+        workItemId: item.id
       }));
       myItemsPickedUpForTesting.slice(0, 4).forEach((item) => {
         const qaPerson = collaborators.find((person) => person.id === item.qaCollaboratorId);
@@ -502,7 +513,9 @@ export function WorkbenchHome() {
           icon: "bi-person-check",
           text: `#${item.id} ${item.title}`,
           meta: `Pego para teste por ${qaPerson?.azureName || "QA"}`,
-          date: item.updatedAt
+          date: item.updatedAt,
+          to: "/dev",
+          workItemId: item.id
         });
       });
     } else {
@@ -511,14 +524,18 @@ export function WorkbenchHome() {
         icon: "bi-check2-circle",
         text: `#${item.id} ${item.title}`,
         meta: `${qaStatusInfo(item.state).label || item.state || "Sem status"} · disponivel para teste`,
-        date: item.updatedAt
+        date: item.updatedAt,
+        to: "/qa",
+        workItemId: item.id
       }));
       recentEvidenceTeamWide.slice(0, 4).forEach((entry) => entries.push({
         id: `evidence-${entry.id}`,
         icon: "bi-clipboard2-check",
         text: `Novo resultado no #${entry.workItemId}`,
         meta: `${entry.result || "resultado"} · ${entry.authorName || "QA"}`,
-        date: entry.createdAt
+        date: entry.createdAt,
+        to: "/qa",
+        workItemId: entry.workItemId
       }));
     }
     return entries.sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 8);
@@ -684,7 +701,7 @@ export function WorkbenchHome() {
         {loading ? <WorkbenchCardSkeleton rows={4} mode="compact" /> : (
           <div className="mb-home-activity">
             {activityFeed.map((entry) => (
-              <Link key={entry.id} to="/dev">
+              <Link key={entry.id} to={entry.to || "/dev"} onClick={() => entry.workItemId != null && savePendingWorkItemHighlight(entry.workItemId)}>
                 <i className={`bi ${entry.icon}`} />
                 <span><strong>{entry.text}</strong><small>{entry.meta}</small></span>
               </Link>
