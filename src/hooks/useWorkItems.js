@@ -312,18 +312,17 @@ export function useWorkItems({ includeClosed = false } = {}) {
       }
       if (!demoMode && patch.notifySlack !== false) {
         const webhooks = resolveSlackWebhooks(getSetting);
-        // `c.id` e o ID proprio da linha de collaborators, NUNCA igual a
-        // `profile.id` — o vinculo com o profile logado e por `profileId`.
-        // Essa comparacao errada fazia o reporter nunca ser encontrado, e
-        // por isso "Tested by" nunca aparecia na mensagem real do Slack.
-        const reporter = collaborators.find((c) => c.profileId === profile?.id || c.email === profile?.email);
+        // "Tested by" mostra o QA Responsavel cadastrado no Work Item (Stark
+        // Hub), nao quem esta logado registrando o resultado — pedido
+        // explicito do usuario, ja que quem clica em "Registrar resultado"
+        // pode nao ser o QA oficialmente responsavel pelo item.
         const text = buildLegacyQaResultSlackText({
           item,
           resultKey: patch.lastTestResult,
           resultLabel,
           environments,
           countries: testedCountries,
-          authorName: mentionNameForSlack(reporter),
+          authorName: mentionNameForSlack(qaResponsible),
           assignee,
           fyi: fyiPeople
         });
