@@ -24,6 +24,15 @@ import { resolveSlackWebhooks } from "../../../utils/slack.js";
 import { Button, Kpi, KpiSkeleton, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
 
 const widgetIcons = { note: "bi-sticky", link: "bi-link-45deg", shortcut: "bi-rocket-takeoff" };
+
+const HOME_SECTION_DEFAULT_ORDER = ["widgets", "devPanel", "qaPanel", "activity", "governance", "summary"];
+const HOME_SECTION_TITLES = {
+  widgets: "Painel",
+  devPanel: "Painel Dev",
+  qaPanel: "Painel QA",
+  activity: "Atualizacoes recentes",
+  governance: "Gestao da equipe"
+};
 const widgetTitles = { note: "Nota", link: "Link", shortcut: "Atalho" };
 
 function escapeHtml(text) {
@@ -296,8 +305,7 @@ function DevPanel({ loading, myItems, completedHours, goalHours, hoursPercent })
   const tasks = myItems.filter((item) => item.type === "Task").length;
   const bugs = myItems.filter((item) => item.type === "Bug").length;
   return (
-    <section className="mb-home-panel">
-      <header><div><strong>Painel Dev</strong><small>Cards atribuidos e horas do periodo.</small></div></header>
+    <>
       <div className="mb-home-kpis">
         {loading ? <KpiSkeleton count={4} /> : (
           <>
@@ -309,28 +317,47 @@ function DevPanel({ loading, myItems, completedHours, goalHours, hoursPercent })
         )}
       </div>
       {loading ? <span className="mbw-skeleton-block" style={{ height: 10, borderRadius: 999 }} /> : <div className="mb-home-hours-bar"><b style={{ width: `${hoursPercent}%` }} /></div>}
-    </section>
+    </>
   );
 }
 
-function QaPanel({ loading, availableForTesting, evidenceToday, currentSprintLabel }) {
+function QaPanel({ loading, availableForTesting, evidenceToday }) {
   return (
-    <section className="mb-home-panel">
-      <header><div><strong>Painel QA</strong><small>Dados da sprint atual{currentSprintLabel ? ` (${currentSprintLabel})` : ""} e resultados de hoje.</small></div></header>
-      <div className="mb-home-kpis">
-        {loading ? <KpiSkeleton count={3} /> : (
-          <>
-            <Kpi icon="bi-check2-circle" label="Para testar na sprint" value={availableForTesting} color="#7c3aed" />
-            <Kpi icon="bi-calendar-check" label="Testados hoje" value={evidenceToday} color="#2563eb" />
-            <Kpi icon="bi-clipboard2-pulse" label="Foco do dia" value={availableForTesting ? "QA" : "Livre"} color="#16a34a" />
-          </>
-        )}
-      </div>
+    <div className="mb-home-kpis">
+      {loading ? <KpiSkeleton count={3} /> : (
+        <>
+          <Kpi icon="bi-check2-circle" label="Para testar na sprint" value={availableForTesting} color="#7c3aed" />
+          <Kpi icon="bi-calendar-check" label="Testados hoje" value={evidenceToday} color="#2563eb" />
+          <Kpi icon="bi-clipboard2-pulse" label="Foco do dia" value={availableForTesting ? "QA" : "Livre"} color="#16a34a" />
+        </>
+      )}
+    </div>
+  );
+}
+
+// Reordenavel (drag nativo, mesmo padrao ja usado em WidgetsGrid) e
+// colapsavel como accordion — pedido explicito do usuario pra TODOS os
+// painelzinhos da Home, com um resumo minimalista quando fechado (em vez
+// de simplesmente sumir o conteudo sem indicar o que tem la dentro).
+function HomeSection({ title, subtitle, summary, collapsed, onToggleCollapse, dragging, onDragStart, onDragOver, onDrop, onDragEnd, actions, children }) {
+  return (
+    <section className={`mb-home-panel mb-home-section ${dragging ? "dragging" : ""} ${collapsed ? "collapsed" : ""}`} onDragOver={onDragOver} onDrop={onDrop}>
+      <header>
+        <div className="mb-home-section-heading">
+          <span className="mb-home-section-drag" draggable onDragStart={onDragStart} onDragEnd={onDragEnd} title="Arraste para reordenar" aria-label="Arraste para reordenar"><i className="bi bi-grip-vertical" /></span>
+          <button type="button" className="mb-home-section-toggle" onClick={onToggleCollapse} aria-expanded={!collapsed} title={collapsed ? "Expandir" : "Recolher"}>
+            <i className={`bi ${collapsed ? "bi-chevron-right" : "bi-chevron-down"}`} />
+          </button>
+          <div><strong>{title}</strong><small>{collapsed ? summary : subtitle}</small></div>
+        </div>
+        {!collapsed && actions}
+      </header>
+      {!collapsed && children}
     </section>
   );
 }
 
-function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, previewText, onAdd, onRemove, onCopy, onPdf, onPrint, onSlack }) {
+function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, previewText, onAdd, onRemove, onCopy, onPdf, onPrint, onSlack, collapsed, onToggleCollapse, summary, dragging, onDragStart, onDragOver, onDrop, onDragEnd }) {
   const [title, setTitle] = useState("");
   const [type, setType] = useState("temporaria");
   const [showPreview, setShowPreview] = useState(true);
@@ -343,46 +370,58 @@ function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, preview
   }
 
   return (
-    <section className="mb-home-panel">
+    <section className={`mb-home-panel mb-home-section ${dragging ? "dragging" : ""} ${collapsed ? "collapsed" : ""}`} onDragOver={onDragOver} onDrop={onDrop}>
       <header>
-        <div><strong>Resumo executivo</strong><small>Itens recorrentes, do dia e atualizacoes automaticas, prontos para copiar, imprimir ou exportar.</small></div>
-        <div className="mb-home-summary-actions">
-          <Button onClick={onCopy}><FiCopy /> Copiar</Button>
-          <Button onClick={onSlack}><i className="bi bi-slack" /> Slack</Button>
-          <Button onClick={onPrint}><FiPrinter /> Imprimir</Button>
-          <Button onClick={onPdf}><FiDownload /> PDF</Button>
+        <div className="mb-home-section-heading">
+          <span className="mb-home-section-drag" draggable onDragStart={onDragStart} onDragEnd={onDragEnd} title="Arraste para reordenar" aria-label="Arraste para reordenar"><i className="bi bi-grip-vertical" /></span>
+          <button type="button" className="mb-home-section-toggle" onClick={onToggleCollapse} aria-expanded={!collapsed} title={collapsed ? "Expandir" : "Recolher"}>
+            <i className={`bi ${collapsed ? "bi-chevron-right" : "bi-chevron-down"}`} />
+          </button>
+          <div><strong>Resumo executivo</strong><small>{collapsed ? summary : "Itens recorrentes, do dia e atualizacoes automaticas, prontos para copiar, imprimir ou exportar."}</small></div>
         </div>
+        {!collapsed && (
+          <div className="mb-home-summary-actions">
+            <Button onClick={onCopy}><FiCopy /> Copiar</Button>
+            <Button onClick={onSlack}><i className="bi bi-slack" /> Slack</Button>
+            <Button onClick={onPrint}><FiPrinter /> Imprimir</Button>
+            <Button onClick={onPdf}><FiDownload /> PDF</Button>
+          </div>
+        )}
       </header>
-      <form data-allow-submit="true" className="mb-home-summary-form" onSubmit={submit}>
-        <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: 1:1 com Nat" />
-        <div className="mb-home-summary-type">
-          <button type="button" className={type === "temporaria" ? "active" : ""} onClick={() => setType("temporaria")}>Hoje</button>
-          <button type="button" className={type === "recorrente" ? "active" : ""} onClick={() => setType("recorrente")}>Recorrente</button>
-        </div>
-        <button type="submit" className="mb-home-summary-submit"><FiPlus /> Adicionar</button>
-      </form>
-      <div className="mb-home-summary-list">
-        {entries.map((entry) => (
-          <div key={entry.id} className={`mb-home-summary-item ${entry.type}`}>
-            <span className="mb-home-summary-tag">{entry.type === "recorrente" ? "Recorrente" : "Hoje"}</span>
-            <span className="mb-home-summary-title">{entry.title}</span>
-            <button type="button" onClick={() => onRemove(entry.id)} title="Remover"><i className="bi bi-x" /></button>
+      {!collapsed && (
+        <>
+          <form data-allow-submit="true" className="mb-home-summary-form" onSubmit={submit}>
+            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: 1:1 com Nat" />
+            <div className="mb-home-summary-type">
+              <button type="button" className={type === "temporaria" ? "active" : ""} onClick={() => setType("temporaria")}>Hoje</button>
+              <button type="button" className={type === "recorrente" ? "active" : ""} onClick={() => setType("recorrente")}>Recorrente</button>
+            </div>
+            <button type="submit" className="mb-home-summary-submit"><FiPlus /> Adicionar</button>
+          </form>
+          <div className="mb-home-summary-list">
+            {entries.map((entry) => (
+              <div key={entry.id} className={`mb-home-summary-item ${entry.type}`}>
+                <span className="mb-home-summary-tag">{entry.type === "recorrente" ? "Recorrente" : "Hoje"}</span>
+                <span className="mb-home-summary-title">{entry.title}</span>
+                <button type="button" onClick={() => onRemove(entry.id)} title="Remover"><i className="bi bi-x" /></button>
+              </div>
+            ))}
+            {autoEntries.map((entry, index) => (
+              <div key={`auto-${index}`} className="mb-home-summary-item auto">
+                <span className="mb-home-summary-tag">{autoLabel}</span>
+                <span className="mb-home-summary-title">{entry.title}</span>
+              </div>
+            ))}
+            {!entries.length && !autoEntries.length && <span className="mb-home-empty">Nenhum item no resumo. Adicione acima.</span>}
           </div>
-        ))}
-        {autoEntries.map((entry, index) => (
-          <div key={`auto-${index}`} className="mb-home-summary-item auto">
-            <span className="mb-home-summary-tag">{autoLabel}</span>
-            <span className="mb-home-summary-title">{entry.title}</span>
+          <div className="mb-home-summary-preview">
+            <button type="button" className="mb-home-summary-preview-toggle" onClick={() => setShowPreview((value) => !value)}>
+              <span>Previa do resumo</span><i className={`bi ${showPreview ? "bi-chevron-up" : "bi-chevron-down"}`} />
+            </button>
+            {showPreview && <pre>{previewText}</pre>}
           </div>
-        ))}
-        {!entries.length && !autoEntries.length && <span className="mb-home-empty">Nenhum item no resumo. Adicione acima.</span>}
-      </div>
-      <div className="mb-home-summary-preview">
-        <button type="button" className="mb-home-summary-preview-toggle" onClick={() => setShowPreview((value) => !value)}>
-          <span>Previa do resumo</span><i className={`bi ${showPreview ? "bi-chevron-up" : "bi-chevron-down"}`} />
-        </button>
-        {showPreview && <pre>{previewText}</pre>}
-      </div>
+        </>
+      )}
     </section>
   );
 }
@@ -415,9 +454,51 @@ export function WorkbenchHome() {
 
   const [widgets, setWidgets] = useState(() => readLocal(storageKey("HomeWidgets", userKey), []));
   const [summaryEntries, setSummaryEntries] = useState(() => readLocal(storageKey("HomeSummary", userKey), []));
+  const [rawSectionOrder, setRawSectionOrder] = useState(() => readLocal(storageKey("HomeSectionOrder", userKey), HOME_SECTION_DEFAULT_ORDER));
+  const [collapsedSections, setCollapsedSections] = useState(() => readLocal(storageKey("HomeSectionsCollapsed", userKey), {}));
+  const [dragSectionId, setDragSectionId] = useState(null);
 
   useEffect(() => { writeLocal(storageKey("HomeWidgets", userKey), widgets); }, [widgets, userKey]);
   useEffect(() => { writeLocal(storageKey("HomeSummary", userKey), summaryEntries); }, [summaryEntries, userKey]);
+  useEffect(() => { writeLocal(storageKey("HomeSectionOrder", userKey), rawSectionOrder); }, [rawSectionOrder, userKey]);
+  useEffect(() => { writeLocal(storageKey("HomeSectionsCollapsed", userKey), collapsedSections); }, [collapsedSections, userKey]);
+
+  // Ids conhecidos pra alem do que ja estava salvo (ex.: secao nova
+  // adicionada depois que a pessoa ja tinha uma ordem salva) entram no
+  // final, sem perder a ordem que a pessoa ja tinha customizado.
+  const sectionOrder = useMemo(() => {
+    const known = new Set(rawSectionOrder);
+    return [...rawSectionOrder, ...HOME_SECTION_DEFAULT_ORDER.filter((id) => !known.has(id))];
+  }, [rawSectionOrder]);
+
+  function toggleSectionCollapsed(id) {
+    setCollapsedSections((current) => ({ ...current, [id]: !current[id] }));
+  }
+
+  function reorderSectionTo(draggedId, targetId) {
+    if (!draggedId || draggedId === targetId) return;
+    setRawSectionOrder((current) => {
+      const known = new Set(current);
+      const merged = [...current, ...HOME_SECTION_DEFAULT_ORDER.filter((id) => !known.has(id))];
+      const fromIndex = merged.indexOf(draggedId);
+      const toIndex = merged.indexOf(targetId);
+      if (fromIndex === -1 || toIndex === -1) return current;
+      const next = merged.slice();
+      next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, draggedId);
+      return next;
+    });
+  }
+
+  function sectionDragProps(id) {
+    return {
+      dragging: dragSectionId === id,
+      onDragStart: () => setDragSectionId(id),
+      onDragOver: (event) => event.preventDefault(),
+      onDrop: (event) => { event.preventDefault(); reorderSectionTo(dragSectionId, id); setDragSectionId(null); },
+      onDragEnd: () => setDragSectionId(null)
+    };
+  }
 
   // Admin ignora accessLevel em toda rota protegida (ProtectedRoute.jsx) —
   // esses atalhos precisam do mesmo bypass, senao um Admin sem nivel formal
@@ -666,62 +747,53 @@ export function WorkbenchHome() {
     ]);
   }
 
-  return (
-    <section className="mbw-page mb-home-page">
-      <WorkbenchHeader
-        kicker="Stark Hub"
-        title={`Ola, ${displayName.split(" ")[0] || "time"}`}
-        subtitle={`${accessLabel} · ${now.toLocaleDateString("pt-BR")} · ${now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`}
-        demoMode={demoMode}
-        actions={<Button onClick={exportHomeCsv}><FiDownload /> CSV</Button>}
-      />
-      <section className="mb-home-quick">
-        {quickLinks.map(({ to, label, icon: Icon }) => <Link key={to} to={to}><Icon /> {label}</Link>)}
-      </section>
-      <section className="mb-home-panel">
-        <header>
-          <div><strong>Painel</strong><small>Notas, links e atalhos que voce fixar aqui ficam salvos neste navegador.</small></div>
-          <AddWidgetMenu onPick={setWidgetModalType} />
-        </header>
-        <WidgetsGrid widgets={widgets} onRemove={removeWidget} onReorder={reorderWidgets} onEdit={setEditingWidget} />
-      </section>
-
-      {/* Painel Dev so pra Dev, Painel QA so pra QA — pedido explicito do
-          usuario pra nao misturar os dois pra Gestao/Gerente/Admin, que ja
-          tem o proprio dashboard dedicado (Gestao da equipe). */}
-      {isDev && (
-        <DevPanel loading={loading} myItems={myItems} completedHours={completedHours} goalHours={goalHours} hoursPercent={hoursPercent} />
-      )}
-      {isQa && (
-        <QaPanel loading={loading} availableForTesting={availableForTesting.length} evidenceToday={evidenceToday} currentSprintLabel={currentSprintLabel} />
-      )}
-
-      <section className="mb-home-panel">
-        <header><div><strong>Atualizacoes recentes</strong><small>{isQa ? "Cards novos disponiveis para teste e seus resultados recentes." : isDev ? "O que mudou nos seus itens e quando um QA pega algo seu para testar." : "Pulso do board: itens novos em teste e resultados recentes do time."}</small></div></header>
-        {loading ? <WorkbenchCardSkeleton rows={4} mode="compact" /> : (
-          <div className="mb-home-activity">
-            {activityFeed.map((entry) => (
-              <Link key={entry.id} to={entry.to || "/dev"} onClick={() => entry.workItemId != null && savePendingWorkItemHighlight(entry.workItemId)}>
-                <i className={`bi ${entry.icon}`} />
-                <span><strong>{entry.text}</strong><small>{entry.meta}</small></span>
-              </Link>
-            ))}
-            {!activityFeed.length && <span className="mb-home-empty">Nenhuma atualizacao recente.</span>}
-          </div>
-        )}
-      </section>
-
-      {isGestao && (
-        <section className="mb-home-panel">
-          <header>
-            <div><strong>Gestao da equipe</strong><small>Resumo rapido da sprint atual. Use Ver mais para abrir todos os dados.</small></div>
-            <div className="mb-home-summary-actions">
-              <Button onClick={copyGovernance}><FiCopy /> Copiar</Button>
-              <Button onClick={slackGovernance}><i className="bi bi-slack" /> Slack</Button>
-              <Button onClick={pdfGovernance}><FiDownload /> PDF</Button>
-              <Link to="/management" className="mbw-btn default"><FiShield /> Ver mais</Link>
-            </div>
-          </header>
+  const sectionVisibility = { widgets: true, devPanel: isDev, qaPanel: isQa, activity: true, governance: isGestao, summary: true };
+  const visibleSectionIds = sectionOrder.filter((id) => sectionVisibility[id]);
+  const sectionContent = {
+    widgets: {
+      subtitle: "Notas, links e atalhos que voce fixar aqui ficam salvos neste navegador.",
+      summary: `${widgets.length} item${widgets.length === 1 ? "" : "s"} fixado${widgets.length === 1 ? "" : "s"}`,
+      actions: <AddWidgetMenu onPick={setWidgetModalType} />,
+      body: <WidgetsGrid widgets={widgets} onRemove={removeWidget} onReorder={reorderWidgets} onEdit={setEditingWidget} />
+    },
+    devPanel: {
+      subtitle: "Cards atribuidos e horas do periodo.",
+      summary: `${myItems.length} card(s) · ${formatHours(completedHours)} / ${formatHours(goalHours)}`,
+      body: <DevPanel loading={loading} myItems={myItems} completedHours={completedHours} goalHours={goalHours} hoursPercent={hoursPercent} />
+    },
+    qaPanel: {
+      subtitle: `Dados da sprint atual${currentSprintLabel ? ` (${currentSprintLabel})` : ""} e resultados de hoje.`,
+      summary: `${availableForTesting.length} para testar · ${evidenceToday} hoje`,
+      body: <QaPanel loading={loading} availableForTesting={availableForTesting.length} evidenceToday={evidenceToday} />
+    },
+    activity: {
+      subtitle: isQa ? "Cards novos disponiveis para teste e seus resultados recentes." : isDev ? "O que mudou nos seus itens e quando um QA pega algo seu para testar." : "Pulso do board: itens novos em teste e resultados recentes do time.",
+      summary: `${activityFeed.length} atualizacao${activityFeed.length === 1 ? "" : "es"} recente${activityFeed.length === 1 ? "" : "s"}`,
+      body: loading ? <WorkbenchCardSkeleton rows={4} mode="compact" /> : (
+        <div className="mb-home-activity">
+          {activityFeed.map((entry) => (
+            <Link key={entry.id} to={entry.to || "/dev"} onClick={() => entry.workItemId != null && savePendingWorkItemHighlight(entry.workItemId)}>
+              <i className={`bi ${entry.icon}`} />
+              <span><strong>{entry.text}</strong><small>{entry.meta}</small></span>
+            </Link>
+          ))}
+          {!activityFeed.length && <span className="mb-home-empty">Nenhuma atualizacao recente.</span>}
+        </div>
+      )
+    },
+    governance: {
+      subtitle: "Resumo rapido da sprint atual. Use Ver mais para abrir todos os dados.",
+      summary: `${governanceTotals.developers} colaborador(es) · ${formatHours(governanceTotals.hours)} registradas`,
+      actions: (
+        <div className="mb-home-summary-actions">
+          <Button onClick={copyGovernance}><FiCopy /> Copiar</Button>
+          <Button onClick={slackGovernance}><i className="bi bi-slack" /> Slack</Button>
+          <Button onClick={pdfGovernance}><FiDownload /> PDF</Button>
+          <Link to="/management" className="mbw-btn default"><FiShield /> Ver mais</Link>
+        </div>
+      ),
+      body: (
+        <>
           <div className="mb-home-kpis">
             {loading ? <KpiSkeleton count={4} /> : (
               <>
@@ -750,23 +822,64 @@ export function WorkbenchHome() {
               </div>
             </div>
           )}
-        </section>
-      )}
+        </>
+      )
+    }
+  };
 
-      <ExecutiveSummary
-        entries={summaryEntries}
-        name={displayName}
-        role={accessLabel}
-        autoEntries={autoEntries}
-        autoLabel={autoLabel}
-        previewText={summaryPreviewText}
-        onAdd={addSummaryEntry}
-        onRemove={removeSummaryEntry}
-        onCopy={copySummary}
-        onPdf={pdfSummary}
-        onPrint={printSummary}
-        onSlack={slackSummary}
+  return (
+    <section className="mbw-page mb-home-page">
+      <WorkbenchHeader
+        kicker="Stark Hub"
+        title={`Ola, ${displayName.split(" ")[0] || "time"}`}
+        subtitle={`${accessLabel} · ${now.toLocaleDateString("pt-BR")} · ${now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`}
+        demoMode={demoMode}
+        actions={<Button onClick={exportHomeCsv}><FiDownload /> CSV</Button>}
       />
+      <section className="mb-home-quick">
+        {quickLinks.map(({ to, label, icon: Icon }) => <Link key={to} to={to}><Icon /> {label}</Link>)}
+      </section>
+      {visibleSectionIds.map((id) => {
+        if (id === "summary") {
+          return (
+            <ExecutiveSummary
+              key={id}
+              entries={summaryEntries}
+              name={displayName}
+              role={accessLabel}
+              autoEntries={autoEntries}
+              autoLabel={autoLabel}
+              previewText={summaryPreviewText}
+              onAdd={addSummaryEntry}
+              onRemove={removeSummaryEntry}
+              onCopy={copySummary}
+              onPdf={pdfSummary}
+              onPrint={printSummary}
+              onSlack={slackSummary}
+              collapsed={Boolean(collapsedSections[id])}
+              onToggleCollapse={() => toggleSectionCollapsed(id)}
+              summary={`${summaryEntries.length} manual · ${autoEntries.length} automatico${autoEntries.length === 1 ? "" : "s"}`}
+              {...sectionDragProps(id)}
+            />
+          );
+        }
+        const content = sectionContent[id];
+        if (!content) return null;
+        return (
+          <HomeSection
+            key={id}
+            title={HOME_SECTION_TITLES[id]}
+            subtitle={content.subtitle}
+            summary={content.summary}
+            actions={content.actions}
+            collapsed={Boolean(collapsedSections[id])}
+            onToggleCollapse={() => toggleSectionCollapsed(id)}
+            {...sectionDragProps(id)}
+          >
+            {content.body}
+          </HomeSection>
+        );
+      })}
 
       {(widgetModalType || editingWidget) && (
         <WidgetModal

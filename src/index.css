@@ -1123,6 +1123,53 @@ body {
   color: var(--starkMuted);
   font-size: 11px;
 }
+.mb-home-section.dragging {
+  opacity: 0.5;
+}
+.mb-home-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.mb-home-section-drag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  color: var(--starkMuted);
+  cursor: grab;
+  border-radius: 6px;
+}
+.mb-home-section-drag:hover {
+  color: var(--starkText);
+  background: var(--starkSurfaceAlt);
+}
+.mb-home-section-drag:active {
+  cursor: grabbing;
+}
+.mb-home-section-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border: none;
+  background: transparent;
+  color: var(--starkMuted);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.mb-home-section-toggle:hover {
+  color: var(--starkAccent);
+  background: var(--starkSurfaceAlt);
+}
+.mb-home-section.collapsed {
+  gap: 0;
+}
 .mb-home-governance-mini {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
