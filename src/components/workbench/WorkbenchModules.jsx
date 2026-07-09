@@ -71,38 +71,11 @@ import {
   itemAgeDays,
   normalizeResult,
   normalize,
+  qaStatusConfig,
+  qaStatusInfo,
+  qaStatusOrder,
   shortName
 } from "../../utils/workbench/formatters.js";
-
-const qaStatusConfig = {
-  inQa: { label: "In QA", color: "#2563eb", bg: "#eff6ff", icon: "bi-check2-circle" },
-  inBeta: { label: "In BETA", color: "#7c3aed", bg: "#f5f3ff", icon: "bi-flask" },
-  readyBeta: { label: "Ready Beta", color: "#d97706", bg: "#fffbeb", icon: "bi-rocket-takeoff" },
-  hmgCnk: { label: "HMG CNK", color: "#0891b2", bg: "#ecfeff", icon: "bi-flask" },
-  readyProd: { label: "Ready Prod", color: "#16a34a", bg: "#f0fdf4", icon: "bi-shield-check" }
-};
-
-const qaStatusOrder = ["inQa", "inBeta", "readyBeta", "hmgCnk", "readyProd"];
-
-function qaStatusInfo(state) {
-  const key = normalize(state).replace(/[\s_-]+/g, "");
-  const aliases = {
-    inqa: "inQa",
-    qa: "inQa",
-    inbeta: "inBeta",
-    beta: "inBeta",
-    readytobeta: "readyBeta",
-    readybeta: "readyBeta",
-    readyforbeta: "readyBeta",
-    hmgcnk: "hmgCnk",
-    readytoprod: "readyProd",
-    readyprod: "readyProd",
-    readyforprod: "readyProd",
-    readytoproduction: "readyProd"
-  };
-  const statusKeyValue = aliases[key] || "";
-  return statusKeyValue ? { key: statusKeyValue, ...qaStatusConfig[statusKeyValue] } : { key: "", label: state || "-", color: "#64748b", bg: "#f8fafc", icon: "bi-list-check" };
-}
 
 function workTypeInfo(type) {
   const info = workItemTypes[type] || {};

@@ -8,7 +8,7 @@ import { useTestEvidence } from "../../../hooks/useTestEvidence.js";
 import { useCollaborators } from "../../../hooks/useCollaborators.js";
 import { useAppSettings } from "../../../hooks/useAppSettings.js";
 import { accessLevelLabels, accessLevels, defaultGoalHours, hasManagementAccess } from "../../../utils/constants.js";
-import { formatHours, normalize } from "../../../utils/workbench/formatters.js";
+import { buildCollaboratorNameIndex, findCollaboratorByName, formatHours, qaStatusInfo } from "../../../utils/workbench/formatters.js";
 import { compactSprintLabel, findCurrentSprint } from "../../../utils/sprints.js";
 import { dateStamp, downloadCsv } from "../../../utils/csvExport.js";
 import {
@@ -426,42 +426,103 @@ export function WorkbenchHome() {
     { to: "/settings", label: "Conexoes", icon: FiPlus, show: true }
   ].filter((item) => item.show);
 
+  // Indice alias-aware (mesmo padrao usado em Gestao do projeto/Slack) — o
+  // assigneeName que vem do Azure pode nao bater 100% com o azureName
+  // cadastrado (ordem "Sobrenome, Nome", acentos), o que fazia "meus itens"
+  // e a atividade recente ficarem vazios pra boa parte dos usuarios mesmo
+  // com itens de verdade atribuidos a eles.
+  const collaboratorNameIndex = useMemo(() => buildCollaboratorNameIndex(collaborators), [collaborators]);
+  const myCollaborator = collaborators.find((person) => person.id === profile?.id)
+    || findCollaboratorByName(collaboratorNameIndex, displayName);
+
   const myItems = useMemo(
-    () => items.filter((item) => item.assigneeName === displayName || item.assignedTo === displayName || item.assigneeEmail === user?.email),
-    [items, displayName, user?.email]
+    () => items.filter((item) => (myCollaborator && item.assigneeId === myCollaborator.id)
+      || item.assigneeEmail === user?.email
+      || (myCollaborator && findCollaboratorByName(collaboratorNameIndex, item.assigneeName)?.id === myCollaborator.id)),
+    [items, myCollaborator, user?.email, collaboratorNameIndex]
   );
   const myItemIds = useMemo(() => new Set(myItems.map((item) => Number(item.id))), [myItems]);
   const myRecentEvidence = useMemo(
     () => evidence.filter((entry) => myItemIds.has(Number(entry.workItemId))).slice().sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))),
     [evidence, myItemIds]
   );
+  // "Disponivel para teste" = estagios reconhecidos pelo Quality Board (In
+  // QA/In BETA/Ready Beta/HMG CNK/Ready Prod), a mesma fonte de verdade que
+  // decide quais cards aparecem la — evita a regex solta anterior (so
+  // cobria "in qa"/"in beta") ficar fora de sincronia com o board de verdade.
   const availableForTesting = useMemo(
-    () => items.filter((item) => /in qa|in beta/i.test(String(item.state || ""))).slice().sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""))),
+    () => items.filter((item) => Boolean(qaStatusInfo(item.state).key)).slice().sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""))),
     [items]
   );
+  // Meus itens que um QA ja pegou pra testar (perspectiva do Dev: "seu item
+  // esta sendo testado por Fulano").
+  const myItemsPickedUpForTesting = useMemo(
+    () => myItems.filter((item) => item.qaCollaboratorId && Boolean(qaStatusInfo(item.state).key)),
+    [myItems]
+  );
+  const recentEvidenceTeamWide = useMemo(
+    () => evidence.slice().sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))),
+    [evidence]
+  );
 
+  // Feed relevante por PAPEL, nao um unico feed generico: Dev ve mudancas
+  // nos proprios itens + quando um QA pega um deles pra testar; QA ve itens
+  // novos disponiveis pra teste (board inteiro) + resultados que ele mesmo
+  // registrou; Gestao/Gerente/Admin (sem itens proprios, em geral) veem o
+  // pulso do board inteiro + evidencias recentes do time.
   const activityFeed = useMemo(() => {
     const entries = [];
-    const source = isQa ? availableForTesting : myItems.slice().sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
-    source.slice(0, 6).forEach((item) => entries.push({
-      id: `item-${item.id}`,
-      icon: isQa ? "bi-check2-circle" : "bi-kanban",
-      text: `#${item.id} ${item.title}`,
-      meta: isQa ? `${item.state || "Sem status"} · disponivel para teste` : `${item.state || "Sem status"} · ${item.sprint || "Sem sprint"}`,
-      date: item.updatedAt
-    }));
-    myRecentEvidence.slice(0, 4).forEach((entry) => entries.push({
-      id: `evidence-${entry.id}`,
-      icon: "bi-clipboard2-check",
-      text: `Novo resultado no #${entry.workItemId}`,
-      meta: `${entry.result || "resultado"} · ${entry.authorName || "QA"}`,
-      date: entry.createdAt
-    }));
+    if (isQa) {
+      availableForTesting.slice(0, 6).forEach((item) => entries.push({
+        id: `item-${item.id}`,
+        icon: "bi-check2-circle",
+        text: `#${item.id} ${item.title}`,
+        meta: `${qaStatusInfo(item.state).label || item.state || "Sem status"} · disponivel para teste`,
+        date: item.updatedAt
+      }));
+      myRecentEvidence.slice(0, 4).forEach((entry) => entries.push({
+        id: `evidence-${entry.id}`,
+        icon: "bi-clipboard2-check",
+        text: `Novo resultado no #${entry.workItemId}`,
+        meta: `${entry.result || "resultado"} · registrado por voce`,
+        date: entry.createdAt
+      }));
+    } else if (isDev) {
+      myItems.slice().sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""))).slice(0, 6).forEach((item) => entries.push({
+        id: `item-${item.id}`,
+        icon: "bi-kanban",
+        text: `#${item.id} ${item.title}`,
+        meta: `${item.state || "Sem status"} · ${item.sprint || "Sem sprint"}`,
+        date: item.updatedAt
+      }));
+      myItemsPickedUpForTesting.slice(0, 4).forEach((item) => {
+        const qaPerson = collaborators.find((person) => person.id === item.qaCollaboratorId);
+        entries.push({
+          id: `qa-pickup-${item.id}`,
+          icon: "bi-person-check",
+          text: `#${item.id} ${item.title}`,
+          meta: `Pego para teste por ${qaPerson?.azureName || "QA"}`,
+          date: item.updatedAt
+        });
+      });
+    } else {
+      availableForTesting.slice(0, 5).forEach((item) => entries.push({
+        id: `item-${item.id}`,
+        icon: "bi-check2-circle",
+        text: `#${item.id} ${item.title}`,
+        meta: `${qaStatusInfo(item.state).label || item.state || "Sem status"} · disponivel para teste`,
+        date: item.updatedAt
+      }));
+      recentEvidenceTeamWide.slice(0, 4).forEach((entry) => entries.push({
+        id: `evidence-${entry.id}`,
+        icon: "bi-clipboard2-check",
+        text: `Novo resultado no #${entry.workItemId}`,
+        meta: `${entry.result || "resultado"} · ${entry.authorName || "QA"}`,
+        date: entry.createdAt
+      }));
+    }
     return entries.sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 8);
-  }, [availableForTesting, isQa, myItems, myRecentEvidence]);
-
-  const myCollaborator = collaborators.find((person) => person.id === profile?.id)
-    || collaborators.find((person) => normalize(person.azureName) === normalize(displayName));
+  }, [availableForTesting, isDev, isQa, myItems, myItemsPickedUpForTesting, myRecentEvidence, recentEvidenceTeamWide, collaborators]);
   const goalHours = Number(myCollaborator?.goalHours || goalDefault);
   const completedHours = myItems.reduce((sum, item) => sum + Number(item.completedHours || 0), 0);
   const hoursPercent = goalHours ? Math.min(100, Math.round((completedHours / goalHours) * 100)) : 0;
@@ -476,7 +537,7 @@ export function WorkbenchHome() {
       map.set(person.id, { name: person.azureName, hours: 0, goal: Number(person.goalHours || goalDefault) });
     });
     items.forEach((item) => {
-      const person = collaborators.find((entry) => entry.id === item.assigneeId) || collaborators.find((entry) => normalize(entry.azureName) === normalize(item.assigneeName));
+      const person = collaborators.find((entry) => entry.id === item.assigneeId) || findCollaboratorByName(collaboratorNameIndex, item.assigneeName);
       const key = person?.id || item.assigneeName || "unassigned";
       if (!map.has(key)) map.set(key, { name: item.assigneeName || "Nao atribuido", hours: 0, goal: goalDefault });
       map.get(key).hours += Number(item.completedHours || 0);
@@ -486,7 +547,7 @@ export function WorkbenchHome() {
       label: row.hours < row.goal ? "Abaixo" : row.hours > row.goal ? "Acima" : "Cumprida",
       tone: row.hours < row.goal ? "danger" : row.hours > row.goal ? "warning" : "primary"
     }));
-  }, [collaborators, goalDefault, isGestao, items]);
+  }, [collaboratorNameIndex, collaborators, goalDefault, isGestao, items]);
 
   const governanceTotals = useMemo(() => ({
     developers: developerRows.length,
@@ -619,7 +680,7 @@ export function WorkbenchHome() {
       )}
 
       <section className="mb-home-panel">
-        <header><div><strong>Atualizacoes recentes</strong><small>{isQa ? "Cards novos disponiveis para teste e seus resultados recentes." : "Resumo objetivo do que mudou por ultimo nos seus itens."}</small></div></header>
+        <header><div><strong>Atualizacoes recentes</strong><small>{isQa ? "Cards novos disponiveis para teste e seus resultados recentes." : isDev ? "O que mudou nos seus itens e quando um QA pega algo seu para testar." : "Pulso do board: itens novos em teste e resultados recentes do time."}</small></div></header>
         {loading ? <WorkbenchCardSkeleton rows={4} mode="compact" /> : (
           <div className="mb-home-activity">
             {activityFeed.map((entry) => (
