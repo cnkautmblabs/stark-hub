@@ -285,13 +285,17 @@ function PendingApprovalRow({ person, onApprove }) {
 export function CollaboratorsWorkbench() {
   const { profile, demoMode } = useAuth();
   const currentUserAccess = profile?.accessLevel;
-  const canEditRolesGlobal = currentUserAccess === accessLevels.admin || hasManagementAccess(currentUserAccess);
-  const canChangeAdminGlobal = currentUserAccess === accessLevels.admin;
+  // isAdmin e um flag independente do accessLevel (nao existe 'admin' no
+  // enum do banco) — Admin sempre pode editar funcoes e o flag Admin de
+  // qualquer pessoa, mesmo com nivel de acesso formal Dev/QA/pending.
+  const isAdminUser = Boolean(profile?.isAdmin);
+  const canEditRolesGlobal = isAdminUser || hasManagementAccess(currentUserAccess, isAdminUser);
+  const canChangeAdminGlobal = isAdminUser;
   const { collaborators, loading, updateCollaborator, addCollaborator, deleteCollaborator } = useCollaborators();
   const [search, setSearch] = usePersistentState("starkHubFilters:collaborators:search", "");
   const [roleFilter, setRoleFilter] = usePersistentState("starkHubFilters:collaborators:role", "all");
   const [editingId, setEditingId] = useState(null);
-  const isGestao = hasManagementAccess(profile?.accessLevel);
+  const isGestao = hasManagementAccess(profile?.accessLevel, isAdminUser);
   const ownCollaborator = collaborators.find((person) => person.id === profile?.id)
     || collaborators.find((person) => String(person.azureName || "").toLowerCase() === String(profile?.displayName || profile?.fullName || "").toLowerCase());
   // Contas que ja logaram (authUserId preenchido pelo trigger no primeiro

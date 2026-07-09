@@ -410,9 +410,9 @@ export function WorkbenchHome() {
   const access = profile?.accessLevel;
   const isDev = access === accessLevels.dev;
   const isQa = access === accessLevels.qa;
-  const isGestao = hasManagementAccess(access);
-  const isGerente = access === accessLevels.gerente;
   const isAdmin = Boolean(profile?.isAdmin || access === accessLevels.admin);
+  const isGestao = hasManagementAccess(access, isAdmin);
+  const isGerente = access === accessLevels.gerente;
   const accessLabel = isAdmin && isQa ? `${accessLevelLabels[access]} (Admin)` : accessLevelLabels[access] || "Acesso";
   const userKey = profile?.id || user?.email || "anonymous";
   const goalDefault = getSetting("defaultGoalHours", defaultGoalHours);

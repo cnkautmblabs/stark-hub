@@ -24,8 +24,11 @@ export const accessLevelLabels = {
 // Gerente tem tudo que Gestao tem, mais a tela exclusiva de Gerenciamento.
 // Use isto (nao "=== accessLevels.gestao") em qualquer checagem que hoje
 // restringe algo à Gestão, para o Gerente herdar o mesmo acesso.
-export function hasManagementAccess(accessLevel) {
-  return accessLevel === accessLevels.gestao || accessLevel === accessLevels.gerente;
+// isAdmin e um flag independente do accessLevel — passe `profile?.isAdmin`
+// como segundo argumento para que Admin sempre tenha acesso de gestão,
+// mesmo se o nível de acesso formal da pessoa for Dev/QA/pending.
+export function hasManagementAccess(accessLevel, isAdmin = false) {
+  return Boolean(isAdmin) || accessLevel === accessLevels.gestao || accessLevel === accessLevels.gerente;
 }
 
 export function isDomainAllowed(email) {

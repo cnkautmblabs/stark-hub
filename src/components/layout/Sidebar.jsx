@@ -56,7 +56,10 @@ export default function Sidebar({ collapsed, onToggle }) {
   const { theme, toggleTheme } = useTheme();
   const { isEnabled } = useFeatureFlags();
   const accessLevel = profile?.accessLevel;
-  const items = (navByRole[accessLevel] || []).filter((item) => isEnabled(item.flag));
+  // Admin enxerga tudo de todos os niveis — usa o menu do Gerente (o mais
+  // completo: Quality Board, Meus itens, Gestao da equipe/projeto, Perfil,
+  // Import Work Items) independente do accessLevel formal da pessoa.
+  const items = (profile?.isAdmin ? navByRole[accessLevels.gerente] : navByRole[accessLevel] || []).filter((item) => isEnabled(item.flag));
   const ThemeIcon = theme === "dark" ? FiSun : FiMoon;
 
   return (

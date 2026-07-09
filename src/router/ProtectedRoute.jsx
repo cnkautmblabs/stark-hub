@@ -12,7 +12,9 @@ export default function ProtectedRoute({ children, allow }) {
   if (!demoMode && !(profile?.slackMemberId && profile?.aliasSlack && profile?.aliasAzure)) return <Navigate to="/profile-setup" replace />;
 
   const accessLevel = profile?.accessLevel;
-  if (allow && !allow.includes(accessLevel)) return <Navigate to="/" replace />;
+  // Admin e um flag independente do accessLevel — sempre passa em qualquer
+  // rota restrita por nivel, mesmo com nivel formal Dev/QA/pending.
+  if (allow && !profile?.isAdmin && !allow.includes(accessLevel)) return <Navigate to="/" replace />;
 
   return children;
 }

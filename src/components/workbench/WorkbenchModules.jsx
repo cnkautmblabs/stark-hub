@@ -1780,12 +1780,35 @@ export function HoursWorkbench() {
   );
 }
 
+// Precisa viver FORA de SettingsWorkbench: definida dentro, virava uma
+// funcao/componente NOVO a cada render (qualquer digitacao num campo do
+// formulario ja causa um re-render do componente pai) — o React via isso
+// como um tipo de componente diferente e desmontava/remontava TODOS os
+// <details> (e os inputs focados dentro deles) a cada tecla, fechando os
+// acordeões e derrubando o foco/valor digitado no meio da digitação.
+function SettingsSection({ title, description, children, open = false }) {
+  return (
+    <details className="mb-settings-accordion-card" open={open}>
+      <summary className="mb-settings-accordion-header">
+        <span className="mb-settings-accordion-copy"><strong>{title}</strong><small>{description}</small></span>
+        <span className="mb-settings-accordion-chevron" aria-hidden="true" />
+      </summary>
+      <div className="mb-settings-accordion-content">{children}</div>
+    </details>
+  );
+}
+
 export function SettingsWorkbench() {
   const { profile, user, demoMode, updateLocalAzureConnection } = useAuth();
   const { flags, isEnabled, setFlag } = useFeatureFlags();
   const { collaborators } = useCollaborators();
   const { getSetting, updateSetting, loading: settingsLoading } = useAppSettings();
-  const isGestao = hasManagementAccess(profile?.accessLevel);
+  // Feature flags ligam/desligam telas inteiras pra todo mundo — pedido
+  // explicito do usuario pra restringir isso a Admin, nao a Gestao/Gerente
+  // (que ja podia mexer aqui antes). Admin tambem herda tudo que Gestao ve
+  // nesta tela, mesmo com nivel de acesso formal Dev/QA/pending.
+  const isAdmin = Boolean(profile?.isAdmin || profile?.accessLevel === accessLevels.admin);
+  const isGestao = hasManagementAccess(profile?.accessLevel, isAdmin);
   const { pushToast } = useToast();
   const initialSettingsSynced = useRef(false);
   const settingsRef = useRef(null);
@@ -2328,20 +2351,6 @@ export function SettingsWorkbench() {
     setPreview(people.map((person) => `${person.azureName || "Sem nome"} -> ${person.slackMemberId ? `<@${person.slackMemberId}>` : person.slackName || "sem Slack"}`).join("\n") || "Nenhum colaborador configurado para Slack.");
   }
 
-  function SettingsSection({ title, description, children, open = false }) {
-    // For stability, parent controls open state via `openSections` map.
-    // If parent doesn't provide control, fall back to the `open` prop.
-    return (
-      <details className="mb-settings-accordion-card" open={open}>
-        <summary className="mb-settings-accordion-header">
-          <span className="mb-settings-accordion-copy"><strong>{title}</strong><small>{description}</small></span>
-          <span className="mb-settings-accordion-chevron" aria-hidden="true" />
-        </summary>
-        <div className="mb-settings-accordion-content">{children}</div>
-      </details>
-    );
-  }
-
   return (
     <section ref={settingsRef} className="mbw-page mb-settings-page mb-settings-workbench">
       {/* determine if any draft differs from current state */}
@@ -2389,15 +2398,19 @@ export function SettingsWorkbench() {
             <label className="mb-form-row"><span>Nome do produto</span><input value={productDraft} onChange={(event) => setProductDraft(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
             <label className="mb-form-row"><span>Intervalo de atualizacao automatica (segundos)</span><input type="number" min="0" step="10" value={azureAutoRefreshDraft} onChange={(event) => setAzureAutoRefreshDraft(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
           <small className="mb-settings-note">Tempo entre cada atualizacao automatica do Quality Board e Meus itens. Use 0 para desativar o auto-reload.</small>
-          <div className="mb-settings-subtitle">Funcionalidades</div>
-          <div className="mb-featureflag-grid">
-            {Object.entries(featureLabels).map(([key, [label, description]]) => (
-              <label key={key} className="mb-switch-row">
-                <span><strong>{label}</strong><small>{description}</small></span>
-                <span className="mb-switch"><input type="checkbox" checked={Boolean(localFlags?.[key])} disabled={!isGestao} onChange={(event) => setLocalFlags((prev) => ({ ...prev, [key]: event.target.checked }))} /><span className="mb-switch-slider" /></span>
-              </label>
-            ))}
-          </div>
+          {isAdmin && (
+            <>
+              <div className="mb-settings-subtitle">Funcionalidades</div>
+              <div className="mb-featureflag-grid">
+                {Object.entries(featureLabels).map(([key, [label, description]]) => (
+                  <label key={key} className="mb-switch-row">
+                    <span><strong>{label}</strong><small>{description}</small></span>
+                    <span className="mb-switch"><input type="checkbox" checked={Boolean(localFlags?.[key])} disabled={!isAdmin} onChange={(event) => setLocalFlags((prev) => ({ ...prev, [key]: event.target.checked }))} /><span className="mb-switch-slider" /></span>
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
           {(() => {
             const dirty = productDraft !== productName || String(azureAutoRefreshDraft) !== String(azureAutoRefreshSeconds) || Object.entries(localFlags).some(([k, v]) => flags?.[k] !== v);
             return (
