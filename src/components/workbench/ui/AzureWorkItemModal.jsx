@@ -284,7 +284,7 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
   // `person.id` e o ID proprio da linha de collaborators, nunca igual a
   // `profile.id` — o vinculo com o profile logado e por `profileId`. Essa
   // comparacao errada fazia o reporter nunca ser encontrado, entao a previa
-  // (e a mensagem real) nunca mostrava "Reported by".
+  // (e a mensagem real) nunca mostrava "Tested by".
   const reporter = collaborators.find((person) => person.profileId === profile?.id || person.email === profile?.email);
   const slackPreviewText = result ? buildLegacyQaResultSlackText({
     item,

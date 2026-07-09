@@ -143,11 +143,12 @@ function slackWorkItemLine(item, includeTitle = true) {
   return `${workItemSlackTag(item.type)} ${link ? `<${link}|${escapeSlackLinkText(text)}>` : escapeSlackLinkText(text)}`;
 }
 
-// Formato fiel ao userscript legado (buildSlackReportText): exatamente 5
+// Formato baseado no userscript legado (buildSlackReportText): exatamente 5
 // linhas — titulo, pai (se houver), item (com "└" se houver pai), FYI
-// (fixos + assignee, sem QA responsavel) e Reported by (quem registrou o
-// teste). Nada de status/contexto/anexos aqui — esses detalhes ficam na
-// discussion do Azure (buildQaResultDiscussionHtml), nao no Slack.
+// (fixos + assignee, sem QA responsavel) e Tested by (quem registrou o
+// teste — renomeado de "Reported by" a pedido do usuario, mais claro pra
+// quem le no Slack). Nada de status/contexto/anexos aqui — esses detalhes
+// ficam na discussion do Azure (buildQaResultDiscussionHtml), nao no Slack.
 export function buildLegacyQaResultSlackText({ item, resultKey, resultLabel, environments = [], countries = [], authorName = "", assignee, fyi = [] }) {
   const template = qaResultTemplates[resultKey] || Object.values(qaResultTemplates).find((entry) => entry.label === resultLabel) || qaResultTemplates.pass;
   const assigneeMention = legacyMention(assignee);
@@ -160,7 +161,7 @@ export function buildLegacyQaResultSlackText({ item, resultKey, resultLabel, env
     parentLine,
     itemLine,
     fyiMentions ? `FYI ${fyiMentions}` : null,
-    authorName ? `Reported by: ${authorName}` : null
+    authorName ? `Tested by: ${authorName}` : null
   ].filter(Boolean).join("\n");
 }
 
