@@ -201,6 +201,27 @@ body {
   font-size: 11px;
   font-weight: 700;
 }
+.stark-admin-sandbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #ea580c;
+  border-radius: 999px;
+  background: color-mix(in srgb, #ea580c 12%, transparent);
+  color: #ea580c;
+  padding: 0 10px 0 12px;
+  min-height: 32px;
+  font-size: 11px;
+  font-weight: 800;
+}
+.stark-admin-sandbox select {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
 .stark-user-menu-wrap {
   position: relative;
   min-width: 0;
@@ -3009,7 +3030,7 @@ body {
   margin-bottom: 4px;
 }
 .mbdhc-governance .mbdhc-dev-card-pinned {
-  max-width: 420px;
+  width: 100%;
   box-shadow: 0 4px 14px rgba(15,23,42,.08);
 }
 .mbdhc-dev-pinned-label {
@@ -3503,12 +3524,14 @@ body {
 }
 .mbwi-tabs-react {
   display: flex;
+  align-items: center;
   gap: 8px;
   padding: 10px 14px;
   border-bottom: 1px solid var(--starkBorder);
   background: var(--starkSurface);
   overflow-x: auto;
 }
+.mbwi-tabs-spacer { flex: 1; }
 .mbwi-tabs-react button {
   border: 1px solid var(--starkBorder);
   border-radius: 999px;
@@ -3599,7 +3622,7 @@ body {
 }
 .mbwi-node-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
   padding: 10px 12px;
@@ -3698,28 +3721,52 @@ body {
   color: #1d4ed8;
 }
 .mbwi-type-pill-icon { width: 18px; height: 18px; margin-right: 8px; vertical-align: middle; }
-.mbwi-manual-help {
-  margin-bottom: 14px;
-  padding: 12px;
-  border: 1px solid var(--starkBorder);
-  border-radius: 10px;
-  background: var(--starkSurfaceAlt);
-  color: var(--starkMuted);
-  font-size: 12px;
+.mbw-info-tooltip {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
 }
-.mbwi-info {
-  width: 30px;
-  height: 30px;
-  border-radius: 999px;
-  border: 1px solid var(--starkBorder);
-  background: var(--starkSurface);
+.mbw-info-tooltip-trigger {
   display: inline-grid;
   place-items: center;
-  margin-right: 8px;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--starkMuted);
   cursor: pointer;
+  font-size: 14px;
 }
-.mbwi-help-text { display: inline-block; vertical-align: middle; max-width: 70%; }
-.mbwi-info:hover + .mbwi-help-text, .mbwi-info:focus + .mbwi-help-text { background: rgba(37,99,235,.04); border-radius:6px; padding:6px; color:var(--starkText); }
+.mbw-info-tooltip-trigger:hover,
+.mbw-info-tooltip-trigger:focus-visible {
+  color: var(--starkAccent);
+}
+.mbw-info-tooltip-bubble {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 8px);
+  left: 0;
+  width: max-content;
+  max-width: 280px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #1e293b;
+  color: #f1f5f9;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+  box-shadow: 0 8px 20px rgba(15,23,42,.25);
+  pointer-events: none;
+}
+.mbw-info-tooltip-bubble::before {
+  content: "";
+  position: absolute;
+  bottom: 100%;
+  left: 10px;
+  border: 6px solid transparent;
+  border-bottom-color: #1e293b;
+}
 .mbwi-manual-editor {
   margin-top: 14px;
   border: 1px solid var(--starkBorder);
@@ -3813,11 +3860,8 @@ body {
 }
 .mbwi-type-wrap { position: relative; display: inline-block; }
 .mbwi-edit-inside-badge {
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 999px;
   border: 1px solid var(--starkBorder);
   background: var(--starkSurfaceAlt);
@@ -3825,6 +3869,7 @@ body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  flex: none;
 }
 .mbwi-edit-inside-badge i { font-size: 12px; }
 

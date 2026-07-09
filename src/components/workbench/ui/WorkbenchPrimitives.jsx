@@ -34,6 +34,21 @@ export function IconButton({ children, title, ...props }) {
   return <button type="button" className="mbw-icon-btn" title={title} {...props}>{children}</button>;
 }
 
+// So o icone (sem texto ao lado) — passa mouse ou clica pra ver a explicacao
+// num balao estilizado, em vez do title nativo do navegador (feio, sem
+// quebra de linha, atraso pra aparecer).
+export function InfoTooltip({ text }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="mbw-info-tooltip" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <button type="button" className="mbw-info-tooltip-trigger" aria-label="Mais informacoes" onClick={() => setOpen((value) => !value)}>
+        <i className="bi bi-info-circle" />
+      </button>
+      {open && <span className="mbw-info-tooltip-bubble" role="tooltip">{text}</span>}
+    </span>
+  );
+}
+
 export function SearchBox({ value, onChange, placeholder = "Buscar" }) {
   return (
     <label className="mbw-search">

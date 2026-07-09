@@ -184,7 +184,11 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
         <label className="mbw-field mb-span-2">
           <span>Funções</span>
           <div className="mb-profile-role-row">
-            {roleDefs.map((role) => (
+            {/* Quem nao e Gestao/Gerente/Admin so pode OLHAR a propria
+                funcao — mostrar as demais opcoes (que nunca vai poder
+                escolher) so polui a tela. Gestao/Gerente/Admin continuam
+                vendo o menu completo pra atribuir qualquer funcao. */}
+            {roleDefs.filter((role) => canEditRoles || hasRoleFlag(person, role)).map((role) => (
               <RolePill
                 key={role.key}
                 level={role.level}
@@ -205,28 +209,32 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
                 }}
               />
             ))}
-            <RolePill
-              key="role-gerente"
-              level="gerente"
-              label="Gerente"
-              active={currentAccessLevel === accessLevels.gerente}
-              disabled={!editable || !canEditRoles}
-              onToggle={() => onUpdate({ accessLevel: currentAccessLevel === accessLevels.gerente ? accessLevels.gestao : accessLevels.gerente, isManagement: true })}
-            />
-            <RolePill
-              key="role-admin"
-              level="admin"
-              label="Admin"
-              active={isAdminPerson(person)}
-              disabled={!editable || !canChangeAdmin}
-              onToggle={() => {
-                if (currentAccessLevel === accessLevels.admin) {
-                  onUpdate({ accessLevel: accessLevels.gestao });
-                } else {
-                  onUpdate({ isAdmin: !Boolean(person.isAdmin) });
-                }
-              }}
-            />
+            {(canEditRoles || currentAccessLevel === accessLevels.gerente) && (
+              <RolePill
+                key="role-gerente"
+                level="gerente"
+                label="Gerente"
+                active={currentAccessLevel === accessLevels.gerente}
+                disabled={!editable || !canEditRoles}
+                onToggle={() => onUpdate({ accessLevel: currentAccessLevel === accessLevels.gerente ? accessLevels.gestao : accessLevels.gerente, isManagement: true })}
+              />
+            )}
+            {(canChangeAdmin || isAdminPerson(person)) && (
+              <RolePill
+                key="role-admin"
+                level="admin"
+                label="Admin"
+                active={isAdminPerson(person)}
+                disabled={!editable || !canChangeAdmin}
+                onToggle={() => {
+                  if (currentAccessLevel === accessLevels.admin) {
+                    onUpdate({ accessLevel: accessLevels.gestao });
+                  } else {
+                    onUpdate({ isAdmin: !Boolean(person.isAdmin) });
+                  }
+                }}
+              />
+            )}
           </div>
         </label>
         <label className="mbw-field mb-span-2">
@@ -383,7 +391,13 @@ export function CollaboratorsWorkbench() {
         title="Perfil"
         subtitle={isGestao ? "Cadastro unico de identidade, aliases, permissoes, Slack, avatar e cor de todo o time." : "Suas informacoes de identidade, Slack, avatar e cor."}
         demoMode={demoMode}
-        actions={<>{isGestao && <Button onClick={addPerson}>+ Adicionar</Button>}<Button onClick={exportCollaboratorsCsv}><i className="bi bi-download" /> CSV</Button></>}
+        actions={<>
+          {isGestao && <Button onClick={addPerson}>+ Adicionar</Button>}
+          {!isGestao && ownCollaborator && (editingId === ownCollaborator.id
+            ? <Button tone="primary" onClick={() => setEditingId(null)}><i className="bi bi-check-lg" /> Concluir</Button>
+            : <Button onClick={() => setEditingId(ownCollaborator.id)}><i className="bi bi-pencil" /> Editar</Button>)}
+          <Button onClick={exportCollaboratorsCsv}><i className="bi bi-download" /> CSV</Button>
+        </>}
       />
       <div className="mb-collaborators-list-react">
         {isGestao && (loading ? <WorkbenchCardSkeleton rows={1} mode="list" /> : pendingAccounts.length > 0 && (
@@ -414,11 +428,6 @@ export function CollaboratorsWorkbench() {
           const editing = editingId === person.id;
           return (
             <div key={person.id} className="mb-collaborator-single">
-              <div className="mb-profile-card-actions mb-profile-card-actions-outer">
-                {editing
-                  ? <Button tone="primary" onClick={() => setEditingId(null)}><i className="bi bi-check-lg" /> Concluir</Button>
-                  : <Button onClick={() => setEditingId(person.id)}><i className="bi bi-pencil" /> Editar</Button>}
-              </div>
               <ProfileCard
                 person={person}
                 isGestao={isGestao}

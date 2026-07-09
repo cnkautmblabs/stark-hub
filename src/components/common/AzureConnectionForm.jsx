@@ -1,20 +1,59 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { supabase } from "../../lib/supabaseClient.js";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { normalizeAzureOrgUrl } from "../../utils/azure.js";
+import { writePersonalSettings } from "../../utils/personalSettings.js";
 
 const DEFAULT_ORG_URL = "https://dev.azure.com/cinemarkintl";
 
 export default function AzureConnectionForm({ onSuccess, submitLabel = "Testar e salvar" }) {
-  const { profile, updateLocalAzureConnection } = useAuth();
+  const { profile, user, updateLocalAzureConnection } = useAuth();
   const [orgUrl, setOrgUrl] = useState(profile?.azureOrgUrl || DEFAULT_ORG_URL);
   const [project, setProject] = useState(profile?.azureProject || "");
   const [team, setTeam] = useState(profile?.azureTeam || "");
   const [pat, setPat] = useState("");
   const [status, setStatus] = useState(null);
   const [testing, setTesting] = useState(false);
+  const importRef = useRef(null);
 
   const alreadyConnected = Boolean(profile?.azureVerifiedAt);
+
+  // Arquivo gerado em Configuracoes ("Config. p/ equipe") — preenche org/
+  // projeto/time (o PAT continua pessoal, cada um cola o proprio) e ja deixa
+  // pipelines/webhook do Slack salvos localmente pra quando a pessoa chegar
+  // em Configuracoes depois.
+  function handleImportConfig(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const payload = JSON.parse(String(reader.result || "{}"));
+        if (payload.schema !== "stark-hub-config" || payload.type !== "team-onboarding") {
+          setStatus({ type: "error", message: "Arquivo de configuracao invalido." });
+          return;
+        }
+        const azure = payload.azure || {};
+        const slack = payload.slack || {};
+        if (azure.orgUrl) setOrgUrl(azure.orgUrl);
+        if (azure.project) setProject(azure.project);
+        if (azure.team) setTeam(azure.team);
+        writePersonalSettings(profile, user, {
+          pipelineQaName: azure.pipelineQaName || "",
+          pipelineBetaName: azure.pipelineBetaName || "",
+          slackWebhookUrl: slack.webhookUrl || "",
+          slackTestWebhookUrl: slack.testWebhookUrl || "",
+          slackTestMode: Boolean(slack.testMode),
+          slackPrimaryWebhookName: slack.primaryWebhookName || "Canal principal"
+        });
+        setStatus({ type: "success", message: "Configuracao importada. Falta so colar seu PAT pessoal e testar a conexao." });
+      } catch {
+        setStatus({ type: "error", message: "Nao foi possivel ler o arquivo de configuracao." });
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = "";
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -58,6 +97,12 @@ export default function AzureConnectionForm({ onSuccess, submitLabel = "Testar e
 
   return (
     <form data-allow-submit="true" onSubmit={handleSubmit} className="d-flex flex-column gap-3">
+      <div className="d-flex justify-content-end">
+        <input ref={importRef} type="file" accept="application/json" hidden onChange={handleImportConfig} />
+        <button type="button" className="btn btn-outline-secondary btn-sm" onClick={() => importRef.current?.click()}>
+          <i className="bi bi-upload" /> Importar configuração
+        </button>
+      </div>
       <div>
         <label className="form-label small text-muted">URL da organização Azure DevOps</label>
         <input

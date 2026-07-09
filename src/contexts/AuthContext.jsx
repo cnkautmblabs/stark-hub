@@ -22,6 +22,24 @@ function mergeLocalAzureConnection(profile, user) {
   return { ...profile, ...azure };
 }
 
+// Sandbox de Admin: "ver como" outro nivel de acesso, sem trocar de conta.
+// So mexe no OBJETO profile exposto pelo frontend (accessLevel/isDev/isQa/
+// isManagement/isAdmin) — a identidade real (auth.uid()) nao muda, entao RLS
+// no banco continua valendo pra quem a pessoa realmente e. Aplicado aqui, no
+// unico lugar de onde `profile` sai pro resto do app, entao toda tela que ja
+// le profile.accessLevel/isDev/isQa/isManagement muda de visao junto.
+function applyViewAsRole(profile, viewAsRole) {
+  if (!profile?.isAdmin || !viewAsRole) return profile;
+  return {
+    ...profile,
+    accessLevel: viewAsRole,
+    isAdmin: false,
+    isDev: viewAsRole === accessLevels.dev,
+    isQa: viewAsRole === accessLevels.qa,
+    isManagement: viewAsRole === accessLevels.gestao || viewAsRole === accessLevels.gerente
+  };
+}
+
 const AuthContext = createContext(null);
 
 // Sentinela para "ainda não sabemos se há sessão" — distinto de `null`
@@ -88,6 +106,7 @@ export function AuthProvider({ children }) {
   const [demoMode, setDemoMode] = useState(false);
   const [demoRole, setDemoRole] = useState(accessLevels.gestao);
   const [oauthError] = useState(readOAuthDiagnostics);
+  const [viewAsRole, setViewAsRole] = useState(null);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -200,7 +219,8 @@ export function AuthProvider({ children }) {
     return { data, error };
   }
 
-  const effectiveProfile = demoMode ? mockProfiles[demoRole] : mergeLocalAzureConnection(profile, session?.user);
+  const realProfile = demoMode ? mockProfiles[demoRole] : mergeLocalAzureConnection(profile, session?.user);
+  const effectiveProfile = demoMode ? realProfile : applyViewAsRole(realProfile, viewAsRole);
 
   const value = useMemo(
     () => ({
@@ -217,10 +237,16 @@ export function AuthProvider({ children }) {
       updateProfile,
       updateLocalAzureConnection,
       reloadProfile: () => session?.user && loadProfile(session.user.id),
-      oauthError
+      oauthError,
+      // Sandbox de Admin: ver o app como outro nivel de acesso sem trocar de
+      // conta. isRealAdmin reflete a identidade de verdade (nao o profile
+      // pisado pelo sandbox), pra decidir se mostra o seletor.
+      isRealAdmin: Boolean(profile?.isAdmin) && !demoMode,
+      viewAsRole,
+      setViewAsRole
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [session, profile, loading, demoMode, demoRole, effectiveProfile, oauthError, azureConnectionVersion]
+    [session, profile, loading, demoMode, demoRole, effectiveProfile, oauthError, azureConnectionVersion, viewAsRole]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

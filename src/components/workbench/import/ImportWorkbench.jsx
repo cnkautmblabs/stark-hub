@@ -14,7 +14,7 @@ import {
 } from "../../../utils/hierarchyImport.js";
 import { csvCell } from "../../../utils/workbench/formatters.js";
 import { dateStamp, downloadCsv } from "../../../utils/csvExport.js";
-import { Button, EmptyState, Kpi, TextField, TypeBadge, WorkbenchHeader, typeIconSrc } from "../ui/WorkbenchPrimitives.jsx";
+import { Button, EmptyState, InfoTooltip, Kpi, TextField, TypeBadge, WorkbenchHeader, typeIconSrc } from "../ui/WorkbenchPrimitives.jsx";
 
 const manualTypeOptions = ["Epic", "Feature", "User Story", "Task", "Test Case", "Bug"];
 
@@ -249,14 +249,14 @@ function TreePreview({ node, depth = 0, draggingId, dropTargetId, onToggle, onMo
         >
           {hasChildren ? (isExpanded ? "−" : "+") : ""}
         </button>
+        {onToggle?.onEdit && (
+          <button type="button" className="mbwi-edit-inside-badge" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onToggle.onEdit(node.id); }} title="Editar item">
+            <i className="bi bi-pencil" />
+          </button>
+        )}
         <div className="mbwi-node-title">
           <div className="mbwi-type-wrap">
             <TypeBadge type={node.type} />
-            {onToggle?.onEdit && (
-              <button type="button" className="mbwi-edit-inside-badge" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onToggle.onEdit(node.id); }} title="Editar item">
-                <i className="bi bi-pencil" />
-              </button>
-            )}
           </div>
           <strong>{node.title || node.type}</strong>
         </div>
@@ -339,7 +339,6 @@ export function ImportWorkbench() {
   const [manualDraft, setManualDraft] = useState({ type: "Epic", title: "", tags: [], tagInput: "", description: "", parentId: "" });
   const [manualEditItemId, setManualEditItemId] = useState(null);
   const [showManualModal, setShowManualModal] = useState(false);
-  const [showLogs, setShowLogs] = useState(false);
   const [draggingId, setDraggingId] = useState(null);
   const [dropTargetId, setDropTargetId] = useState(null);
   const [dragOverRoot, setDragOverRoot] = useState(false);
@@ -601,14 +600,17 @@ export function ImportWorkbench() {
       <input ref={fileRef} type="file" hidden accept=".csv,.tsv,.txt" onChange={handleFile} />
       <div className="mbwi-drawer-react">
         <nav className="mbwi-tabs-react">
-          {["manual", "csv", "preview"].map((value) => <button key={value} className={tab === value ? "active" : ""} onClick={() => setTab(value)}>{{ manual: "Manual", csv: "CSV", preview: "Previa" }[value]}</button>)}
+          {["manual", "csv", "logs"].map((value) => <button key={value} className={tab === value ? "active" : ""} onClick={() => setTab(value)}>{{ manual: "Manual", csv: "CSV", logs: "Logs" }[value]}</button>)}
+          <span className="mbwi-tabs-spacer" />
+          {tab !== "logs" && (
+            <Button onClick={() => (tab === "manual" ? loadDefaultManual() : loadDefaultCsv())}>Exemplo</Button>
+          )}
         </nav>
         <div className="mbwi-body-react">
           {tab === "manual" && (
             <div className="mbwi-grid-react">
               <section className="mbwi-card-react">
-                <h3>Manual</h3>
-                <p>Arraste um tipo para a prévia ou clique num badge para abrir o editor.</p>
+                <h3>Manual <InfoTooltip text="Clique num tipo para abrir o editor, informe o título, tags e descrição e depois confirme. Arraste o tipo para a prévia para criar com pai direto." /></h3>
                 <div className="mbw-form-grid mbwi-shared-settings">
                   <TextField label="Area Path" value={areaPath} onChange={setAreaPath} />
                   <TextField label="Iteration Path" value={iterationPath} onChange={setIterationPath} />
@@ -632,12 +634,6 @@ export function ImportWorkbench() {
                     </button>
                   ))}
                 </div>
-                <div className="mbwi-manual-help">
-                  <button type="button" className="mbwi-info" aria-label="Como usar" title="Clique para ver instrucoes">i</button>
-                  <div className="mbwi-help-text">Clique num tipo para abrir o editor, informe o título, tags e descrição e depois confirme. Arraste o tipo para a prévia para criar com pai direto.</div>
-                  <div className="mbw-actions"><Button onClick={loadDefaultManual}>Exemplo QA</Button></div>
-                </div>
-                
               </section>
               <section className="mbwi-card-react">
                 <h3>Prévia</h3>
@@ -674,7 +670,7 @@ export function ImportWorkbench() {
                 <h3>CSV / TSV</h3>
                 <p>Aceita ID, Work Item Type, Title 1...Title 5, Area Path, Iteration Path, Country, Tags e Description.</p>
                 <textarea value={raw} onChange={(event) => setRaw(event.target.value)} placeholder="Cole o CSV/TSV aqui" />
-                <div className="mbw-actions"><Button onClick={() => fileRef.current?.click()}>Carregar arquivo CSV</Button><Button onClick={loadDefaultCsv}>Exemplo QA</Button></div>
+                <div className="mbw-actions"><Button onClick={() => fileRef.current?.click()}>Carregar arquivo CSV</Button></div>
               </section>
               <section className="mbwi-card-react">
                 <h3>Preview</h3>
@@ -701,46 +697,16 @@ export function ImportWorkbench() {
               </section>
             </div>
           )}
-          {tab === "preview" && (
+          {tab === "logs" && (
             <section className="mbwi-card-react">
-              <div className="mbw-form-grid">
-                <TextField label="Area Path" value={areaPath} onChange={setAreaPath} />
-                <TextField label="Iteration Path" value={iterationPath} onChange={setIterationPath} />
-                <TextField label="Country field" value={countryField} onChange={setCountryField} placeholder="Custom.Country" />
-              </div>
-              <div className="mbw-kpi-row">{Object.entries(counts).map(([type, count]) => <Kpi key={type} label={type} value={count} />)}</div>
-              <div className="mbwi-tree-controls">
-                <div>
-                  <Button tone="secondary" onClick={collapseAll}>Recolher tudo</Button>
-                  <Button tone="secondary" onClick={expandAll}>Expandir tudo</Button>
-                </div>
-                <span className="mbwi-tree-hint">Arraste um item e solte sobre outro para torná-lo filho; solte fora de um item para torná-lo raiz.</span>
-              </div>
-              <div
-                className={`mbwi-tree-preview${dragOverRoot ? " mbwi-tree-root-active" : ""}`}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  if (event.target === event.currentTarget) {
-                    setDragOverRoot(true);
-                    setDropTargetId(null);
-                  }
-                }}
-                onDragLeave={() => setDragOverRoot(false)}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  const sourceId = event.dataTransfer.getData("text/plain");
-                  if (sourceId) moveTreeNode(sourceId, null);
-                  setDragOverRoot(false);
-                }}
-              >
-                <div className="mbwi-tree-drop-hint">Arraste aqui para mover para raiz</div>
-                {tree ? <TreePreview node={tree} draggingId={draggingId} dropTargetId={dropTargetId} onToggle={{ toggle: toggleNodeExpanded, setDragging: setDraggingId, clearDrag: () => { setDraggingId(null); setDropTargetId(null); }, setDropTarget: setDropTargetId, clearDropTarget: () => setDropTargetId(null), isExpanded: (id) => expandedNodeIds.has(id) }} onMove={moveTreeNode} /> : <EmptyState title="Nenhuma previa gerada. Monte a hierarquia manual ou cole um CSV." />}
-              </div>
+              <h3>Logs</h3>
+              {log.length > 0
+                ? <div className="mbwi-log-react">{log.map((entry, index) => <div key={index} className={entry.kind}>{entry.message}</div>)}</div>
+                : <EmptyState title="Nenhum log ainda" />}
             </section>
           )}
         </div>
         <footer className="mbwi-footer-react">
-          <Button onClick={() => setShowLogs((v) => !v)}>{showLogs ? "Ocultar logs" : "Logs"}</Button>
           <span className="mbwi-spacer" />
           <Button disabled={!tree || demoMode || importing} onClick={executeImport} tone="primary">{importing ? "Importando..." : "Executar importacao"}</Button>
           {demoMode && <span className="mbw-muted">Import real indisponivel no modo demo.</span>}
@@ -779,11 +745,6 @@ export function ImportWorkbench() {
         </div>
       )}
 
-      {showLogs && log.length > 0 && (
-        <div className="mbwi-log-react">
-          {log.map((entry, index) => <div key={index} className={entry.kind}>{entry.message}</div>)}
-        </div>
-      )}
       {result && (
         <section className="mbwi-card-react mbwi-result">
           <h3>Resumo da importacao</h3>

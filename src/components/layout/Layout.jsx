@@ -21,7 +21,7 @@ function MBLabsMark() {
 export default function Layout() {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("starkHubSidebarCollapsed") === "1");
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const { profile, user, demoMode, signOut } = useAuth();
+  const { profile, user, demoMode, signOut, isRealAdmin, viewAsRole, setViewAsRole } = useAuth();
   const { collaborators } = useCollaborators();
   const displayName = profile?.displayName || profile?.fullName || user?.email || "Stark Hub";
   const email = profile?.email || user?.email || (demoMode ? "modo.demo@starkhub.local" : "");
@@ -57,6 +57,18 @@ export default function Layout() {
             <span>Stark Hub</span>
             <small>{accessLabel}</small>
           </div>
+          {isRealAdmin && (
+            <label className="stark-admin-sandbox" title="Sandbox de Admin: ver o app como outro nivel de acesso, sem trocar de conta. Vale em todas as telas.">
+              <i className="bi bi-eye" />
+              <select value={viewAsRole || ""} onChange={(event) => setViewAsRole(event.target.value || null)}>
+                <option value="">Ver como: Admin (real)</option>
+                <option value={accessLevels.dev}>Ver como: Dev</option>
+                <option value={accessLevels.qa}>Ver como: QA</option>
+                <option value={accessLevels.gestao}>Ver como: Gestão</option>
+                <option value={accessLevels.gerente}>Ver como: Gerente</option>
+              </select>
+            </label>
+          )}
           <div className="stark-user-menu-wrap">
             <button type="button" className="stark-user-menu-trigger" onClick={() => setUserMenuOpen((value) => !value)} aria-expanded={userMenuOpen}>
               <IdentityAvatar name={displayName} imageUrl={avatarUrl} color={avatarColor} accessLevel={profile?.accessLevel} size={36} />

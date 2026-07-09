@@ -661,10 +661,13 @@ export function WorkbenchHome() {
         <WidgetsGrid widgets={widgets} onRemove={removeWidget} onReorder={reorderWidgets} onEdit={setEditingWidget} />
       </section>
 
-      {(isDev || isGestao) && (
+      {/* Painel Dev so pra Dev, Painel QA so pra QA — pedido explicito do
+          usuario pra nao misturar os dois pra Gestao/Gerente/Admin, que ja
+          tem o proprio dashboard dedicado (Gestao da equipe). */}
+      {isDev && (
         <DevPanel loading={loading} myItems={myItems} completedHours={completedHours} goalHours={goalHours} hoursPercent={hoursPercent} />
       )}
-      {(isQa || isGestao) && (
+      {isQa && (
         <QaPanel loading={loading} availableForTesting={availableForTesting.length} evidenceToday={evidenceToday} currentSprintLabel={currentSprintLabel} />
       )}
 
