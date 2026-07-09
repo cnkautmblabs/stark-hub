@@ -6,6 +6,7 @@ import {
   FiSearch,
   FiUpload
 } from "react-icons/fi";
+import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import AzureConnectionForm from "../common/AzureConnectionForm.jsx";
 import { ErrorBoundary } from "../common/ErrorBoundary.jsx";
 import {
@@ -279,6 +280,24 @@ function PipelineEnvPill({ item, pipeline }) {
       <i className={`bi ${statusIcon}`} />
       <span>{label}</span>
     </button>
+  );
+}
+
+// Tooltip compartilhado entre os graficos Recharts do app — segue as mesmas
+// variaveis de tema (var(--stark*)) usadas no resto da UI, entao adapta
+// sozinho no toggle claro/escuro sem precisar de uma versao por tema.
+function RechartsTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="mbw-chart-tooltip">
+      {label && <strong>{label}</strong>}
+      {payload.map((entry) => (
+        <span key={entry.dataKey || entry.name}>
+          <i style={{ background: entry.color || entry.payload?.color }} />
+          {entry.name}: <b>{entry.value}</b>
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -627,16 +646,24 @@ export function QaBoardWorkbench() {
               ) : (
                 <div id="mbaz-chart" className="mbaz-chart">
                   <div className="mbaz-chart-head"><h3>Distribuicao por status</h3><span>{filtered.length} item(s)</span></div>
-                  <div className="mbaz-stacked">
-                    {qaStatusOrder.map((key) => {
-                      const percent = filtered.length ? Math.round((filteredCounts[key] / filtered.length) * 100) : 0;
-                      return (
-                        <span key={key} className="mbaz-stack-seg" title={`${qaStatusConfig[key].label}: ${filteredCounts[key]} (${percent}%)`} style={{ width: `${filtered.length ? Math.max(2, (filteredCounts[key] / filtered.length) * 100) : 0}%`, background: qaStatusConfig[key].color }}>
-                          {percent >= 10 && <em>{filteredCounts[key]}</em>}
-                        </span>
-                      );
-                    })}
-                  </div>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <PieChart>
+                      <Pie
+                        data={qaStatusOrder.map((key) => ({ key, name: qaStatusConfig[key].label, value: filteredCounts[key] }))}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius="58%"
+                        outerRadius="90%"
+                        paddingAngle={filteredCounts && filtered.length ? 2 : 0}
+                        onClick={(entry) => { const key = entry?.payload?.key; setStatusFilter((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key]); }}
+                      >
+                        {qaStatusOrder.map((key) => (
+                          <Cell key={key} fill={qaStatusConfig[key].color} opacity={statusFilter.length && !statusFilter.includes(key) ? 0.3 : 1} cursor="pointer" stroke="var(--starkSurface)" strokeWidth={2} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<RechartsTooltip />} />
+                    </PieChart>
+                  </ResponsiveContainer>
                   <div className="mbaz-legend">{qaStatusOrder.map((key) => <span key={key} className="mbaz-legend-item"><i className="mbaz-legend-dot" style={{ background: qaStatusConfig[key].color }} />{qaStatusConfig[key].label} {filteredCounts[key]}/{filtered.length ? Math.round((filteredCounts[key] / filtered.length) * 100) : 0}%</span>)}</div>
                 </div>
               )}
@@ -645,16 +672,18 @@ export function QaBoardWorkbench() {
               ) : (
                 <div id="mbaz-qa-metrics" className="mbaz-qa-metrics">
                   <div className="mbaz-chart-head"><h3>Carga por QA</h3><span>{filtered.length} item(s)</span></div>
-                  <div className="mbaz-qa-bar">
-                    {qaMetrics.map((row) => {
-                      const percent = filtered.length ? Math.round((row.count / filtered.length) * 100) : 0;
-                      return (
-                        <span key={row.id || "none"} className={`mbaz-qa-seg ${qaFilter.includes(row.id) ? "active" : ""}`} title={`${row.label}: ${row.count} (${percent}%)`} style={{ width: `${filtered.length ? Math.max(row.count ? 2 : 0, (row.count / filtered.length) * 100) : 0}%`, background: row.color }}>
-                          {percent >= 10 && <em>{row.count}</em>}
-                        </span>
-                      );
-                    })}
-                  </div>
+                  <ResponsiveContainer width="100%" height={Math.max(140, qaMetrics.length * 40)}>
+                    <BarChart data={qaMetrics} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 4 }}>
+                      <XAxis type="number" hide />
+                      <YAxis type="category" dataKey="label" width={110} tick={{ fontSize: 11, fill: "var(--starkMuted)" }} axisLine={false} tickLine={false} />
+                      <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
+                      <Bar dataKey="count" radius={[0, 6, 6, 0]} onClick={(entry) => { const id = entry?.payload?.id; setQaFilter((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]); }} cursor="pointer">
+                        {qaMetrics.map((row) => (
+                          <Cell key={row.id || "none"} fill={row.color} opacity={qaFilter.length && !qaFilter.includes(row.id) ? 0.3 : 1} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
                   <div className="mbaz-qa-legend">{qaMetrics.map((row) => <button key={row.id || "none"} type="button" className={`mbaz-qa-legend-item ${qaFilter.includes(row.id) ? "active" : ""}`} onClick={() => setQaFilter((current) => current.includes(row.id) ? current.filter((item) => item !== row.id) : [...current, row.id])}><i className="mbaz-legend-dot" style={{ background: row.color }} />{row.label} <strong>{row.count}</strong></button>)}</div>
                 </div>
               )}

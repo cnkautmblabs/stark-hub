@@ -1002,6 +1002,22 @@ body {
 .mbaz-legend { display: flex; flex-wrap: wrap; gap: 7px; font-size: 10px; color: var(--starkMuted); }
 .mbaz-legend-item { display: inline-flex; align-items: center; gap: 4px; }
 .mbaz-legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+.mbw-chart-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border: 1px solid var(--starkBorder);
+  background: var(--starkSurface);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--starkText);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .18);
+}
+.mbw-chart-tooltip strong { font-size: 11px; }
+.mbw-chart-tooltip span { display: inline-flex; align-items: center; gap: 6px; color: var(--starkMuted); }
+.mbw-chart-tooltip span i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.mbw-chart-tooltip span b { color: var(--starkText); }
 .mbaz-country-state {
   margin-top: 6px;
   border: 1px solid var(--starkBorder);
