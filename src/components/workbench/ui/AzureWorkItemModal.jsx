@@ -4,7 +4,7 @@ import { azureWorkItemUrl } from "../../../utils/azure.js";
 import { countries, formatWorkItemCode } from "../../../utils/constants.js";
 import { compactSprintLabel } from "../../../utils/sprints.js";
 import { buildLegacyQaResultSlackText, buildQaResultDiscussionHtml, legacyMention } from "../../../utils/slackReport.js";
-import { evidenceDedupeKey, evidenceEnvironmentOrder, evidenceEnvironments, evidenceResultInfo, isQaEvidenceEntry } from "../../../utils/workbench/formatters.js";
+import { buildCollaboratorNameIndex, evidenceDedupeKey, evidenceEnvironmentOrder, evidenceEnvironments, evidenceResultInfo, findCollaboratorByName, isQaEvidenceEntry } from "../../../utils/workbench/formatters.js";
 import { useCollaborators } from "../../../hooks/useCollaborators.js";
 import { CountryVisual, EnvBadge, IdentityAvatar, QaPicker, ResultBadge, TypeBadge, envIconSrc, typeIconSrc } from "./WorkbenchPrimitives.jsx";
 
@@ -254,7 +254,15 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
   ];
   const resultLabel = result === "pass" ? "Approved" : result === "fail" ? "Fail" : result === "limitation" ? "Limitation" : "";
   const qaResponsible = collaborators.find((person) => person.id === item.qaCollaboratorId);
-  const assigneePerson = collaborators.find((person) => person.id === item.assigneeId || person.azureName === item.assigneeName) || { azureName: item.assigneeName || item.assignedTo };
+  // Nome exato so bate quando o Azure exibe o assignee EXATAMENTE igual ao
+  // azureName cadastrado — qualquer variacao (ordem "Sobrenome, Nome", alias)
+  // fazia o assignee "sumir" (virava so { azureName } sem slackMemberId,
+  // sem FYI/mencao possivel). Indice por nome cobre azureName/slackName/
+  // aliases e variacoes de ordem.
+  const collaboratorNameIndex = buildCollaboratorNameIndex(collaborators);
+  const assigneePerson = collaborators.find((person) => person.id === item.assigneeId)
+    || findCollaboratorByName(collaboratorNameIndex, item.assigneeName)
+    || { azureName: item.assigneeName || item.assignedTo };
   const devPeople = collaborators.filter((person) => person.isDev || person.dev);
   const qaPeople = collaborators.filter((person) => person.isQa || person.qa);
   const fixedFyi = collaborators.filter((person) => person.fixedMention || person.isFyiFixed || person.fyiFixed || person.fixedFyi);

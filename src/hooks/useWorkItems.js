@@ -11,6 +11,7 @@ import { getDemoWorkItems, updateDemoWorkItem, addDemoWorkItem } from "../utils/
 import { playNotificationSound } from "../utils/notificationSounds.js";
 import { azureWorkItemUrl } from "../utils/azure.js";
 import { buildApiCacheKey, readApiCache, stableSignature, withInflight, writeApiCache } from "../utils/localApiCache.js";
+import { buildCollaboratorNameIndex, findCollaboratorByName } from "../utils/workbench/formatters.js";
 
 const MAX_TOASTS_PER_GROUP = 4;
 const WORK_ITEMS_CACHE_TTL_MS = 60 * 1000;
@@ -267,7 +268,14 @@ export function useWorkItems({ includeClosed = false } = {}) {
         if (data?.ok && data.url) attachmentUrls.push(data.url);
       }
       const fyiPeople = collaborators.filter((person) => person.fixedMention || person.isFyiFixed || person.fyiFixed || person.fixedFyi);
-      const assignee = collaborators.find((c) => c.id === item.assigneeId || c.azureName === item.assigneeName) || { azureName: item.assigneeName || item.assignedTo };
+      // Nome exato so bate quando o Azure exibe o assignee EXATAMENTE igual
+      // ao azureName cadastrado — indice por nome cobre aliases/slackName/
+      // variacoes de ordem, pra nao perder o assignee (e a mencao dele no
+      // FYI) so por uma diferenca de formatacao do nome.
+      const collaboratorNameIndex = buildCollaboratorNameIndex(collaborators);
+      const assignee = collaborators.find((c) => c.id === item.assigneeId)
+        || findCollaboratorByName(collaboratorNameIndex, item.assigneeName)
+        || { azureName: item.assigneeName || item.assignedTo };
       const qaResponsible = collaborators.find((c) => c.id === item.qaCollaboratorId);
       const context = patch.context || patch.note || "";
       const commentText = patch.discussionText || buildQaResultDiscussionHtml({

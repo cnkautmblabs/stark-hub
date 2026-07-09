@@ -4,6 +4,53 @@ export function normalize(value) {
   return String(value || "").toLowerCase();
 }
 
+// Nome de uma pessoa pode aparecer em ordens diferentes entre Azure/Slack
+// ("Sobrenome, Nome" vs "Nome Sobrenome") — gera as variacoes plausiveis pra
+// nao depender de bater a string exata.
+export function identityNameVariants(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return [];
+  const variants = [raw];
+  const parenthesized = raw.match(/^([^()]+)\s*\(([^()]+)\)/);
+  if (parenthesized) {
+    variants.push(`${parenthesized[2]} ${parenthesized[1]}`);
+    variants.push(`${parenthesized[1]} ${parenthesized[2]}`);
+  }
+  const parts = raw.replace(/[()]/g, " ").split(/\s+/).filter(Boolean);
+  if (parts.length === 2) variants.push(`${parts[1]} ${parts[0]}`);
+  if (parts.length > 2) variants.push(`${parts[parts.length - 1]} ${parts.slice(0, -1).join(" ")}`);
+  return variants;
+}
+
+// Indexa colaboradores por TODO nome/apelido conhecido (azureName, slackName,
+// aliases cadastrados e variacoes de ordem "Sobrenome, Nome"), nao apenas o
+// azureName exato — evita "assignee nao encontrado" (sem FYI/mencao no
+// Slack) so porque o nome do Azure nao bate 100% com o azureName cadastrado.
+export function buildCollaboratorNameIndex(collaborators) {
+  const map = new Map();
+  (collaborators || []).forEach((person) => {
+    const names = [
+      person.azureName,
+      ...identityNameVariants(person.azureName),
+      person.slackName,
+      ...identityNameVariants(person.slackName),
+      ...(person.aliases || [])
+    ].filter(Boolean);
+    names.forEach((name) => {
+      const key = normalize(name);
+      if (key && !map.has(key)) map.set(key, person);
+    });
+  });
+  return map;
+}
+
+export function findCollaboratorByName(index, rawName) {
+  if (!rawName) return null;
+  const direct = index.get(normalize(rawName));
+  if (direct) return direct;
+  return identityNameVariants(rawName).map((variant) => index.get(normalize(variant))).find(Boolean) || null;
+}
+
 export function csvCell(value) {
   return `"${String(value ?? "").replace(/"/g, '""')}"`;
 }
