@@ -51,10 +51,15 @@ export function buildQaResultSlackText({ item, resultLabel, environments = [], c
   ].filter(Boolean).join("\n");
 }
 
+// Texto padrao sugerido no campo Contexto quando o resultado e Limitation —
+// exportado pra o modal pre-preencher o textarea (editavel) em vez de vir
+// fixo/duplicado no corpo da discussion (ver buildQaResultDiscussionHtml).
+export const limitationContextTemplate = "Client test and approval is required due to testing limitations in the Beta/PRD environment, which relies on payment in the local currency.";
+
 const qaResultTemplates = {
   pass: { label: "Pass", title: "TEST APPROVED IN", slackTitle: "TEST APPROVED IN", color: "rgb(15, 92, 26)", slackIcon: "✓", defaultBody: "<p><strong>EVIDENCE(S)</strong></p>" },
   fail: { label: "Fail", title: "TEST FAILED IN", slackTitle: "TEST FAILED IN", color: "rgb(163, 21, 21)", slackIcon: ":x:", defaultBody: "<p><strong>More details on task:</strong></p>" },
-  limitation: { label: "Limitation", title: "TESTING LIMITATION IN", slackTitle: "TESTING LIMITATION IN", color: "rgb(0, 90, 158)", slackIcon: ":warning:", defaultBody: "<p><strong>Context:</strong></p><p>Client test and approval is required due to testing limitations in the Beta/PRD environment, which relies on payment in the local currency.</p>" }
+  limitation: { label: "Limitation", title: "TESTING LIMITATION IN", slackTitle: "TESTING LIMITATION IN", color: "rgb(0, 90, 158)", slackIcon: ":warning:", defaultBody: "" }
 };
 
 const slackEnvLabels = { DEV: ":dev-tag:", QA: ":qa-tag:", BETA: ":beta-tag:", PROD: ":prod-tag:" };
@@ -112,8 +117,14 @@ export function buildQaResultDiscussionHtml({ resultKey, environments = [], coun
   const envHtml = environments.map(envPillHtml).join("");
   const countryHtml = countries.map(countryPillHtml).join("");
   const bpText = breakpointText(breakpoints);
-  const bpHtml = bpText ? `<p><span style="display:inline-block;width:16px;height:16px;margin-right:6px;border:1px solid #64748b;border-radius:3px;vertical-align:middle;"></span>${escapeHtml(bpText)}</p>` : "";
-  const contextHtml = context ? `<p>${escapeHtml(context).replace(/\n/g, "<br>")}</p>` : "";
+  // SVG de computador inline (nao um icon-font) porque isso vira HTML puro
+  // postado como comentario no Azure — sem a fonte de icones carregada la,
+  // um <i class="bi ..."> so mostraria um quadrado vazio/caractere quebrado.
+  const computerIconSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;display:inline-block;"><rect x="2" y="4" width="20" height="13" rx="1.5"></rect><line x1="8" y1="20" x2="16" y2="20"></line><line x1="12" y1="17" x2="12" y2="20"></line></svg>`;
+  const bpHtml = bpText ? `<p>${computerIconSvg}${escapeHtml(bpText)}</p>` : "";
+  // So mostra a linha de Contexto quando o campo foi preenchido de verdade —
+  // com o rotulo "Context:" seguido de quebra de linha antes do texto.
+  const contextHtml = context ? `<p><strong>Context:</strong><br>${escapeHtml(context).replace(/\n/g, "<br>")}</p>` : "";
   return [
     `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:13px;line-height:1.4;color:#201f1e;">`,
     `<p style="margin:0 0 8px 0;color:${template.color};font-weight:700;white-space:normal;">`,
@@ -121,8 +132,8 @@ export function buildQaResultDiscussionHtml({ resultKey, environments = [], coun
     `<span style="vertical-align:middle;">${template.title}</span>${envHtml}${countryHtml}`,
     `</p>`,
     template.defaultBody,
-    bpHtml,
     contextHtml,
+    bpHtml,
     attachmentHtml(attachments),
     `</div><p><br></p>`
   ].join("");

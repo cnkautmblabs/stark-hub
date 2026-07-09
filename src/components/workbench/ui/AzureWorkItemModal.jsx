@@ -3,7 +3,7 @@ import { supabase, isSupabaseConfigured } from "../../../lib/supabaseClient.js";
 import { azureWorkItemUrl } from "../../../utils/azure.js";
 import { countries, formatWorkItemCode } from "../../../utils/constants.js";
 import { compactSprintLabel } from "../../../utils/sprints.js";
-import { buildLegacyQaResultSlackText, buildQaResultDiscussionHtml, legacyMention } from "../../../utils/slackReport.js";
+import { buildLegacyQaResultSlackText, buildQaResultDiscussionHtml, legacyMention, limitationContextTemplate } from "../../../utils/slackReport.js";
 import { buildCollaboratorNameIndex, evidenceDedupeKey, evidenceEnvironmentOrder, evidenceEnvironments, evidenceResultInfo, findCollaboratorByName, isQaEvidenceEntry } from "../../../utils/workbench/formatters.js";
 import { useCollaborators } from "../../../hooks/useCollaborators.js";
 import { CountryVisual, EnvBadge, IdentityAvatar, QaPicker, ResultBadge, TypeBadge, envIconSrc, typeIconSrc } from "./WorkbenchPrimitives.jsx";
@@ -323,6 +323,10 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
   function setResultAndState(nextResult) {
     setResult(nextResult);
     setState(nextResult === "pass" ? "Ready to Beta" : "In QA");
+    // Limitation sempre tem o mesmo motivo padrao (limitacao de ambiente
+    // Beta/PRD) — pre-preenche o contexto com esse texto, editavel. Pass e
+    // Fail nao tem texto padrao, entao o campo comeca vazio.
+    setContext(nextResult === "limitation" ? limitationContextTemplate : "");
   }
 
   function attachmentKey(attachment) {
@@ -606,8 +610,8 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
               </select></label>
               <fieldset><legend>Ambiente testado</legend><div className="mbaz-new-modal-checks">{environmentOptions.map((env) => <button key={env} type="button" className={`mbaz-new-modal-toggle-pill ${selectedEnvironments.includes(env) ? "active" : ""}`} onClick={() => toggleValue(env, setSelectedEnvironments)}><img src={envIconSrc(env)} alt="" />{env}</button>)}</div></fieldset>
               <fieldset><legend>Pais testado</legend><div className="mbaz-new-modal-checks countries">{countryOptions.map((country) => <button key={country} type="button" className={`mbaz-new-modal-toggle-pill country ${selectedCountries.includes(country) ? "active" : ""}`} onClick={() => toggleValue(country, setSelectedCountries)}><CountryVisual code={country} compact /></button>)}</div></fieldset>
-              <fieldset><legend>Breakpoint</legend><div className="mbaz-new-modal-checks">{breakpointOptions.map((bp) => <button key={bp.value} type="button" className={`mbaz-new-modal-toggle-pill ${selectedBreakpoints.includes(bp.value) ? "active" : ""}`} onClick={() => toggleValue(bp.value, setSelectedBreakpoints)}><i className={`bi ${bp.icon}`} />{bp.label}<small>{bp.detail}</small></button>)}</div></fieldset>
               <label className="wide"><span>Contexto opcional</span><textarea value={context} onChange={(event) => setContext(event.target.value)} placeholder="Ex.: Validado checkout em 1280px, evidencias abaixo." /></label>
+              <fieldset><legend>Breakpoint</legend><div className="mbaz-new-modal-checks">{breakpointOptions.map((bp) => <button key={bp.value} type="button" className={`mbaz-new-modal-toggle-pill ${selectedBreakpoints.includes(bp.value) ? "active" : ""}`} onClick={() => toggleValue(bp.value, setSelectedBreakpoints)}><i className={`bi ${bp.icon}`} />{bp.label}<small>{bp.detail}</small></button>)}</div></fieldset>
               <div className="wide mbaz-new-modal-attachments">
                 <span>Evidencias</span>
                 <div

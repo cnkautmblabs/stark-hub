@@ -4843,8 +4843,9 @@ body {
 .mbaz-new-modal-dropzone {
   display: grid;
   place-items: center;
-  gap: 4px;
-  min-height: 104px;
+  gap: 6px;
+  min-height: 160px;
+  padding: 20px 16px;
   margin: 10px 0;
   border: 1px dashed #93c5fd;
   border-radius: 10px;
