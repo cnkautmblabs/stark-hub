@@ -4754,7 +4754,7 @@ body {
 }
 .mbaz-new-modal-form-grid {
   display: grid;
-  grid-template-columns: minmax(160px, 220px) minmax(220px, 1fr) minmax(220px, 1fr) minmax(160px, .8fr);
+  grid-template-columns: minmax(120px, 150px) minmax(180px, 1fr) minmax(180px, 1fr) minmax(140px, .8fr);
   gap: 10px;
   min-width: 0;
 }
@@ -5039,7 +5039,9 @@ body {
    icone/corner na mesma linha sempre que couber. */
 .mbaz-slack-preview p > * {
   min-width: 0;
+  max-width: 100%;
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .mbaz-slack-token {
   display: inline-flex;

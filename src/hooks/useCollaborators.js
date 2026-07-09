@@ -57,7 +57,26 @@ export function useCollaborators() {
             .select('id, email, "fullName", "displayName", "accessLevel", "isAdmin", "aliasAzure", "aliasSlack", "aliasVariations", "slackMemberId", "avatarUrl"')
             .in("id", profileIds);
           const byId = new Map((profiles || []).map((row) => [row.id, row]));
-          rows = data.map((person) => ({ ...person, linkedProfile: byId.get(person.profileId) || null, accessLevel: byId.get(person.profileId)?.accessLevel || person.accessLevel }));
+          // As duas tabelas guardam os mesmos campos de identidade com nomes
+          // diferentes, e a escrita nem sempre sincroniza os dois lados (ver
+          // updateCollaborator). Sem espelhar aqui — nao so na exibicao do
+          // Perfil — qualquer lugar que le `person.slackMemberId` direto
+          // (ex.: legacyMention pras mencoes do Slack) recebia o campo vazio
+          // de `collaborators` mesmo com o dado certo disponivel em
+          // `profiles`, e a mencao simplesmente nao aparecia.
+          rows = data.map((person) => {
+            const linked = byId.get(person.profileId) || null;
+            return {
+              ...person,
+              linkedProfile: linked,
+              accessLevel: linked?.accessLevel || person.accessLevel,
+              slackMemberId: person.slackMemberId || linked?.slackMemberId || "",
+              slackName: person.slackName || linked?.aliasSlack || "",
+              azureName: person.azureName || linked?.aliasAzure || linked?.displayName || linked?.fullName || "",
+              imageUrl: person.imageUrl || person.avatarUrl || linked?.avatarUrl || "",
+              aliases: Array.from(new Set([...(person.aliases || []), ...(linked?.aliasVariations || [])]))
+            };
+          });
         }
         // Remover duplicidades (caso o banco retorne linhas repetidas)
         rows = Array.from(new Map((rows || []).map((r) => [r.id, r])).values());
