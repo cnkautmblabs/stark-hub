@@ -128,7 +128,7 @@ function identityNameVariants(value) {
 function qaIdentityTokens({ profile, user, collaborator }) {
   return [
     collaborator?.id,
-    collaborator?.profileId,
+    collaborator?.authUserId,
     ...identityNameVariants(collaborator?.azureName),
     ...identityNameVariants(collaborator?.slackName),
     collaborator?.email,
@@ -147,7 +147,7 @@ function identityMatches(tokens, ...values) {
 }
 
 function collaboratorMatchesTokens(person, tokens) {
-  return identityMatches(tokens, person?.id, person?.profileId, person?.azureName, person?.slackName, person?.email, ...(person?.aliases || []));
+  return identityMatches(tokens, person?.id, person?.authUserId, person?.azureName, person?.slackName, person?.email, ...(person?.aliases || []));
 }
 
 // Indexa colaboradores por TODO nome/apelido conhecido (azureName, slackName,
@@ -674,7 +674,7 @@ export function QaBoardWorkbench() {
               </button>
             </div>
             <div id="mbaz-panel-board" className="mbaz-panel">
-              <form id="mbaz-create-form" className={`mbaz-create ${showCreate ? "open" : ""}`} onSubmit={createItem}>
+              <form data-allow-submit="true" id="mbaz-create-form" className={`mbaz-create ${showCreate ? "open" : ""}`} onSubmit={createItem}>
                 <div className="mbaz-create-grid">
                   <label>Tipo<select className="mbaz-select" value={newItem.type} onChange={(event) => setNewItem((current) => ({ ...current, type: event.target.value }))}><option value="Bug">Bug</option><option value="Task">Task</option><option value="User Story">User Story</option></select></label>
                   <label>Pais<select className="mbaz-select" value={newItem.country} onChange={(event) => setNewItem((current) => ({ ...current, country: event.target.value }))}>{Object.keys(countries).map((code) => <option key={code} value={code}>{code}</option>)}</select></label>
@@ -741,7 +741,7 @@ export function MyItemsWorkbench() {
   const [hoursTarget, setHoursTarget] = useState(null);
   const [workedHours, setWorkedHours] = useState("");
   const [hoursError, setHoursError] = useState("");
-  const myCollaborator = collaborators.find((person) => person.profileId === profile?.id)
+  const myCollaborator = collaborators.find((person) => person.id === profile?.id)
     || collaborators.find((person) => normalize(person.azureName) && normalize(person.azureName) === normalize(profile?.displayName || profile?.fullName))
     || collaborators.find((person) => collaboratorMatchesTokens(person, qaIdentityTokens({ profile, user, collaborator: null })))
     || null;
@@ -1270,7 +1270,7 @@ function goalStatus(hours, goal) {
 }
 
 function governanceRoleLevel(person) {
-  return person?.accessLevel || person?.linkedProfile?.accessLevel
+  return person?.accessLevel
     || (person?.isManagement ? "gestao" : person?.isQa ? "qa" : person?.isDev ? "dev" : null);
 }
 
@@ -1454,7 +1454,7 @@ export function HoursWorkbench() {
   // Card "Pai": o proprio usuario logado, sempre visivel (nao depende dos
   // filtros ativos). QA ve metricas de teste no lugar de Tasks/Bugs — para
   // QA, o que importa e o que ele testou, nao o que ele "entregou" como dev.
-  const ownDev = developers.find((dev) => dev.person?.profileId === profile?.id)
+  const ownDev = developers.find((dev) => dev.person?.id === profile?.id)
     || developers.find((dev) => normalize(dev.displayName) === normalize(profile?.displayName || profile?.fullName || ""));
   const ownIsQaOnly = profile?.accessLevel === accessLevels.qa;
 
@@ -1681,7 +1681,7 @@ export function HoursWorkbench() {
         demoMode={demoMode}
         actions={ownIsQaOnly
           ? <><Button onClick={() => downloadCsv(`minhas-metricas-${dateStamp()}.csv`, ["Colaborador", "Cards", "Tasks", "Bugs", "Horas", "Meta", "Sem horas"], ownDev ? [[ownDev.displayName, ownDev.items.length, ownDev.tasks, ownDev.bugs, ownDev.completed, ownDev.goalHours, ownDev.cardsWithoutHours]] : [])}><FiDownload /> CSV</Button><Button onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /> Atualizar</Button></>
-          : <><Button onClick={() => downloadCsv(`Gestao-equipe-${dateStamp()}.csv`, ["Colaborador", "Papel", "Cards", "Tasks", "Bugs", "User Stories", "Features", "Horas", "Meta", "Com horas", "Sem horas", "Saldo"], filteredDevelopers.map((dev) => [dev.displayName, accessLevelLabels[dev.person?.accessLevel || dev.person?.linkedProfile?.accessLevel] || (dev.person?.isQa ? "QA" : dev.person?.isDev ? "Dev" : dev.person?.isManagement ? "Gestao" : ""), dev.items.length, dev.tasks, dev.bugs, dev.userStories, dev.features, dev.completed, dev.goalHours, dev.cardsWithHours, dev.cardsWithoutHours, dev.completed - dev.goalHours]))}><FiDownload /> CSV</Button><Button onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /> Atualizar</Button><Button onClick={copyReport}><FiCopy /> Copiar</Button><Button onClick={sendGovernanceSlack}><i className="bi bi-slack" /> Slack</Button><Button onClick={pdfReport}><FiDownload /> PDF</Button></>}
+          : <><Button onClick={() => downloadCsv(`Gestao-equipe-${dateStamp()}.csv`, ["Colaborador", "Papel", "Cards", "Tasks", "Bugs", "User Stories", "Features", "Horas", "Meta", "Com horas", "Sem horas", "Saldo"], filteredDevelopers.map((dev) => [dev.displayName, accessLevelLabels[dev.person?.accessLevel] || (dev.person?.isQa ? "QA" : dev.person?.isDev ? "Dev" : dev.person?.isManagement ? "Gestao" : ""), dev.items.length, dev.tasks, dev.bugs, dev.userStories, dev.features, dev.completed, dev.goalHours, dev.cardsWithHours, dev.cardsWithoutHours, dev.completed - dev.goalHours]))}><FiDownload /> CSV</Button><Button onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /> Atualizar</Button><Button onClick={copyReport}><FiCopy /> Copiar</Button><Button onClick={sendGovernanceSlack}><i className="bi bi-slack" /> Slack</Button><Button onClick={pdfReport}><FiDownload /> PDF</Button></>}
       />
       {error && <div className="mbw-alert error">{error}</div>}
       {/* O card fixo so faz sentido pra QA: pra ele e o UNICO conteudo desta
@@ -1795,6 +1795,8 @@ export function SettingsWorkbench() {
     function handleSubmit(e) {
       if (!settingsRef.current) return;
       if (settingsRef.current.contains(e.target)) {
+        const form = e.target.closest && e.target.closest("form");
+        if (form && form.dataset && form.dataset.allowSubmit === "true") return; // allow explicit forms
         e.preventDefault();
         e.stopImmediatePropagation();
       }
@@ -2327,13 +2329,11 @@ export function SettingsWorkbench() {
   }
 
   function SettingsSection({ title, description, children, open = false }) {
-    const [isOpen, setIsOpen] = useState(Boolean(open));
+    // For stability, parent controls open state via `openSections` map.
+    // If parent doesn't provide control, fall back to the `open` prop.
     return (
-      <details className="mb-settings-accordion-card" open={isOpen}>
-        <summary
-          className="mb-settings-accordion-header"
-          onClick={(e) => { e.preventDefault(); setIsOpen((v) => !v); }}
-        >
+      <details className="mb-settings-accordion-card" open={open}>
+        <summary className="mb-settings-accordion-header">
           <span className="mb-settings-accordion-copy"><strong>{title}</strong><small>{description}</small></span>
           <span className="mb-settings-accordion-chevron" aria-hidden="true" />
         </summary>

@@ -57,7 +57,7 @@ export default function AzureConnectionForm({ onSuccess, submitLabel = "Testar e
   }
 
   return (
-    <form onSubmit={handleSubmit} className="d-flex flex-column gap-3">
+    <form data-allow-submit="true" onSubmit={handleSubmit} className="d-flex flex-column gap-3">
       <div>
         <label className="form-label small text-muted">URL da organização Azure DevOps</label>
         <input

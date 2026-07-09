@@ -134,7 +134,7 @@ function WidgetModal({ type, initial, onClose, onSave }) {
 
   return (
     <div className="mb-home-modal-overlay" onClick={onClose}>
-      <form
+      <form data-allow-submit="true"
         className={`mb-home-modal ${isNote ? "note" : ""}`}
         style={isNote ? { background: color || notePresetColors[0] } : undefined}
         onClick={(event) => event.stopPropagation()}
@@ -362,7 +362,7 @@ function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, reportT
           <Button onClick={onPdf}><FiDownload /> PDF</Button>
         </div>
       </header>
-      <form className="mb-home-summary-form" onSubmit={submit}>
+      <form data-allow-submit="true" className="mb-home-summary-form" onSubmit={submit}>
         <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: 1:1 com Nat" />
         <div className="mb-home-summary-type">
           <button type="button" className={type === "temporaria" ? "active" : ""} onClick={() => setType("temporaria")}>Hoje</button>
@@ -476,7 +476,7 @@ export function WorkbenchHome() {
     return entries.sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 8);
   }, [availableForTesting, isQa, myItems, myRecentEvidence]);
 
-  const myCollaborator = collaborators.find((person) => person.profileId === profile?.id)
+  const myCollaborator = collaborators.find((person) => person.id === profile?.id)
     || collaborators.find((person) => normalize(person.azureName) === normalize(displayName));
   const goalHours = Number(myCollaborator?.goalHours || goalDefault);
   const completedHours = myItems.reduce((sum, item) => sum + Number(item.completedHours || 0), 0);

@@ -305,7 +305,7 @@ function ManualItemForm({ items, onAdd }) {
   }
 
   return (
-    <form className="mbwi-manual-form" onSubmit={submit}>
+    <form data-allow-submit="true" className="mbwi-manual-form" onSubmit={submit}>
       <div className="mbw-form-grid">
         <label className="mbw-field"><span>Tipo</span><select value={type} onChange={(event) => setType(event.target.value)}>{manualTypeOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
         <label className="mbw-field"><span>Item pai</span>

@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useAuth } from "../../../contexts/AuthContext.jsx";
 import { useCollaborators } from "../../../hooks/useCollaborators.js";
-import { useProfiles } from "../../../hooks/useProfiles.js";
 import { usePersistentState } from "../../../hooks/usePersistentState.js";
 import { accessLevelLabels, accessLevels, defaultGoalHours, hasManagementAccess } from "../../../utils/constants.js";
 import { normalize } from "../../../utils/workbench/formatters.js";
@@ -16,32 +15,14 @@ const roleDefs = [
 
 const accessLevelOptions = [accessLevels.dev, accessLevels.qa, accessLevels.gestao, accessLevels.gerente, accessLevels.admin];
 
-// Perfil (onboarding) e Colaboradores nunca ficaram 100% sincronizados
-// (gravacoes historicas podem ter falhado antes das correcoes de RLS) —
-// pra exibicao, cai no valor gravado em `profiles` quando o campo em
-// `collaborators` estiver vazio, em vez de mostrar tudo em branco.
-function withProfileFallback(person) {
-  const linked = person?.linkedProfile;
-  const azureName = person?.azureName || linked?.aliasAzure || linked?.displayName || linked?.fullName || "";
-  const slackName = person?.slackName || linked?.aliasSlack || "";
-  const slackMemberId = person?.slackMemberId || linked?.slackMemberId || "";
-  const imageUrl = person?.imageUrl || person?.avatarUrl || linked?.avatarUrl || "";
-  const aliases = Array.from(new Set([...(person?.aliases || []), ...(linked?.aliasVariations || [])]));
-  return { ...person, azureName, slackName, slackMemberId, imageUrl, aliases };
-}
-
 function getEffectiveAccessLevel(person) {
-  return person.accessLevel || person.linkedProfile?.accessLevel || "";
+  return person.accessLevel || "";
 }
 
 // isAdmin e um flag independente do nivel de acesso (alguem pode ser
-// "gestao" no accessLevel e ainda ser Admin) — gravado em `profiles`, nao em
-// `collaborators`. Uma versao dessa checagem (so `accessLevel === "admin"`)
-// vivia duplicada e incompleta no resumo recolhido da lista, fazendo alguem
-// com isAdmin=true mas accessLevel="gestao" (caso do Matheus Bonotto) nunca
-// aparecer com o selo Admin ali, mesmo aparecendo certo dentro do card.
+// "gestao" no accessLevel e ainda ser Admin).
 function isAdminPerson(person) {
-  return Boolean(person.isAdmin || person.linkedProfile?.isAdmin || getEffectiveAccessLevel(person) === accessLevels.admin);
+  return Boolean(person.isAdmin || getEffectiveAccessLevel(person) === accessLevels.admin);
 }
 
 // Selos de funcao (Dev/QA/Gestao/Gerente/Admin) usados tanto no resumo
@@ -173,24 +154,22 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
   const canEdit = isGestao || isOwn;
   const editable = isEditing && canEdit;
   const currentAccessLevel = getEffectiveAccessLevel(person);
-  const effectivePerson = withProfileFallback(person);
-  const { azureName: effectiveAzureName, slackName: effectiveSlackName, slackMemberId: effectiveSlackMemberId, imageUrl: effectiveImageUrl, aliases: effectiveAliases } = effectivePerson;
 
   return (
     <div className="mb-profile-card">
       <div className="mb-profile-card-head">
-        <IdentityAvatar name={effectiveAzureName} imageUrl={effectiveImageUrl} color={person.color} accessLevel={currentAccessLevel} size={56} />
+        <IdentityAvatar name={person.azureName} imageUrl={person.imageUrl} color={person.color} accessLevel={currentAccessLevel} size={56} />
         <div className="mb-profile-card-heading">
-          <strong>{effectiveAzureName || "Sem nome"}</strong>
+          <strong>{person.azureName || "Sem nome"}</strong>
         </div>
         {/* actions intentionally rendered outside for consistent placement */}
       </div>
       <div className="mbw-form-grid">
-        <TextField label="Nome Azure" value={effectiveAzureName} onChange={(value) => onUpdate({ azureName: value })} readOnly={!editable} />
-        <TextField label="Email" value={person.linkedProfile?.email || person.email || ""} onChange={(value) => onUpdate({ email: value })} readOnly={!editable || Boolean(person.linkedProfile?.email)} />
-        <TextField label="Nome no Slack" value={effectiveSlackName} onChange={(value) => onUpdate({ slackName: value })} readOnly={!editable} />
-        <TextField label="Slack Member ID" value={effectiveSlackMemberId} onChange={(value) => onUpdate({ slackMemberId: value })} readOnly={!editable} />
-        <AvatarSourceField value={effectiveImageUrl} onChange={(value) => onUpdate({ imageUrl: value })} disabled={!editable} />
+        <TextField label="Nome Azure" value={person.azureName || ""} onChange={(value) => onUpdate({ azureName: value })} readOnly={!editable} />
+        <TextField label="Email" value={person.email || ""} onChange={(value) => onUpdate({ email: value })} readOnly={!editable || Boolean(person.authUserId)} />
+        <TextField label="Nome no Slack" value={person.slackName || ""} onChange={(value) => onUpdate({ slackName: value })} readOnly={!editable} />
+        <TextField label="Slack Member ID" value={person.slackMemberId || ""} onChange={(value) => onUpdate({ slackMemberId: value })} readOnly={!editable} />
+        <AvatarSourceField value={person.imageUrl || ""} onChange={(value) => onUpdate({ imageUrl: value })} disabled={!editable} />
         <label className="mbw-field">
           <span>Cor</span>
           <div className="mb-profile-color-field">
@@ -200,7 +179,7 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
         </label>
         <label className="mbw-field mb-span-2">
           <span>Aliases</span>
-          <AliasTagInput values={effectiveAliases} onChange={(next) => onUpdate({ aliases: next })} readOnly={!editable} />
+          <AliasTagInput values={person.aliases || []} onChange={(next) => onUpdate({ aliases: next })} readOnly={!editable} />
         </label>
         <label className="mbw-field mb-span-2">
           <span>Funções</span>
@@ -244,7 +223,7 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
                 if (currentAccessLevel === accessLevels.admin) {
                   onUpdate({ accessLevel: accessLevels.gestao });
                 } else {
-                  onUpdate({ isAdmin: !Boolean(person.isAdmin || person.linkedProfile?.isAdmin) });
+                  onUpdate({ isAdmin: !Boolean(person.isAdmin) });
                 }
               }}
             />
@@ -276,22 +255,22 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
   );
 }
 
-function PendingApprovalRow({ profile, onApprove }) {
+function PendingApprovalRow({ person, onApprove }) {
   const [level, setLevel] = useState(accessLevels.dev);
   const [approving, setApproving] = useState(false);
 
   async function handleApprove() {
     setApproving(true);
-    await onApprove(profile, level);
+    await onApprove(person, level);
     setApproving(false);
   }
 
   return (
     <div className="mb-profile-pending-row">
-      <AvatarDot person={{ azureName: profile.displayName || profile.fullName }} />
+      <AvatarDot person={person} />
       <div className="mb-profile-pending-copy">
-        <strong>{profile.displayName || profile.fullName}</strong>
-        <small>{profile.email}</small>
+        <strong>{person.displayName || person.fullName}</strong>
+        <small>{person.email}</small>
       </div>
       <select value={level} onChange={(event) => setLevel(event.target.value)} disabled={approving}>
         {accessLevelOptions.map((value) => <option key={value} value={value}>{accessLevelLabels[value]}</option>)}
@@ -309,15 +288,23 @@ export function CollaboratorsWorkbench() {
   const canEditRolesGlobal = currentUserAccess === accessLevels.admin || hasManagementAccess(currentUserAccess);
   const canChangeAdminGlobal = currentUserAccess === accessLevels.admin;
   const { collaborators, loading, updateCollaborator, addCollaborator, deleteCollaborator } = useCollaborators();
-  const { profiles, loading: profilesLoading } = useProfiles();
   const [search, setSearch] = usePersistentState("starkHubFilters:collaborators:search", "");
   const [roleFilter, setRoleFilter] = usePersistentState("starkHubFilters:collaborators:role", "all");
   const [editingId, setEditingId] = useState(null);
   const isGestao = hasManagementAccess(profile?.accessLevel);
-  const ownCollaborator = collaborators.find((person) => person.profileId === profile?.id)
+  const ownCollaborator = collaborators.find((person) => person.id === profile?.id)
     || collaborators.find((person) => String(person.azureName || "").toLowerCase() === String(profile?.displayName || profile?.fullName || "").toLowerCase());
+  // Contas que ja logaram (authUserId preenchido pelo trigger no primeiro
+  // login) mas a Gestao ainda nao atribuiu nenhuma funcao — accessLevel fica
+  // "pending" ate a aprovacao. Diretorio cadastrado manualmente sem login
+  // (authUserId nulo) NAO entra aqui, mesmo com accessLevel "pending" por
+  // nunca ter sido definido.
+  const pendingAccounts = isGestao
+    ? collaborators.filter((person) => person.authUserId && person.accessLevel === accessLevels.pending)
+    : [];
   const baseCollaborators = isGestao ? collaborators : ownCollaborator ? [ownCollaborator] : [];
   const visibleCollaborators = baseCollaborators.filter((person) => {
+    if (pendingAccounts.some((pending) => pending.id === person.id)) return false;
     if (roleFilter === "dev" && !hasRoleFlag(person, roleDefs[0])) return false;
     if (roleFilter === "qa" && !hasRoleFlag(person, roleDefs[1])) return false;
     if (roleFilter === "gestao" && !hasRoleFlag(person, roleDefs[2])) return false;
@@ -325,19 +312,12 @@ export function CollaboratorsWorkbench() {
     if (search && !normalize(`${person.azureName || ""} ${person.email || ""} ${person.slackId || ""} ${person.slackName || ""} ${(person.aliases || []).join(" ")}`).includes(normalize(search))) return false;
     return true;
   });
-  // Qualquer conta que ja logou (profiles) mas ainda nao tem um registro em
-  // collaborators fica invisivel pra sempre sem isto — inclui tanto quem
-  // ainda esta "pending" quanto quem ja foi liberado por fora desta tela
-  // (ex.: direto no Supabase) mas nunca ganhou um card de identidade.
-  const pendingProfiles = isGestao
-    ? profiles.filter((person) => !collaborators.some((collaborator) => collaborator.profileId === person.id))
-    : [];
   const metrics = useMemo(() => ({
     total: baseCollaborators.length,
     dev: baseCollaborators.filter((person) => hasRoleFlag(person, roleDefs[0])).length,
     qa: baseCollaborators.filter((person) => hasRoleFlag(person, roleDefs[1])).length,
     gestao: baseCollaborators.filter((person) => hasRoleFlag(person, roleDefs[2])).length,
-    linked: baseCollaborators.filter((person) => person.profileId).length
+    linked: baseCollaborators.filter((person) => person.authUserId).length
   }), [baseCollaborators]);
 
   async function addPerson() {
@@ -350,16 +330,15 @@ export function CollaboratorsWorkbench() {
     await deleteCollaborator(id);
   }
 
-  async function approveProfile(pendingProfile, level) {
-    await addCollaborator({
-      profileId: pendingProfile.id,
-      azureName: pendingProfile.displayName || pendingProfile.fullName,
-      email: pendingProfile.email,
+  // A linha pendente ja existe (criada pelo trigger no primeiro login) —
+  // aprovar so atualiza o nivel de acesso e os papeis dela, sem criar nada.
+  async function approveAccount(pendingAccount, level) {
+    await updateCollaborator(pendingAccount.id, {
+      accessLevel: level,
       isDev: level === accessLevels.dev,
       isQa: level === accessLevels.qa,
       isManagement: level === accessLevels.gestao || level === accessLevels.gerente,
-      goalHours: defaultGoalHours,
-      accessLevel: level
+      goalHours: pendingAccount.goalHours || defaultGoalHours
     });
   }
 
@@ -377,23 +356,20 @@ export function CollaboratorsWorkbench() {
       "FYI todos",
       "FYI Fail/Limitation",
       "Aliases"
-    ], visibleCollaborators.map((person) => {
-      const effective = withProfileFallback(person);
-      return [
-        effective.azureName || "",
-        person.linkedProfile?.email || person.email || "",
-        effective.slackName || "",
-        effective.slackMemberId || "",
-        accessLevelLabels[getEffectiveAccessLevel(person)] || getEffectiveAccessLevel(person) || "",
-        hasRoleFlag(person, roleDefs[0]) ? "sim" : "nao",
-        hasRoleFlag(person, roleDefs[1]) ? "sim" : "nao",
-        hasRoleFlag(person, roleDefs[2]) ? "sim" : "nao",
-        person.goalHours || "",
-        person.fixedMention ? "sim" : "nao",
-        person.fixedMentionOnFailure ? "sim" : "nao",
-        (effective.aliases || []).join("|")
-      ];
-    }));
+    ], visibleCollaborators.map((person) => [
+      person.azureName || "",
+      person.email || "",
+      person.slackName || "",
+      person.slackMemberId || "",
+      accessLevelLabels[getEffectiveAccessLevel(person)] || getEffectiveAccessLevel(person) || "",
+      hasRoleFlag(person, roleDefs[0]) ? "sim" : "nao",
+      hasRoleFlag(person, roleDefs[1]) ? "sim" : "nao",
+      hasRoleFlag(person, roleDefs[2]) ? "sim" : "nao",
+      person.goalHours || "",
+      person.fixedMention ? "sim" : "nao",
+      person.fixedMentionOnFailure ? "sim" : "nao",
+      (person.aliases || []).join("|")
+    ]));
   }
 
   return (
@@ -406,11 +382,11 @@ export function CollaboratorsWorkbench() {
         actions={<>{isGestao && <Button onClick={addPerson}>+ Adicionar</Button>}<Button onClick={exportCollaboratorsCsv}><i className="bi bi-download" /> CSV</Button></>}
       />
       <div className="mb-collaborators-list-react">
-        {isGestao && (profilesLoading ? <WorkbenchCardSkeleton rows={1} mode="list" /> : pendingProfiles.length > 0 && (
+        {isGestao && (loading ? <WorkbenchCardSkeleton rows={1} mode="list" /> : pendingAccounts.length > 0 && (
           <section className="mb-profile-pending-section">
-            <header><strong>Pendentes de aprovacao</strong><small>{pendingProfiles.length} conta(s) logada(s) sem nivel de acesso ou identidade vinculada.</small></header>
-            {pendingProfiles.map((pendingProfile) => (
-              <PendingApprovalRow key={pendingProfile.id} profile={pendingProfile} onApprove={approveProfile} />
+            <header><strong>Pendentes de aprovacao</strong><small>{pendingAccounts.length} conta(s) logada(s) sem nivel de acesso ou identidade vinculada.</small></header>
+            {pendingAccounts.map((pendingAccount) => (
+              <PendingApprovalRow key={pendingAccount.id} person={pendingAccount} onApprove={approveAccount} />
             ))}
           </section>
         ))}
@@ -462,7 +438,7 @@ export function CollaboratorsWorkbench() {
           return (
             <details key={person.id} className="mb-collaborator-card-react" open={editing}>
               <summary>
-                <AvatarDot person={withProfileFallback(person)} />
+                <AvatarDot person={person} />
                 <div className="mb-profile-role-row">
                   {showAccessLevelPill && <RolePill level={currentAccessLevel} label={accessLevelLabels[currentAccessLevel] || currentAccessLevel} active disabled />}
                   {rolePills.map((role) => <RolePill key={role.key} level={role.level} label={role.label} active disabled />)}
@@ -489,7 +465,7 @@ export function CollaboratorsWorkbench() {
             </details>
           );
         })}
-        {!visibleCollaborators.length && !pendingProfiles.length && <EmptyState title={isGestao ? "Nenhum colaborador cadastrado" : "Sua conta ainda nao foi vinculada a um colaborador"} />}
+        {!visibleCollaborators.length && !pendingAccounts.length && <EmptyState title={isGestao ? "Nenhum colaborador cadastrado" : "Sua conta ainda nao foi vinculada a um colaborador"} />}
       </div>
     </section>
   );

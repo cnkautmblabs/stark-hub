@@ -4,37 +4,39 @@
 // QA, sem último resultado de teste) para simular uma conta real em uso,
 // não um cenário perfeito.
 
-// "profileId" liga um colaborador a uma conta registrada no Stark Hub (tabela
-// profiles — accessLevel controla o que ela pode acessar no app). Colaboradores
-// sem profileId existem só no diretório Azure/Slack (ainda não têm conta).
+// "collaborators" e "profiles" viraram uma tabela so (collaborators_profile)
+// — "id" de quem ja logou bate direto com o "id" do profile demo
+// correspondente (mockProfiles[role].id), sem precisar de um profileId
+// separado. Colaboradores com "authUserId" nulo existem so no diretorio
+// Azure/Slack (cadastrados pela Gestao, ainda nao logaram).
 const fallbackCollaborators = [
   {
-    id: "c1", profileId: "demo-gestao", accessLevel: "gestao", azureName: "Marina Costa", slackName: "marina.costa.demo",
+    id: "demo-gestao", authUserId: "demo-gestao", accessLevel: "gestao", azureName: "Marina Costa", slackName: "marina.costa.demo",
     slackMemberId: "UDEMO001", aliases: ["Marina C."], color: "#38bdf8", imageUrl: "",
     isDev: true, isQa: false, isManagement: true, goalHours: 160
   },
   {
-    id: "c2", profileId: "demo-qa", accessLevel: "qa", azureName: "Lia Martins", slackName: "lia.martins.demo",
+    id: "demo-qa", authUserId: "demo-qa", accessLevel: "qa", azureName: "Lia Martins", slackName: "lia.martins.demo",
     slackMemberId: "UDEMO002", aliases: ["Lia M.", "lmartins"], color: "#f472b6", imageUrl: "",
     isDev: false, isQa: true, isManagement: false, goalHours: 160
   },
   {
-    id: "c3", profileId: "demo-dev", accessLevel: "dev", azureName: "Rafael Demo", slackName: "rafael.demo",
+    id: "demo-dev", authUserId: "demo-dev", accessLevel: "dev", azureName: "Rafael Demo", slackName: "rafael.demo",
     slackMemberId: "UDEMO003", aliases: [], color: "#22c55e", imageUrl: "",
     isDev: true, isQa: false, isManagement: false, goalHours: 160
   },
   {
-    id: "c4", profileId: null, accessLevel: null, azureName: "Clara Souza", slackName: "clara.souza.demo",
+    id: "c4", authUserId: null, accessLevel: "pending", azureName: "Clara Souza", slackName: "clara.souza.demo",
     slackMemberId: "UDEMO004", aliases: ["Clara"], color: "#f59e0b", imageUrl: "",
     isDev: true, isQa: true, isManagement: false, goalHours: 140
   },
   {
-    id: "c5", profileId: null, accessLevel: null, azureName: "Diego Demo", slackName: "",
+    id: "c5", authUserId: null, accessLevel: "pending", azureName: "Diego Demo", slackName: "",
     slackMemberId: "", aliases: [], color: "#a78bfa", imageUrl: "",
     isDev: true, isQa: false, isManagement: false, goalHours: 160
   },
   {
-    id: "c6", profileId: "demo-pending", accessLevel: "pending", azureName: "Nina Demo", slackName: "nina.demo",
+    id: "demo-pending", authUserId: "demo-pending", accessLevel: "pending", azureName: "Nina Demo", slackName: "nina.demo",
     slackMemberId: "UDEMO006", aliases: [], color: "#94a3b8", imageUrl: "",
     isDev: false, isQa: false, isManagement: false, goalHours: 160
   }

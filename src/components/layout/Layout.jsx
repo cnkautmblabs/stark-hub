@@ -25,11 +25,11 @@ export default function Layout() {
   const { collaborators } = useCollaborators();
   const displayName = profile?.displayName || profile?.fullName || user?.email || "Stark Hub";
   const email = profile?.email || user?.email || (demoMode ? "modo.demo@starkhub.local" : "");
-  const profileCollaborator = collaborators.find((person) => person.profileId === profile?.id)
+  const profileCollaborator = collaborators.find((person) => person.id === profile?.id)
     || collaborators.find((person) => person.email && email && normalize(person.email) === normalize(email))
     || collaborators.find((person) => normalize(person.azureName) && normalize(person.azureName) === normalize(displayName));
-  const avatarUrl = profileCollaborator?.imageUrl || profileCollaborator?.avatarUrl || profileCollaborator?.linkedProfile?.avatarUrl || profile?.avatarUrl || "";
-  const avatarColor = profileCollaborator?.color || profile?.color;
+  const avatarUrl = profile?.imageUrl || profileCollaborator?.imageUrl || profile?.avatarUrl || "";
+  const avatarColor = profile?.color || profileCollaborator?.color;
   const isAdmin = Boolean(profile?.isAdmin || profile?.accessLevel === accessLevels.admin);
   const accessLabel = isAdmin && profile?.accessLevel && profile?.accessLevel !== accessLevels.admin
     ? `${accessLevelLabels[profile.accessLevel] || profile.accessLevel} (Admin)`

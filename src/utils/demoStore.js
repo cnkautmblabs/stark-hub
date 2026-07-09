@@ -111,7 +111,7 @@ export function deleteDemoCollaborator(id) {
 export function addDemoCollaborator(patch) {
   const state = getState();
   const created = {
-    id: `c${Date.now()}`, profileId: null, azureName: "", slackName: "", slackMemberId: "",
+    id: `c${Date.now()}`, authUserId: null, accessLevel: "pending", azureName: "", slackName: "", slackMemberId: "",
     aliases: [], color: "#475569", imageUrl: "", isQa: false, isDev: true, isManagement: false,
     ...patch
   };

@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import ReactorLogo from "../components/layout/ReactorLogo.jsx";
 import { useAuth } from "../contexts/AuthContext.jsx";
-import { useCollaborators } from "../hooks/useCollaborators.js";
 
 function AliasTagInput({ values = [], onChange }) {
   const [draft, setDraft] = useState("");
@@ -42,7 +41,6 @@ function AliasTagInput({ values = [], onChange }) {
 
 export default function ProfileSetup() {
   const { profile, user, updateProfile, demoMode } = useAuth();
-  const { collaborators, addCollaborator, updateCollaborator } = useCollaborators();
   const navigate = useNavigate();
   const [slackMemberId, setSlackMemberId] = useState(profile?.slackMemberId || "");
   const [aliasSlack, setAliasSlack] = useState(profile?.aliasSlack || "");
@@ -65,36 +63,28 @@ export default function ProfileSetup() {
     }
     setSaving(true);
     setStatus(null);
+    // "profiles" e "collaborators" viraram uma unica linha (collaborators_profile)
+    // — um update so ja grava tanto os campos de onboarding (aliasSlack/
+    // aliasAzure/aliasVariations/avatarUrl) quanto os campos usados no resto
+    // do app pras mencoes do Slack e assignee matching (slackName/azureName/
+    // aliases/imageUrl). Nao ha mais uma segunda tabela pra sincronizar.
+    const trimmedAvatarUrl = avatarUrl.trim() || null;
     const { error } = await updateProfile({
       slackMemberId: slackMemberId.trim(),
       aliasSlack: aliasSlack.trim(),
       aliasAzure: aliasAzure.trim(),
       aliasVariations,
-      avatarUrl: avatarUrl.trim() || null
-    });
-    if (error) {
-      setSaving(false);
-      setStatus({ type: "error", message: `Erro ao salvar: ${error.message}` });
-      return;
-    }
-    // O diretorio de identidade usado em todo o app (menções no Slack, QA
-    // responsavel, Assigned To) e a tabela collaborators, nao profiles — sem
-    // sincronizar aqui, o slackMemberId preenchido acima nunca chegava onde
-    // as mensagens de Slack realmente sao montadas.
-    const own = collaborators.find((person) => person.profileId === profile?.id);
-    const collaboratorPatch = {
-      slackMemberId: slackMemberId.trim(),
+      avatarUrl: trimmedAvatarUrl,
       slackName: aliasSlack.trim(),
       azureName: aliasAzure.trim(),
       aliases: aliasVariations,
-      imageUrl: avatarUrl.trim() || undefined
-    };
-    if (own) {
-      await updateCollaborator(own.id, collaboratorPatch);
-    } else {
-      await addCollaborator({ profileId: profile.id, email: profile.email, ...collaboratorPatch });
-    }
+      imageUrl: trimmedAvatarUrl
+    });
     setSaving(false);
+    if (error) {
+      setStatus({ type: "error", message: `Erro ao salvar: ${error.message}` });
+      return;
+    }
     navigate("/", { replace: true });
   }
 
@@ -105,7 +95,7 @@ export default function ProfileSetup() {
       <p className="text-muted mb-2" style={{ maxWidth: 480 }}>
         Complete seu perfil para aparecer corretamente nos relatórios, menções do Slack e no diretório de colaboradores.
       </p>
-      <form onSubmit={handleSubmit} className="stark-card text-start d-flex flex-column gap-3" style={{ width: "100%", maxWidth: 460 }}>
+      <form data-allow-submit="true" onSubmit={handleSubmit} className="stark-card text-start d-flex flex-column gap-3" style={{ width: "100%", maxWidth: 460 }}>
         <div>
           <label className="form-label small text-muted">Member ID do Slack *</label>
           <input className="form-control" placeholder="Ex.: U012ABC3DE" value={slackMemberId} onChange={(e) => setSlackMemberId(e.target.value)} required />

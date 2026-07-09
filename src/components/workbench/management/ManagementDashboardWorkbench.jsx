@@ -84,7 +84,7 @@ export function ManagementDashboardWorkbench() {
       const own = filteredItems.filter((item) => item.assigneeId === dev.id || item.assigneeName === dev.azureName);
       const tasks = own.filter((item) => item.type === "Task").length;
       const bugs = own.filter((item) => item.type === "Bug").length;
-      return { id: dev.id, name: dev.azureName || "Sem nome", color: dev.color, imageUrl: dev.imageUrl || dev.avatarUrl || dev.linkedProfile?.avatarUrl || "", tasks, bugs, total: tasks + bugs };
+      return { id: dev.id, name: dev.azureName || "Sem nome", color: dev.color, imageUrl: dev.imageUrl || dev.avatarUrl || "", tasks, bugs, total: tasks + bugs };
     }).filter((row) => row.total > 0).sort((a, b) => b.total - a.total);
   }, [filteredItems, collaborators]);
 
@@ -118,7 +118,7 @@ export function ManagementDashboardWorkbench() {
       id: qa.id,
       name: qa.azureName || "Sem nome",
       color: qa.color,
-      imageUrl: qa.imageUrl || qa.avatarUrl || qa.linkedProfile?.avatarUrl || "",
+      imageUrl: qa.imageUrl || qa.avatarUrl || "",
       count: filteredItems.filter((item) => item.qaCollaboratorId === qa.id && ["Bug", "User Story"].includes(item.type)).length
     })).filter((row) => row.count > 0).sort((a, b) => b.count - a.count);
   }, [filteredItems, collaborators]);

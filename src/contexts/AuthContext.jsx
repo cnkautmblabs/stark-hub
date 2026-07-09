@@ -143,7 +143,10 @@ export function AuthProvider({ children }) {
 
   async function loadProfile(userId) {
     setLoading(true);
-    const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+    // "profiles" e "collaborators" viraram uma tabela só (collaborators_profile)
+    // — o id da linha não é mais o auth.users.id (pode já existir antes do
+    // primeiro login, cadastrado pela Gestão), então busca por "authUserId".
+    const { data, error } = await supabase.from("collaborators_profile").select("*").eq("authUserId", userId).maybeSingle();
     if (!error) setProfile(data);
     setLoading(false);
   }
@@ -188,9 +191,9 @@ export function AuthProvider({ children }) {
   async function updateProfile(patch) {
     if (!isSupabaseConfigured || !session?.user) return;
     const { data, error } = await supabase
-      .from("profiles")
+      .from("collaborators_profile")
       .update(patch)
-      .eq("id", session.user.id)
+      .eq("authUserId", session.user.id)
       .select()
       .maybeSingle();
     if (!error) setProfile(data);
