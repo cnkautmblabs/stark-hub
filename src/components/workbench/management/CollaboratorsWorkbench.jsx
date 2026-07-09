@@ -146,20 +146,22 @@ function AvatarSourceField({ value, onChange, disabled }) {
   }
 
   return (
-    <label className="mbw-field">
+    <label className="mbw-field mb-span-2">
       <span>Avatar</span>
       <div className="mb-profile-avatar-field">
         <div className="mb-profile-source-toggle">
-          <button type="button" className={mode === "url" ? "active" : ""} disabled={disabled} onClick={() => setMode("url")}>URL</button>
-          <button type="button" className={mode === "file" ? "active" : ""} disabled={disabled} onClick={() => setMode("file")}>Arquivo</button>
+          <button type="button" className={mode === "url" ? "active" : ""} disabled={disabled} onClick={() => setMode("url")}><i className="bi bi-link-45deg" /> URL</button>
+          <button type="button" className={mode === "file" ? "active" : ""} disabled={disabled} onClick={() => setMode("file")}><i className="bi bi-upload" /> Arquivo</button>
         </div>
         {mode === "url" ? (
           <input type="text" value={isDataUri ? "" : value} onChange={(event) => onChange(event.target.value)} readOnly={disabled} placeholder="https://..." />
         ) : (
           <div className="mb-profile-avatar-file">
-            <input type="file" accept="image/*" disabled={disabled} onChange={handleFile} />
-            {isDataUri && !disabled && <button type="button" className="mb-profile-avatar-clear" onClick={() => onChange("")}><i className="bi bi-x-lg" /> Remover</button>}
-            {isDataUri && <small>Imagem carregada do computador.</small>}
+            <label className="mb-profile-avatar-file-btn">
+              <input type="file" accept="image/*" disabled={disabled} onChange={handleFile} />
+              <i className="bi bi-image" /> {isDataUri ? "Trocar imagem" : "Escolher imagem"}
+            </label>
+            {isDataUri && !disabled && <button type="button" className="mb-profile-avatar-clear" onClick={() => onChange("")}><i className="bi bi-x-lg" /></button>}
           </div>
         )}
       </div>
@@ -200,35 +202,6 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
           <span>Aliases</span>
           <AliasTagInput values={effectiveAliases} onChange={(next) => onUpdate({ aliases: next })} readOnly={!editable} />
         </label>
-        {person.profileId && (
-          <label className="mbw-field">
-            <span>Nivel de acesso</span>
-            <select
-              value={currentAccessLevel}
-              disabled={!isGestao || !editable}
-              onChange={(event) => {
-                const level = event.target.value;
-                // Nivel de acesso e Papeis (isDev/isQa/isManagement) sao dois
-                // campos separados no banco — trocar so o nivel de acesso
-                // deixava os papeis desatualizados (ex.: alguem vira Dev mas
-                // continua com isQa=true de uma aprovacao anterior), o que
-                // afeta quem aparece nos pickers de QA/Dev e nos dashboards.
-                // Trocar o nivel de acesso realinha os papeis com ele,
-                // igual ao que ja acontece na aprovacao de pendentes.
-                onUpdate({
-                  accessLevel: level,
-                  isDev: level === accessLevels.dev,
-                  isQa: level === accessLevels.qa,
-                  isManagement: level === accessLevels.gestao || level === accessLevels.gerente
-                });
-              }}
-            >
-              {accessLevelOptions.map((level) => (
-                <option key={level} value={level} disabled={level === accessLevels.admin && !canChangeAdmin}>{accessLevelLabels[level]}</option>
-              ))}
-            </select>
-          </label>
-        )}
         <label className="mbw-field mb-span-2">
           <span>Funções</span>
           <div className="mb-profile-role-row">
@@ -239,7 +212,18 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
                 label={role.label}
                 active={hasRoleFlag(person, role)}
                 disabled={!editable || !canEditRoles || isRoleDerivedFromAccessLevel(person, role)}
-                onToggle={() => onUpdate({ [role.key]: !Boolean(person[role.key]) })}
+                onToggle={() => {
+                  // Dev/QA/Gestao usam o mesmo nome do nivel de acesso — em
+                  // vez de manter um select de "Nivel de acesso" separado
+                  // (que so duplicava a mesma escolha), selecionar a funcao
+                  // ja atribui o nivel de acesso equivalente direto.
+                  onUpdate({
+                    accessLevel: role.level,
+                    isDev: role.level === accessLevels.dev,
+                    isQa: role.level === accessLevels.qa,
+                    isManagement: role.level === accessLevels.gestao
+                  });
+                }}
               />
             ))}
             <RolePill

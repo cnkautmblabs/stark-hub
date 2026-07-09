@@ -14,7 +14,7 @@ import {
 } from "../../../utils/hierarchyImport.js";
 import { csvCell } from "../../../utils/workbench/formatters.js";
 import { dateStamp, downloadCsv } from "../../../utils/csvExport.js";
-import { Button, EmptyState, Kpi, TextField, TypeBadge, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
+import { Button, EmptyState, Kpi, TextField, TypeBadge, WorkbenchHeader, typeIconSrc } from "../ui/WorkbenchPrimitives.jsx";
 
 const manualTypeOptions = ["Epic", "Feature", "User Story", "Task", "Test Case", "Bug"];
 
@@ -250,17 +250,20 @@ function TreePreview({ node, depth = 0, draggingId, dropTargetId, onToggle, onMo
           {hasChildren ? (isExpanded ? "−" : "+") : ""}
         </button>
         <div className="mbwi-node-title">
-          <TypeBadge type={node.type} />
+          <div className="mbwi-type-wrap">
+            <TypeBadge type={node.type} />
+            {onToggle?.onEdit && (
+              <button type="button" className="mbwi-edit-inside-badge" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onToggle.onEdit(node.id); }} title="Editar item">
+                <i className="bi bi-pencil" />
+              </button>
+            )}
+          </div>
           <strong>{node.title || node.type}</strong>
         </div>
         <span className="mbwi-node-meta">
           {childCount > 0 ? `${childCount} filho${childCount === 1 ? "" : "s"} · ${descendantCount} nós` : "Sem filhos"}
         </span>
-        {onToggle?.onEdit && (
-          <button type="button" className="mbwi-node-edit" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onToggle.onEdit(node.id); }} title="Editar item">
-            <i className="bi bi-pencil" />
-          </button>
-        )}
+        
       </div>
       {nodeErrors.length > 0 && (
         <div className="mbwi-node-error">
@@ -335,7 +338,8 @@ export function ImportWorkbench() {
   const [tree, setTree] = useState(null);
   const [manualDraft, setManualDraft] = useState({ type: "Epic", title: "", tags: [], tagInput: "", description: "", parentId: "" });
   const [manualEditItemId, setManualEditItemId] = useState(null);
-  const [manualEditOpen, setManualEditOpen] = useState(false);
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
   const [draggingId, setDraggingId] = useState(null);
   const [dropTargetId, setDropTargetId] = useState(null);
   const [dragOverRoot, setDragOverRoot] = useState(false);
@@ -359,6 +363,17 @@ export function ImportWorkbench() {
   useEffect(() => {
     if (result) setProgress(100);
   }, [result]);
+
+  const parseTimer = useRef(null);
+  useEffect(() => {
+    if (!raw) return undefined;
+    if (!looksLikeCsv(raw)) return undefined;
+    clearTimeout(parseTimer.current);
+    parseTimer.current = setTimeout(() => {
+      parseInput(raw);
+    }, 600);
+    return () => clearTimeout(parseTimer.current);
+  }, [raw]);
   useEffect(() => {
     if (tab === "manual") {
       setTreeWithIds(buildTreeFromManualItems(manualItems));
@@ -373,7 +388,7 @@ export function ImportWorkbench() {
     setManualDraft((current) => ({ ...current, ...updates }));
   }
 
-  function openManualEditor({ type = manualDraft.type, parentId = "", itemId = null }) {
+  function openManualModal({ type = manualDraft.type, parentId = "", itemId = null }) {
     const existing = itemId ? manualItems.find((item) => item.id === itemId) : null;
     setManualDraft({
       type,
@@ -384,13 +399,13 @@ export function ImportWorkbench() {
       parentId: existing?.parentId || parentId || ""
     });
     setManualEditItemId(itemId);
-    setManualEditOpen(true);
+    setShowManualModal(true);
   }
 
-  function clearManualEditor() {
+  function clearManualModal() {
     setManualEditItemId(null);
     setManualDraft({ type: "Epic", title: "", tags: [], tagInput: "", description: "", parentId: "" });
-    setManualEditOpen(false);
+    setShowManualModal(false);
   }
 
   function handleManualTagAdd(value) {
@@ -429,7 +444,7 @@ export function ImportWorkbench() {
       }
       return [...current, nextItem];
     });
-    clearManualEditor();
+    clearManualModal();
     append(`${nextItem.type} adicionado à prévia manual.`, "success");
   }
 
@@ -508,7 +523,7 @@ export function ImportWorkbench() {
   }
 
   function openNewManualItem(type, parentId = "") {
-    openManualEditor({ type, parentId, itemId: null });
+    openManualModal({ type, parentId, itemId: null });
     if (tab !== "manual") setTab("manual");
   }
 
@@ -610,43 +625,19 @@ export function ImportWorkbench() {
                         event.dataTransfer.setData("text/plain", `new-type:${type}`);
                         event.dataTransfer.effectAllowed = "copy";
                       }}
-                      onClick={() => openManualEditor({ type, parentId: "" })}
+                        onClick={() => openManualModal({ type, parentId: "" })}
                     >
+                      <img src={typeIconSrc(type)} alt="" className="mbwi-type-pill-icon" />
                       {type}
                     </button>
                   ))}
                 </div>
                 <div className="mbwi-manual-help">
-                  <strong>Como usar:</strong>
-                  <p>Clique num tipo para abrir o editor, informe o título, tags e descrição e depois confirme. Arraste o tipo para a prévia para criar com pai direto.</p>
+                  <button type="button" className="mbwi-info" aria-label="Como usar" title="Clique para ver instrucoes">i</button>
+                  <div className="mbwi-help-text">Clique num tipo para abrir o editor, informe o título, tags e descrição e depois confirme. Arraste o tipo para a prévia para criar com pai direto.</div>
                   <div className="mbw-actions"><Button onClick={loadDefaultManual}>Exemplo QA</Button></div>
                 </div>
-                {manualEditOpen && (
-                  <div className="mbwi-manual-editor">
-                    <div className="mbwi-manual-editor-head">
-                      <h4>{manualEditItemId ? "Editar item" : "Criar item manual"}</h4>
-                      <span className="mbwi-manual-editor-tip">Preencha título e confirme para adicionar à prévia.</span>
-                    </div>
-                    <div className="mbw-form-grid">
-                      <label className="mbw-field"><span>Tipo</span><input readOnly value={manualDraft.type} /></label>
-                      <label className="mbw-field"><span>Pai</span>
-                        <select value={manualDraft.parentId} onChange={(event) => updateManualDraft({ parentId: event.target.value })}>
-                          <option value="">Raiz</option>
-                          {manualItems.map((item) => (
-                            <option key={item.id} value={item.id}>{item.type}: {item.title}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <TextField label="Titulo" value={manualDraft.title} onChange={(value) => updateManualDraft({ title: value })} placeholder="Digite o titulo do work item" />
-                      <label className="mbw-field mb-span-2"><span>Tags</span><TagInput tags={manualDraft.tags} value={manualDraft.tagInput} onChange={(value) => updateManualDraft({ tagInput: value })} onAdd={handleManualTagAdd} onRemove={handleManualTagRemove} placeholder="Enter para adicionar" /></label>
-                      <label className="mbw-field mb-span-2"><span>Description</span><textarea value={manualDraft.description} onChange={(event) => updateManualDraft({ description: event.target.value })} rows={4} placeholder="Descricao ou Steps/Expected Result para Test Case" /></label>
-                    </div>
-                    <div className="mbw-actions">
-                      <Button tone="primary" onClick={saveManualDraft}>{manualEditItemId ? "Salvar" : "Confirmar"}</Button>
-                      <Button tone="secondary" onClick={clearManualEditor}>Cancelar</Button>
-                    </div>
-                  </div>
-                )}
+                
               </section>
               <section className="mbwi-card-react">
                 <h3>Prévia</h3>
@@ -663,7 +654,7 @@ export function ImportWorkbench() {
                     event.preventDefault();
                     const payload = event.dataTransfer.getData("text/plain") || "";
                     if (payload.startsWith("new-type:")) {
-                      openManualEditor({ type: payload.replace("new-type:", ""), parentId: "" });
+                      openManualModal({ type: payload.replace("new-type:", ""), parentId: "" });
                       setDragOverRoot(false);
                       return;
                     }
@@ -672,7 +663,7 @@ export function ImportWorkbench() {
                   }}
                 >
                   <div className="mbwi-tree-drop-hint">Arraste aqui para criar item na raiz ou soltar sobre outro item para torná-lo filho.</div>
-                  {tree ? <TreePreview node={tree} draggingId={draggingId} dropTargetId={dropTargetId} onToggle={{ toggle: toggleNodeExpanded, setDragging: setDraggingId, clearDrag: () => { setDraggingId(null); setDropTargetId(null); }, setDropTarget: setDropTargetId, clearDropTarget: () => setDropTargetId(null), isExpanded: (id) => expandedNodeIds.has(id), onDropNewType: (type, parentId) => openManualEditor({ type, parentId }), onEdit: (id) => openManualEditor({ itemId: id }) }} onMove={moveTreeNode} errors={validationErrors} /> : <EmptyState title="Nenhum item criado ainda" />}
+                  {tree ? <TreePreview node={tree} draggingId={draggingId} dropTargetId={dropTargetId} onToggle={{ toggle: toggleNodeExpanded, setDragging: setDraggingId, clearDrag: () => { setDraggingId(null); setDropTargetId(null); }, setDropTarget: setDropTargetId, clearDropTarget: () => setDropTargetId(null), isExpanded: (id) => expandedNodeIds.has(id), onDropNewType: (type, parentId) => openManualModal({ type, parentId }), onEdit: (id) => openManualModal({ itemId: id }) }} onMove={moveTreeNode} errors={validationErrors} /> : <EmptyState title="Nenhum item criado ainda" />}
                 </div>
               </section>
             </div>
@@ -683,7 +674,7 @@ export function ImportWorkbench() {
                 <h3>CSV / TSV</h3>
                 <p>Aceita ID, Work Item Type, Title 1...Title 5, Area Path, Iteration Path, Country, Tags e Description.</p>
                 <textarea value={raw} onChange={(event) => setRaw(event.target.value)} placeholder="Cole o CSV/TSV aqui" />
-                <div className="mbw-actions"><Button tone="primary" onClick={() => parseInput()}>Visualizar</Button><Button onClick={() => fileRef.current?.click()}>Carregar arquivo CSV</Button><Button onClick={loadDefaultCsv}>Exemplo QA</Button></div>
+                <div className="mbw-actions"><Button onClick={() => fileRef.current?.click()}>Carregar arquivo CSV</Button><Button onClick={loadDefaultCsv}>Exemplo QA</Button></div>
               </section>
               <section className="mbwi-card-react">
                 <h3>Preview</h3>
@@ -749,9 +740,9 @@ export function ImportWorkbench() {
           )}
         </div>
         <footer className="mbwi-footer-react">
-          <Button onClick={() => parseInput()} disabled={tab !== "csv"}>Visualizar</Button>
-          <Button disabled={!tree || demoMode || importing} onClick={executeImport} tone="primary">{importing ? "Importando..." : "Executar importacao"}</Button>
+          <Button onClick={() => setShowLogs((v) => !v)}>{showLogs ? "Ocultar logs" : "Logs"}</Button>
           <span className="mbwi-spacer" />
+          <Button disabled={!tree || demoMode || importing} onClick={executeImport} tone="primary">{importing ? "Importando..." : "Executar importacao"}</Button>
           {demoMode && <span className="mbw-muted">Import real indisponivel no modo demo.</span>}
         </footer>
         {(importing || result) && (
@@ -761,7 +752,34 @@ export function ImportWorkbench() {
           </div>
         )}
       </div>
-      {log.length > 0 && (
+      {showManualModal && (
+        <div className="mbwi-modal-backdrop" onMouseDown={() => setShowManualModal(false)}>
+          <div className="mbwi-modal" onMouseDown={(e) => e.stopPropagation()}>
+            <h3>{manualEditItemId ? "Editar item" : "Criar item"}</h3>
+            <div className="mbw-form-grid">
+              <label className="mbw-field"><span>Tipo</span><input readOnly value={manualDraft.type} /></label>
+              <label className="mbw-field"><span>Pai</span>
+                <select value={manualDraft.parentId} onChange={(event) => updateManualDraft({ parentId: event.target.value })}>
+                  <option value="">Raiz</option>
+                  {manualItems.map((item) => (
+                    <option key={item.id} value={item.id}>{item.type}: {item.title}</option>
+                  ))}
+                </select>
+              </label>
+              <TextField label="Titulo" value={manualDraft.title} onChange={(value) => updateManualDraft({ title: value })} placeholder="Digite o titulo do work item" />
+              <label className="mbw-field mb-span-2"><span>Tags</span><TagInput tags={manualDraft.tags} value={manualDraft.tagInput} onChange={(value) => updateManualDraft({ tagInput: value })} onAdd={handleManualTagAdd} onRemove={handleManualTagRemove} placeholder="Enter para adicionar" /></label>
+              <label className="mbw-field mb-span-2"><span>Description</span><textarea value={manualDraft.description} onChange={(event) => updateManualDraft({ description: event.target.value })} rows={4} placeholder="Descricao ou Steps/Expected Result para Test Case" /></label>
+            </div>
+            <div className="mbw-actions">
+              <Button tone="primary" onClick={saveManualDraft}>{manualEditItemId ? "Salvar" : "Confirmar"}</Button>
+              {manualEditItemId && <Button onClick={() => { removeManualItem(manualEditItemId); clearManualModal(); append('Item manual removido.', 'info'); }}>Excluir</Button>}
+              <Button tone="secondary" onClick={clearManualModal}>Cancelar</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLogs && log.length > 0 && (
         <div className="mbwi-log-react">
           {log.map((entry, index) => <div key={index} className={entry.kind}>{entry.message}</div>)}
         </div>

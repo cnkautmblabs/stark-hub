@@ -330,7 +330,7 @@ function QaPanel({ loading, availableForTesting, evidenceToday, currentSprintLab
   );
 }
 
-const reportTypeLabels = { dev: "Dev (PRs)", qa: "QA (testes)", gestao: "Gestao (governanca)" };
+const reportTypeLabels = { dev: "Dev (PRs)", qa: "QA (testes)", gestao: "Gestao (Gestao)" };
 
 function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, reportType, previewText, canOverrideReportType, onReportTypeChange, onAdd, onRemove, onCopy, onPdf, onPrint, onSlack }) {
   const [title, setTitle] = useState("");
@@ -437,7 +437,7 @@ export function WorkbenchHome() {
   const quickLinks = [
     { to: "/dev", label: "Meus itens", icon: FiUser, show: [accessLevels.dev, accessLevels.qa, accessLevels.gestao, accessLevels.gerente].includes(access) },
     { to: "/qa", label: "Quality Board", icon: FiCheckCircle, show: [accessLevels.qa, accessLevels.gestao, accessLevels.gerente].includes(access) },
-    { to: "/management", label: "Governanca", icon: FiShield, show: isGestao },
+    { to: "/management", label: "Gestao da equipe", icon: FiShield, show: isGestao },
     { to: "/management/dashboard", label: "Gerenciamento", icon: FiShield, show: isGerente },
     { to: "/settings", label: "Conexoes", icon: FiPlus, show: true }
   ].filter((item) => item.show);
@@ -513,7 +513,7 @@ export function WorkbenchHome() {
     extra: developerRows.reduce((sum, row) => sum + Math.max(row.hours - row.goal, 0), 0)
   }), [developerRows, items]);
 
-  const autoLabel = { dev: "PRs de hoje", qa: "Testes de hoje", gestao: "Governanca (snapshot)" }[reportType];
+  const autoLabel = { dev: "PRs de hoje", qa: "Testes de hoje", gestao: "Gestao (snapshot)" }[reportType];
   const autoEntries = useMemo(() => {
     if (reportType === "qa") {
       return evidence
@@ -556,7 +556,7 @@ export function WorkbenchHome() {
     }
     if (reportType === 'gestao') {
       return copyExecutiveReportText({
-        title: 'Governanca da equipe — Resumo rapido',
+        title: 'Gestao da equipe — Resumo rapido',
         period: 'Atual',
         totals: governanceTotals,
         rows: developerRows
@@ -567,11 +567,11 @@ export function WorkbenchHome() {
   function pdfSummary() {
     if (reportType === 'gestao') {
       return downloadExecutiveReportPdf({
-        title: 'Governanca da equipe — Resumo rapido',
+        title: 'Gestao da equipe — Resumo rapido',
         period: 'Atual',
         totals: governanceTotals,
         rows: developerRows,
-        filename: `stark-hub-governanca-resumo-${new Date().toISOString().slice(0, 10)}.pdf`
+        filename: `stark-hub-Gestao-resumo-${new Date().toISOString().slice(0, 10)}.pdf`
       });
     }
     return downloadPersonalSummaryPdf({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel, filename: `stark-hub-resumo-${displayName.split(" ")[0].toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf` });
@@ -582,7 +582,7 @@ export function WorkbenchHome() {
       text = buildQaTestEvidenceReportText({ generatedAt: now, scope: 'Filtered records', records: evidence, workItems: items, collaborators });
     } else if (reportType === 'gestao') {
       text = buildExecutiveReportText({
-        title: 'Governanca da equipe — Resumo rapido',
+        title: 'Gestao da equipe — Resumo rapido',
         period: 'Atual',
         totals: governanceTotals,
         rows: developerRows
@@ -599,10 +599,10 @@ export function WorkbenchHome() {
     printWindow.print();
   }
   function copyGovernance() {
-    copyExecutiveReportText({ title: "Governanca da equipe - Resumo rapido", period: "Atual", totals: governanceTotals, rows: developerRows });
+    copyExecutiveReportText({ title: "Gestao da equipe - Resumo rapido", period: "Atual", totals: governanceTotals, rows: developerRows });
   }
   function pdfGovernance() {
-    downloadExecutiveReportPdf({ title: "Stark Hub - Governanca da equipe (resumo rapido)", period: "Atual", totals: governanceTotals, rows: developerRows, filename: `stark-hub-governanca-resumo-${new Date().toISOString().slice(0, 10)}.pdf` });
+    downloadExecutiveReportPdf({ title: "Stark Hub - Gestao da equipe (resumo rapido)", period: "Atual", totals: governanceTotals, rows: developerRows, filename: `stark-hub-Gestao-resumo-${new Date().toISOString().slice(0, 10)}.pdf` });
   }
   async function sendSlack(text) {
     const webhookUrl = getSetting("slackWebhookUrl", "");
@@ -629,7 +629,7 @@ export function WorkbenchHome() {
   const summaryPreviewText = reportType === 'qa'
     ? buildQaTestEvidenceReportText({ generatedAt: now, scope: 'Filtered records', records: evidence, workItems: items, collaborators })
     : reportType === 'gestao'
-      ? buildExecutiveReportText({ title: 'Governanca da equipe — Resumo rapido', period: 'Atual', totals: governanceTotals, rows: developerRows })
+      ? buildExecutiveReportText({ title: 'Gestao da equipe — Resumo rapido', period: 'Atual', totals: governanceTotals, rows: developerRows })
       : buildPersonalSummaryText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel });
 
   function exportHomeCsv() {
@@ -686,12 +686,12 @@ export function WorkbenchHome() {
       {isGestao && (
         <section className="mb-home-panel">
           <header>
-            <div><strong>Governanca do time</strong><small>Resumo rapido — para o detalhe completo, acesse Governanca do time.</small></div>
+            <div><strong>Gestao da equipe</strong><small>Resumo rapido da sprint atual. Use Ver mais para abrir todos os dados.</small></div>
             <div className="mb-home-summary-actions">
               <Button onClick={copyGovernance}><FiCopy /> Copiar</Button>
               <Button onClick={slackGovernance}><i className="bi bi-slack" /> Slack</Button>
               <Button onClick={pdfGovernance}><FiDownload /> PDF</Button>
-              <Link to="/management" className="mbw-btn default"><FiShield /> Ver completo</Link>
+              <Link to="/management" className="mbw-btn default"><FiShield /> Ver mais</Link>
             </div>
           </header>
           <div className="mb-home-kpis">
@@ -704,6 +704,24 @@ export function WorkbenchHome() {
               </>
             )}
           </div>
+          {!loading && (
+            <div className="mb-home-governance-mini">
+              <div>
+                <span>Horas</span>
+                <div className="mb-home-mini-track"><b style={{ width: `${governanceTotals.goal ? Math.min(100, (governanceTotals.hours / governanceTotals.goal) * 100) : 0}%` }} /></div>
+                <small>{formatHours(governanceTotals.hours)} de {formatHours(governanceTotals.goal)}</small>
+              </div>
+              <div>
+                <span>Saude da meta</span>
+                <div className="mb-home-mini-bars">
+                  <b className="ok" style={{ width: `${governanceTotals.developers ? (governanceTotals.goalMet / governanceTotals.developers) * 100 : 0}%` }} />
+                  <b className="warn" style={{ width: `${governanceTotals.developers ? (governanceTotals.goalAbove / governanceTotals.developers) * 100 : 0}%` }} />
+                  <b className="danger" style={{ width: `${governanceTotals.developers ? (governanceTotals.goalBelow / governanceTotals.developers) * 100 : 0}%` }} />
+                </div>
+                <small>{governanceTotals.goalBelow} abaixo, {governanceTotals.goalMet} na meta, {governanceTotals.goalAbove} acima</small>
+              </div>
+            </div>
+          )}
         </section>
       )}
 
@@ -736,3 +754,5 @@ export function WorkbenchHome() {
     </section>
   );
 }
+
+

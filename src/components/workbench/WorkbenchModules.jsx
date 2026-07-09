@@ -1267,6 +1267,16 @@ function goalStatus(hours, goal) {
   return { key: "met", label: "Na meta", tone: "blue" };
 }
 
+function governanceRoleLevel(person) {
+  return person?.accessLevel || person?.linkedProfile?.accessLevel
+    || (person?.isManagement ? "gestao" : person?.isQa ? "qa" : person?.isDev ? "dev" : null);
+}
+
+function governanceRoleLabel(person) {
+  const level = governanceRoleLevel(person);
+  return accessLevelLabels[level] || (person?.isQa ? "QA" : person?.isDev ? "Dev" : person?.isManagement ? "Gestao" : "Sem funcao");
+}
+
 export function HoursWorkbench() {
   const { profile, demoMode } = useAuth();
   const { items, error, loading, refreshing, reload } = useWorkItems();
@@ -1279,6 +1289,7 @@ export function HoursWorkbench() {
   const [sprintFilter, setSprintFilter] = usePersistentState("starkHubFilters:governance:sprint", []);
   const [hourStatus, setHourStatus] = usePersistentState("starkHubFilters:governance:hours", "all");
   const [goalFilter, setGoalFilter] = usePersistentState("starkHubFilters:governance:goal", "all");
+  const [roleGroup, setRoleGroup] = usePersistentState("starkHubFilters:governance:roleGroup", "all");
   const [viewMode, setViewMode] = usePersistentState("starkHubFilters:governance:viewMode", "grid");
   const [chartsCollapsed, setChartsCollapsed] = usePersistentState("starkHubFilters:governance:chartsCollapsed", false);
   const [expanded, setExpanded] = useState(() => new Set());
@@ -1290,7 +1301,7 @@ export function HoursWorkbench() {
   const currentSprint = findCurrentSprint(sprintOptions);
   const effectiveSprintFilter = sprintFilter.length ? sprintFilter : currentSprint ? [currentSprint] : [];
 
-  // Governanca deve refletir o periodo filtrado (sprint atual por padrao),
+  // Gestao deve refletir o periodo filtrado (sprint atual por padrao),
   // nao o historico completo do time. O escopo de periodo (sprint/tipo/
   // horas) e aplicado UMA vez aqui, antes de agregar metricas por
   // colaborador — assim horas, work items e testes ficam todos coerentes
@@ -1366,6 +1377,9 @@ export function HoursWorkbench() {
       const bugs = devItems.filter((item) => String(item.type).toLowerCase() === "bug").length;
       const userStories = devItems.filter((item) => String(item.type).toLowerCase() === "user story").length;
       const features = devItems.filter((item) => String(item.type).toLowerCase() === "feature").length;
+      const testableItems = devItems.filter((item) => ["Bug", "User Story"].includes(item.type)).length;
+      const nonTestableItems = devItems.length - testableItems;
+      const testedItems = devItems.filter((item) => recordsForItem(item, evidence).length > 0).length;
       const cardsWithHours = devItems.filter((item) => Number(item.completedHours || 0) > 0).length;
       const cardsWithoutHours = devItems.length - cardsWithHours;
       const goal = Math.max(Number(dev.goalHours) || 0, 0);
@@ -1375,7 +1389,7 @@ export function HoursWorkbench() {
       const status = progressPercent < 100 ? "below" : progressPercent > 100 ? "above" : "met";
       const countryCounts = {};
       devItems.forEach((item) => (item.countries || ["N/A"]).forEach((country) => { countryCounts[country] = (countryCounts[country] || 0) + 1; }));
-      return { ...dev, items: devItems, completed, tasks, bugs, userStories, features, cardsWithHours, cardsWithoutHours, missingHours, extraHours, progressPercent, goalStatus: status, countries: countryCounts, testMetrics, qaResponsibleCount: qaResponsibleItems.length, azureAssignedCount, pendingToTestCount };
+      return { ...dev, items: devItems, completed, tasks, bugs, userStories, features, testableItems, nonTestableItems, testedItems, cardsWithHours, cardsWithoutHours, missingHours, extraHours, progressPercent, goalStatus: status, countries: countryCounts, testMetrics, qaResponsibleCount: qaResponsibleItems.length, azureAssignedCount, pendingToTestCount };
     }).sort((a, b) => a.displayName.localeCompare(b.displayName, "pt-BR"));
   }, [collaborators, goalDefault, periodItems, peopleById, peopleByName, evidence]);
 
@@ -1385,6 +1399,7 @@ export function HoursWorkbench() {
     const q = normalize(search);
     if (q && !normalize(`${dev.displayName} ${dev.uniqueName} ${dev.items.map((item) => `${item.id} ${item.title}`).join(" ")}`).includes(q)) return false;
     if (collaboratorFilter.length && !collaboratorFilter.includes(dev.key)) return false;
+    if (roleGroup !== "all" && governanceRoleLevel(dev.person) !== roleGroup) return false;
     if ((typeFilter !== "all" || hourStatus !== "all") && dev.items.length === 0) return false;
     if (goalFilter !== "all" && dev.goalStatus !== goalFilter) return false;
     return true;
@@ -1395,11 +1410,19 @@ export function HoursWorkbench() {
     cards: acc.cards + dev.items.length,
     tasks: acc.tasks + dev.items.filter((item) => String(item.type).toLowerCase() === "task").length,
     bugs: acc.bugs + dev.items.filter((item) => String(item.type).toLowerCase() === "bug").length,
+    userStories: acc.userStories + dev.userStories,
+    features: acc.features + dev.features,
+    testable: acc.testable + dev.testableItems,
+    nonTestable: acc.nonTestable + dev.nonTestableItems,
+    tests: acc.tests + dev.testMetrics.total,
+    pass: acc.pass + dev.testMetrics.pass,
+    fail: acc.fail + dev.testMetrics.fail,
+    limitation: acc.limitation + dev.testMetrics.limitation,
     completed: acc.completed + dev.items.reduce((sum, item) => sum + Number(item.completedHours || 0), 0),
     goal: acc.goal + dev.goalHours,
     missing: acc.missing + dev.missingHours,
     extra: acc.extra + dev.extraHours
-  }), { developers: 0, cards: 0, tasks: 0, bugs: 0, completed: 0, goal: 0, missing: 0, extra: 0 });
+  }), { developers: 0, cards: 0, tasks: 0, bugs: 0, userStories: 0, features: 0, testable: 0, nonTestable: 0, tests: 0, pass: 0, fail: 0, limitation: 0, completed: 0, goal: 0, missing: 0, extra: 0 });
 
   const countryTotals = Object.entries(filteredDevelopers.reduce((acc, dev) => {
     Object.entries(dev.countries).forEach(([country, count]) => { acc[country] = (acc[country] || 0) + count; });
@@ -1442,12 +1465,12 @@ export function HoursWorkbench() {
       label: dev.goalStatus === "below" ? "Abaixo" : dev.goalStatus === "above" ? "Acima" : "Cumprida",
       tone: dev.goalStatus === "below" ? "danger" : dev.goalStatus === "above" ? "warning" : "primary"
     }));
-    copyExecutiveReportText({ title: "Governanca da equipe - Horas", period: "Atual", totals: { hours: totals.completed, goal: totals.goal, missing: totals.missing, extra: totals.extra }, rows });
+    copyExecutiveReportText({ title: "Gestao da equipe - Horas", period: "Atual", totals: { hours: totals.completed, goal: totals.goal, missing: totals.missing, extra: totals.extra }, rows });
   }
 
   function pdfReport() {
     const rows = filteredDevelopers.map((dev) => ({ name: dev.displayName, hours: dev.completed, goal: dev.goalHours, label: dev.goalStatus, tone: dev.goalStatus === "below" ? "danger" : dev.goalStatus === "above" ? "warning" : "primary" }));
-    downloadExecutiveReportPdf({ title: "Stark Hub - Governanca da equipe", period: "Atual", totals: { hours: totals.completed, goal: totals.goal, missing: totals.missing, extra: totals.extra }, rows, filename: `stark-hub-governanca-horas-${new Date().toISOString().slice(0, 10)}.pdf` });
+    downloadExecutiveReportPdf({ title: "Stark Hub - Gestao da equipe", period: "Atual", totals: { hours: totals.completed, goal: totals.goal, missing: totals.missing, extra: totals.extra }, rows, filename: `stark-hub-Gestao-horas-${new Date().toISOString().slice(0, 10)}.pdf` });
   }
 
   async function sendGovernanceSlack() {
@@ -1477,6 +1500,7 @@ export function HoursWorkbench() {
     setSprintFilter([]);
     setHourStatus("all");
     setGoalFilter("all");
+    setRoleGroup("all");
   }
 
   useEffect(() => {
@@ -1555,49 +1579,74 @@ export function HoursWorkbench() {
     const progressWidth = Math.min(100, Math.max(0, dev.progressPercent));
     const itemPreview = dev.items;
     const testPassRate = dev.testMetrics.total ? Math.round((dev.testMetrics.pass / dev.testMetrics.total) * 100) : 0;
-    // Papel cadastrado da pessoa (accessLevel e a fonte de verdade; cai pros
-    // booleans isDev/isQa/isManagement se accessLevel nao estiver disponivel,
-    // ex.: atribuido do Azure sem colaborador vinculado). QA mostra metricas
-    // de teste; Gestao/Gerente mostram como Dev por enquanto (pedido explicito).
-    const roleLevel = dev.person?.accessLevel || dev.person?.linkedProfile?.accessLevel
-      || (dev.person?.isManagement ? "gestao" : dev.person?.isQa ? "qa" : dev.person?.isDev ? "dev" : null);
+    const roleLevel = governanceRoleLevel(dev.person);
     const useTestMetrics = roleLevel === accessLevels.qa;
+    const countryEntries = Object.entries(dev.countries).sort((a, b) => b[1] - a[1]);
+    const visibleCountries = countryEntries.slice(0, 5);
+    const hiddenCountryCount = Math.max(0, countryEntries.length - visibleCountries.length);
+    const envStats = ["DEV", "QA", "BETA", "PROD"].map((env) => ({ env, ...(dev.testMetrics.byEnv[env] || { total: 0, pass: 0, fail: 0, limitation: 0, pending: 0 }) })).filter((row) => row.total > 0);
     return (
       <article key={dev.key} className={`mbdhc-dev-card status-${dev.goalStatus} ${dev.goalStatus === "above" ? "pulse-over" : ""} ${pinned ? "mbdhc-dev-card-pinned" : ""}`}>
         {pinned && <div className="mbdhc-dev-pinned-label"><i className="bi bi-person-fill" /> Seu card</div>}
         <div className="mbdhc-dev-head">
-          <AvatarDot person={dev.person || { azureName: dev.displayName, imageUrl: dev.avatarUrl, color: dev.color }} name={dev.displayName} />
-          {roleLevel && <span className={`mbdhc-role-pill role-${roleLevel}`}><RoleBadgeIcon level={roleLevel} /> {accessLevelLabels[roleLevel] || roleLevel}</span>}
+          <div className="mbdhc-dev-identity">
+            <AvatarDot person={dev.person || { azureName: dev.displayName, imageUrl: dev.avatarUrl, color: dev.color }} name={dev.displayName} />
+            {roleLevel && <span className={`mbdhc-role-pill role-${roleLevel}`}><RoleBadgeIcon level={roleLevel} /> {accessLevelLabels[roleLevel] || roleLevel}</span>}
+          </div>
           <div className="mbdhc-dev-status"><strong>{formatHours(dev.completed)}</strong><span>de {formatHours(dev.goalHours)}</span><em>{statusLabel}</em></div>
         </div>
         <div className="mbdhc-country-pills">
-          {Object.entries(dev.countries).slice(0, 6).map(([country, count]) => <span key={country} className="mbdhc-country-pill"><CountryVisual code={country} /><strong>{count}</strong></span>)}
+          {visibleCountries.map(([country, count]) => <span key={country} className="mbdhc-country-pill"><CountryVisual code={country} compact /><strong>{count}</strong></span>)}
+          {hiddenCountryCount > 0 && <span className="mbdhc-country-pill more">+{hiddenCountryCount}</span>}
         </div>
         <div className="mbdhc-progress"><span style={{ width: `${progressWidth}%` }} /></div>
-        {useTestMetrics ? (
-          <div className="mbdhc-dev-metrics">
-            <div><span>Testando</span><strong>{dev.qaResponsibleCount}</strong></div>
-            <div><span>Atribuido Azure</span><strong>{dev.azureAssignedCount}</strong></div>
-            <div><span>P/ testar</span><strong>{dev.pendingToTestCount}</strong></div>
-            <div><span>Fail</span><strong>{dev.testMetrics.fail}</strong></div>
-            <div><span>Limitation</span><strong>{dev.testMetrics.limitation}</strong></div>
-            <div><span>Pass rate</span><strong>{testPassRate}%</strong></div>
-            {["DEV", "QA", "BETA", "PROD"].map((environment) => (
-              <div key={environment}><span>Aprovado {environment}</span><strong>{dev.testMetrics.byEnv[environment]?.pass || 0}</strong></div>
-            ))}
-          </div>
-        ) : (
-          <div className="mbdhc-dev-metrics">
-            <div><span>Cards</span><strong>{dev.items.length}</strong></div>
-            <div><span>Tasks</span><strong>{dev.tasks}</strong></div>
-            <div><span>Bugs</span><strong>{dev.bugs}</strong></div>
-            <div><span>User Stories</span><strong>{dev.userStories}</strong></div>
-            <div><span>Features</span><strong>{dev.features}</strong></div>
-            <div><span>Com horas</span><strong>{dev.cardsWithHours}</strong></div>
-            <div><span>Sem horas</span><strong>{dev.cardsWithoutHours}</strong></div>
-            <div><span>Saldo</span><strong>{dev.goalStatus === "above" ? `+${formatHours(dev.extraHours)}` : `-${formatHours(dev.missingHours)}`}</strong></div>
-          </div>
+        <div className="mbdhc-dev-focus-metrics">
+          {useTestMetrics ? (
+            <>
+              <span><small>Total</small><b>{dev.testMetrics.total}</b></span>
+              <span><small>Feitos</small><b>{dev.testedItems}</b></span>
+              <span className="approved"><small>Pass</small><b>{dev.testMetrics.pass}</b></span>
+              <span className="fail"><small>Fail</small><b>{dev.testMetrics.fail}</b></span>
+              <span className="limitation"><small>Limitation</small><b>{dev.testMetrics.limitation}</b></span>
+            </>
+          ) : (
+            <>
+              <span><small>Testaveis</small><b>{dev.testableItems}</b></span>
+              <span><small>Nao testaveis</small><b>{dev.nonTestableItems}</b></span>
+              <span><small>Testes</small><b>{dev.testMetrics.total}</b></span>
+              <span className="approved"><small>Pass</small><b>{dev.testMetrics.pass}</b></span>
+              <span className="fail"><small>Fail</small><b>{dev.testMetrics.fail}</b></span>
+              <span className="limitation"><small>Limitation</small><b>{dev.testMetrics.limitation}</b></span>
+            </>
+          )}
+        </div>
+        {envStats.length > 0 && (
+          <details className="mbdhc-dev-env-details">
+            <summary>Detalhes por ambiente <i className="bi bi-chevron-down" /></summary>
+            <div>
+              {envStats.map((row) => (
+                <span key={row.env}><img src={envIconSrc(row.env)} alt="" /><b>{row.env}</b><small><i className="bi bi-check-lg" /> {row.pass || 0}</small><small><i className="bi bi-x-lg" /> {row.fail || 0}</small><small><i className="bi bi-exclamation-triangle-fill" /> {row.limitation || 0}</small></span>
+              ))}
+            </div>
+          </details>
         )}
+        <div className="mbdhc-dev-mini-stats">
+          {useTestMetrics ? (
+            <>
+              <span><small>QA resp.</small><b>{dev.qaResponsibleCount}</b></span>
+              <span><small>Azure</small><b>{dev.azureAssignedCount}</b></span>
+              <span><small>P/ testar</small><b>{dev.pendingToTestCount}</b></span>
+              <span><small>Pass rate</small><b>{testPassRate}%</b></span>
+            </>
+          ) : (
+            <>
+              <span><small>Cards</small><b>{dev.items.length}</b></span>
+              <span><small>Tasks</small><b>{dev.tasks}</b></span>
+              <span><small>Bugs</small><b>{dev.bugs}</b></span>
+              <span><small>Saldo</small><b>{dev.goalStatus === "above" ? `+${formatHours(dev.extraHours)}` : `-${formatHours(dev.missingHours)}`}</b></span>
+            </>
+          )}
+        </div>
         <div className="mbdhc-dev-actions">
           <button className="mbdhc-button secondary" type="button" onClick={() => copyHoursNotice(dev)} title="Copiar aviso de horas para enviar ao colaborador"><i className="bi bi-clipboard-check" /> Copiar aviso</button>
           {!pinned && <button className="mbdhc-button secondary" type="button" onClick={() => toggleDeveloper(dev.key)}>{isOpen ? "Ocultar" : "Ver mais"} <i className={`bi ${isOpen ? "bi-chevron-up" : "bi-chevron-down"}`} /></button>}
@@ -1621,12 +1670,12 @@ export function HoursWorkbench() {
     <section className="mbw-page mbdhc-page mbdhc-governance">
       <WorkbenchHeader
         kicker="Modulo 4"
-        title={ownIsQaOnly ? "Minhas metricas" : "Governanca da equipe"}
+        title={ownIsQaOnly ? "Minhas metricas" : "Gestao da equipe"}
         subtitle={ownIsQaOnly ? "Seu card com metricas de teste. A visao completa do time e restrita a Gestao/Gerente." : "Horas, metas, cards sem apontamento e distribuicao por pais."}
         demoMode={demoMode}
         actions={ownIsQaOnly
           ? <><Button onClick={() => downloadCsv(`minhas-metricas-${dateStamp()}.csv`, ["Colaborador", "Cards", "Tasks", "Bugs", "Horas", "Meta", "Sem horas"], ownDev ? [[ownDev.displayName, ownDev.items.length, ownDev.tasks, ownDev.bugs, ownDev.completed, ownDev.goalHours, ownDev.cardsWithoutHours]] : [])}><FiDownload /> CSV</Button><Button onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /> Atualizar</Button></>
-          : <><Button onClick={() => downloadCsv(`governanca-equipe-${dateStamp()}.csv`, ["Colaborador", "Papel", "Cards", "Tasks", "Bugs", "User Stories", "Features", "Horas", "Meta", "Com horas", "Sem horas", "Saldo"], filteredDevelopers.map((dev) => [dev.displayName, accessLevelLabels[dev.person?.accessLevel || dev.person?.linkedProfile?.accessLevel] || (dev.person?.isQa ? "QA" : dev.person?.isDev ? "Dev" : dev.person?.isManagement ? "Gestao" : ""), dev.items.length, dev.tasks, dev.bugs, dev.userStories, dev.features, dev.completed, dev.goalHours, dev.cardsWithHours, dev.cardsWithoutHours, dev.completed - dev.goalHours]))}><FiDownload /> CSV</Button><Button onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /> Atualizar</Button><Button onClick={copyReport}><FiCopy /> Copiar</Button><Button onClick={sendGovernanceSlack}><i className="bi bi-slack" /> Slack</Button><Button onClick={pdfReport}><FiDownload /> PDF</Button></>}
+          : <><Button onClick={() => downloadCsv(`Gestao-equipe-${dateStamp()}.csv`, ["Colaborador", "Papel", "Cards", "Tasks", "Bugs", "User Stories", "Features", "Horas", "Meta", "Com horas", "Sem horas", "Saldo"], filteredDevelopers.map((dev) => [dev.displayName, accessLevelLabels[dev.person?.accessLevel || dev.person?.linkedProfile?.accessLevel] || (dev.person?.isQa ? "QA" : dev.person?.isDev ? "Dev" : dev.person?.isManagement ? "Gestao" : ""), dev.items.length, dev.tasks, dev.bugs, dev.userStories, dev.features, dev.completed, dev.goalHours, dev.cardsWithHours, dev.cardsWithoutHours, dev.completed - dev.goalHours]))}><FiDownload /> CSV</Button><Button onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /> Atualizar</Button><Button onClick={copyReport}><FiCopy /> Copiar</Button><Button onClick={sendGovernanceSlack}><i className="bi bi-slack" /> Slack</Button><Button onClick={pdfReport}><FiDownload /> PDF</Button></>}
       />
       {error && <div className="mbw-alert error">{error}</div>}
       {/* O card fixo so faz sentido pra QA: pra ele e o UNICO conteudo desta
@@ -1641,10 +1690,11 @@ export function HoursWorkbench() {
       {!ownIsQaOnly && (
       <>
       <details className="mbdhc-filters" open>
-        <summary><span>Filtros <small>{filteredDevelopers.length} colaborador(es)</small></span><b>{[search, collaboratorFilter.length, typeFilter !== "all", hourStatus !== "all", goalFilter !== "all"].filter(Boolean).length} ativos</b></summary>
+        <summary><span>Filtros <small>{filteredDevelopers.length} colaborador(es)</small></span><b>{[search, collaboratorFilter.length, typeFilter !== "all", hourStatus !== "all", goalFilter !== "all", roleGroup !== "all"].filter(Boolean).length} ativos</b></summary>
         <div className="mbdhc-filter-grid">
           <label className="mbdhc-field"><span>Buscar</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Pessoa, card, titulo..." /></label>
           <ProfileCombobox label="Colaborador" people={developers.map((dev) => ({ id: dev.key, azureName: dev.displayName, color: dev.color }))} values={collaboratorFilter} multiple onChange={setCollaboratorFilter} />
+          <FilterCombobox label="Funcao" options={[{ value: accessLevels.dev, label: "Dev" }, { value: accessLevels.qa, label: "QA" }, { value: accessLevels.gestao, label: "Gestao" }, { value: accessLevels.gerente, label: "Gerente" }]} values={roleGroup === "all" ? [] : [roleGroup]} multiple={false} onChange={(value) => setRoleGroup(value || "all")} />
           <FilterCombobox label="Tipo" options={["Task", "Bug", "User Story", "Feature"].map((value) => ({ value, label: value }))} values={typeFilter === "all" ? [] : [typeFilter]} multiple={false} onChange={(value) => setTypeFilter(value || "all")} />
           <FilterCombobox label="Sprint" options={sprintOptions.map((sprint) => ({ value: sprint, label: compactSprintLabel(sprint) }))} values={effectiveSprintFilter[0] ? [effectiveSprintFilter[0]] : []} multiple={false} allLabel="Sprint atual" onChange={(value) => setSprintFilter(value ? [value] : [])} />
           <FilterCombobox label="Horas" options={[{ value: "with", label: "Com horas" }, { value: "without", label: "Sem horas" }]} values={hourStatus === "all" ? [] : [hourStatus]} multiple={false} onChange={(value) => setHourStatus(value || "all")} />
@@ -1667,7 +1717,35 @@ export function HoursWorkbench() {
         )}
       </section>
       <section className={`mbdhc-section mbdhc-charts-section ${chartsCollapsed ? "collapsed" : ""}`}>
-        <div className="mbdhc-section-header"><div><h3>Analises visuais</h3><p>Meta, distribuicao de status e atuacao por pais.</p></div><button className="mbdhc-icon-button" type="button" onClick={() => setChartsCollapsed((value) => !value)}><i className={`bi ${chartsCollapsed ? "bi-chevron-down" : "bi-chevron-up"}`} /></button></div>
+        <div className="mbdhc-section-header"><div><h3>Dashboard da equipe</h3><p>Horas, volume de itens e qualidade do ciclo atual.</p></div><button className="mbdhc-icon-button" type="button" onClick={() => setChartsCollapsed((value) => !value)}><i className={`bi ${chartsCollapsed ? "bi-chevron-down" : "bi-chevron-up"}`} /></button></div>
+        {!chartsCollapsed && !loading && (
+          <div className="mbdhc-dashboard-overview">
+            <section className="mbdhc-overview-card hours">
+              <header><span>Horas</span><strong>{formatHours(totals.completed)}</strong><small>de {formatHours(totals.goal)}</small></header>
+              <div className="mbdhc-overview-track"><b style={{ width: `${totals.goal ? Math.min(100, (totals.completed / totals.goal) * 100) : 0}%` }} /></div>
+              <footer><span>Pendente {formatHours(totals.missing)}</span><span>Excedente +{formatHours(totals.extra)}</span></footer>
+            </section>
+            <section className="mbdhc-overview-card volume">
+              <header><span>Quantidade</span><strong>{totals.cards}</strong><small>{totals.testable} testaveis</small></header>
+              <div className="mbdhc-segment-track">
+                <b className="task" style={{ width: `${totals.cards ? (totals.tasks / totals.cards) * 100 : 0}%` }} />
+                <b className="bug" style={{ width: `${totals.cards ? (totals.bugs / totals.cards) * 100 : 0}%` }} />
+                <b className="story" style={{ width: `${totals.cards ? (totals.userStories / totals.cards) * 100 : 0}%` }} />
+                <b className="feature" style={{ width: `${totals.cards ? (totals.features / totals.cards) * 100 : 0}%` }} />
+              </div>
+              <footer><span>Tasks {totals.tasks}</span><span>Bugs {totals.bugs}</span><span>US {totals.userStories}</span><span>Feat {totals.features}</span></footer>
+            </section>
+            <section className="mbdhc-overview-card quality">
+              <header><span>Testes</span><strong>{totals.tests}</strong><small>{totals.nonTestable} nao testaveis</small></header>
+              <div className="mbdhc-segment-track">
+                <b className="pass" style={{ width: `${totals.tests ? (totals.pass / totals.tests) * 100 : 0}%` }} />
+                <b className="fail" style={{ width: `${totals.tests ? (totals.fail / totals.tests) * 100 : 0}%` }} />
+                <b className="limitation" style={{ width: `${totals.tests ? (totals.limitation / totals.tests) * 100 : 0}%` }} />
+              </div>
+              <footer><span>Pass {totals.pass}</span><span>Fail {totals.fail}</span><span>Limitation {totals.limitation}</span></footer>
+            </section>
+          </div>
+        )}
         {!chartsCollapsed && <div className="mbdhc-dashboard-grid">
           {loading ? (
             <>
@@ -1777,7 +1855,7 @@ export function SettingsWorkbench() {
     showMyItems: ["Meus itens", "Work Items do usuario logado"],
     showTestResults: ["Resultado", "Resultado de QA/Beta nos cards"],
     showEvidenceHistory: ["Historico de testes", "Evidencias dentro de Meus itens para QA"],
-    showGovernance: ["Governanca do time", "Horas, metas e indicadores"],
+    showGovernance: ["Gestao da equipe", "Horas, metas e indicadores"],
     enableBulkEdit: ["Alteracao em massa", "Acoes coletivas do workbench"],
     enableNewTask: ["Nova tarefa", "Criacao rapida de Work Items"],
     showImportWorkItems: ["Import Work Items", "Criacao hierarquica no Azure"],
@@ -1972,7 +2050,7 @@ export function SettingsWorkbench() {
       <WorkbenchHeader
         kicker="Produto"
         title="Configuracoes"
-        subtitle={isGestao ? "Produto, funcionalidades, conexoes e governanca." : "Conexoes pessoais do Azure, pipelines e Slack."}
+        subtitle={isGestao ? "Produto, funcionalidades, conexoes e Gestao." : "Conexoes pessoais do Azure, pipelines e Slack."}
         demoMode={demoMode}
         actions={<>{isGestao && <div className="mb-settings-scope"><FilterCombobox label="Escopo" options={[{ value: accessLevels.dev, label: "Dev" }, { value: accessLevels.qa, label: "QA" }, { value: accessLevels.gestao, label: "Gestao" }, { value: accessLevels.gerente, label: "Gerente" }]} values={[configScope]} multiple={false} onChange={(value) => setConfigScope(value || accessLevels.gestao)} /></div>}<Button onClick={() => importRef.current?.click()}><FiUpload /> Importar</Button><Button onClick={exportSettingsCsv}><FiDownload /> CSV</Button><Button onClick={exportConfig}><FiDownload /> Exportar</Button><Button onClick={previewSlack}><FiCopy /> Testar Slack</Button><Button onClick={saveSettings} tone="primary">{saving ? "Aplicando..." : "Aplicar"}</Button></>}
       />
@@ -2007,7 +2085,7 @@ export function SettingsWorkbench() {
               <div className="mb-inner-accordion-body">
                 <label className="mb-form-row"><span>Limite de itens buscados</span><input type="number" min="100" step="100" value={azureMaxItems} onChange={(event) => setAzureMaxItems(event.target.value)} /></label>
                 <label className="mb-form-row"><span>Iteration pattern</span><input value={iterationPattern} onChange={(event) => setIterationPattern(event.target.value)} placeholder="MB Labs" /></label>
-                <small className="mb-settings-note">Afeta Quality Board, Meus itens e Governanca — nao e especifico de nenhuma tela.</small>
+                <small className="mb-settings-note">Afeta Quality Board, Meus itens e Gestao — nao e especifico de nenhuma tela.</small>
               </div>
             </details>
           )}
@@ -2031,11 +2109,11 @@ export function SettingsWorkbench() {
           </details>
         </SettingsSection>
 
-        {isGestao && <SettingsSection title="Governanca" description="Meta padrao de horas usada quando um colaborador nao tem meta propria.">
+        {isGestao && <SettingsSection title="Gestao" description="Meta padrao de horas usada quando um colaborador nao tem meta propria.">
           <div className="mb-governance-grid">
             <label className="mb-form-row"><span>Meta padrao de horas</span><input type="number" min="0" step="0.5" value={goalHours} onChange={(event) => setGoalHours(event.target.value)} /></label>
           </div>
-          <small className="mb-settings-note">Periodo, limite de itens e sprint agora sao filtros dentro da propria tela de Governanca do time, nao configuracoes globais.</small>
+          <small className="mb-settings-note">Periodo, limite de itens e sprint agora sao filtros dentro da propria tela de Gestao da equipe, nao configuracoes globais.</small>
         </SettingsSection>}
 
         <SettingsSection title="Notificacoes sonoras" description="Escolha o som de cada notificacao ou desative por completo. Preferencia individual, salva neste navegador.">
@@ -2060,3 +2138,4 @@ export function SettingsWorkbench() {
     </section>
   );
 }
+

@@ -37,15 +37,15 @@ const navByRole = {
   [accessLevels.gestao]: [
     { to: "/qa", label: "Quality Board", icon: FiCheckSquare, flag: "showQaBoard" },
     { to: "/dev", label: "Meus itens", icon: FiClipboard, flag: "showMyItems" },
-    { to: "/management", label: "Governanca do time", icon: FiShield, flag: "showGovernance" },
+    { to: "/management", label: "Gestao da equipe", icon: FiShield, flag: "showGovernance" },
     { to: "/management/collaborators", label: "Perfil", icon: FiUsers, flag: "showGovernance" },
     { to: "/import", label: "Import Work Items", icon: FiGitBranch, flag: "showImportWorkItems" }
   ],
   [accessLevels.gerente]: [
     { to: "/qa", label: "Quality Board", icon: FiCheckSquare, flag: "showQaBoard" },
     { to: "/dev", label: "Meus itens", icon: FiClipboard, flag: "showMyItems" },
-    { to: "/management", label: "Gestão do time", icon: FiShield, flag: "showGovernance" },
-    { to: "/management/dashboard", label: "Gestão do projeto", icon: FiBarChart2, flag: "showGovernance" },
+    { to: "/management", label: "Gestao da equipe", icon: FiShield, flag: "showGovernance" },
+    { to: "/management/dashboard", label: "Gestao do projeto", icon: FiBarChart2, flag: "showGovernance" },
     { to: "/management/collaborators", label: "Perfil", icon: FiUsers, flag: "showGovernance" },
     { to: "/import", label: "Import Work Items", icon: FiGitBranch, flag: "showImportWorkItems" }
   ]
@@ -103,3 +103,4 @@ export default function Sidebar({ collapsed, onToggle }) {
     </aside>
   );
 }
+
