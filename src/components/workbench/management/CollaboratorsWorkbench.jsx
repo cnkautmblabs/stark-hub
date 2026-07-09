@@ -5,7 +5,8 @@ import { useProfiles } from "../../../hooks/useProfiles.js";
 import { usePersistentState } from "../../../hooks/usePersistentState.js";
 import { accessLevelLabels, accessLevels, defaultGoalHours, hasManagementAccess } from "../../../utils/constants.js";
 import { normalize } from "../../../utils/workbench/formatters.js";
-import { AvatarDot, Button, EmptyState, FilterCombobox, RoleBadgeIcon, TextField, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
+import { dateStamp, downloadCsv } from "../../../utils/csvExport.js";
+import { AvatarDot, Button, EmptyState, FilterCombobox, IdentityAvatar, RoleBadgeIcon, TextField, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
 
 const roleDefs = [
   { key: "isDev", level: "dev", label: "Dev" },
@@ -31,6 +32,31 @@ function withProfileFallback(person) {
 
 function getEffectiveAccessLevel(person) {
   return person.accessLevel || person.linkedProfile?.accessLevel || "";
+}
+
+// isAdmin e um flag independente do nivel de acesso (alguem pode ser
+// "gestao" no accessLevel e ainda ser Admin) — gravado em `profiles`, nao em
+// `collaborators`. Uma versao dessa checagem (so `accessLevel === "admin"`)
+// vivia duplicada e incompleta no resumo recolhido da lista, fazendo alguem
+// com isAdmin=true mas accessLevel="gestao" (caso do Matheus Bonotto) nunca
+// aparecer com o selo Admin ali, mesmo aparecendo certo dentro do card.
+function isAdminPerson(person) {
+  return Boolean(person.isAdmin || person.linkedProfile?.isAdmin || getEffectiveAccessLevel(person) === accessLevels.admin);
+}
+
+// Selos de funcao (Dev/QA/Gestao/Gerente/Admin) usados tanto no resumo
+// recolhido da lista quanto dentro do card — uma unica fonte evita as duas
+// copias divergirem de novo.
+function computeRolePills(person) {
+  const currentAccessLevel = getEffectiveAccessLevel(person);
+  const pills = roleDefs.filter((role) => hasRoleFlag(person, role));
+  if (currentAccessLevel === accessLevels.gerente && !pills.some((role) => role.level === "gerente")) {
+    pills.push({ key: "isGerente", level: "gerente", label: "Gerente" });
+  }
+  if (isAdminPerson(person) && !pills.some((role) => role.level === "admin")) {
+    pills.push({ key: "isAdmin", level: "admin", label: "Admin" });
+  }
+  return pills;
 }
 
 function hasRoleFlag(person, role) {
@@ -103,33 +129,57 @@ function AliasTagInput({ values = [], onChange, readOnly }) {
   );
 }
 
+// Antes so dava pra colar uma URL de imagem — sem opcao de subir uma foto do
+// computador. Sem storage de arquivos no backend, o upload vira uma data URI
+// (mesma tecnica ja usada pelas evidencias de teste) gravada direto no campo
+// imageUrl, que ja aceita qualquer string de URL de imagem.
+function AvatarSourceField({ value, onChange, disabled }) {
+  const isDataUri = /^data:image\//i.test(value || "");
+  const [mode, setMode] = useState(isDataUri ? "file" : "url");
+
+  function handleFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => onChange(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  }
+
+  return (
+    <label className="mbw-field">
+      <span>Avatar</span>
+      <div className="mb-profile-avatar-field">
+        <div className="mb-profile-source-toggle">
+          <button type="button" className={mode === "url" ? "active" : ""} disabled={disabled} onClick={() => setMode("url")}>URL</button>
+          <button type="button" className={mode === "file" ? "active" : ""} disabled={disabled} onClick={() => setMode("file")}>Arquivo</button>
+        </div>
+        {mode === "url" ? (
+          <input type="text" value={isDataUri ? "" : value} onChange={(event) => onChange(event.target.value)} readOnly={disabled} placeholder="https://..." />
+        ) : (
+          <div className="mb-profile-avatar-file">
+            <input type="file" accept="image/*" disabled={disabled} onChange={handleFile} />
+            {isDataUri && !disabled && <button type="button" className="mb-profile-avatar-clear" onClick={() => onChange("")}><i className="bi bi-x-lg" /> Remover</button>}
+            {isDataUri && <small>Imagem carregada do computador.</small>}
+          </div>
+        )}
+      </div>
+    </label>
+  );
+}
+
 function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpdate, onDelete, canEditRoles = false, canChangeAdmin = false }) {
   const canEdit = isGestao || isOwn;
   const editable = isEditing && canEdit;
   const currentAccessLevel = getEffectiveAccessLevel(person);
   const effectivePerson = withProfileFallback(person);
   const { azureName: effectiveAzureName, slackName: effectiveSlackName, slackMemberId: effectiveSlackMemberId, imageUrl: effectiveImageUrl, aliases: effectiveAliases } = effectivePerson;
-  const hasAdminTag = Boolean(person.isAdmin || person.linkedProfile?.isAdmin || currentAccessLevel === accessLevels.admin);
-  // Determine which role/access pills to show: prefer role pills when present
-  // Build role pills including accessLevel-derived roles (gerente/admin) and explicit admin flag
-  const rolePills = [...roleDefs.filter((role) => hasRoleFlag(person, role))];
-  if (currentAccessLevel === "gerente" && !rolePills.some((r) => r.level === "gerente")) rolePills.push({ key: "isGerente", level: "gerente", label: "Gerente" });
-  if ((currentAccessLevel === "admin" || hasAdminTag) && !rolePills.some((r) => r.level === "admin")) rolePills.push({ key: "isAdmin", level: "admin", label: "Admin" });
-  const showAccessLevelPill = !(rolePills && rolePills.length > 0) && Boolean(currentAccessLevel);
 
   return (
     <div className="mb-profile-card">
       <div className="mb-profile-card-head">
-        <AvatarDot person={effectivePerson} />
+        <IdentityAvatar name={effectiveAzureName} imageUrl={effectiveImageUrl} color={person.color} accessLevel={currentAccessLevel} size={56} />
         <div className="mb-profile-card-heading">
           <strong>{effectiveAzureName || "Sem nome"}</strong>
-          {/* Hide role row inside the card for management view; it will appear in the accordion summary */}
-          {!isGestao && (
-            <div className="mb-profile-role-row">
-              {showAccessLevelPill && <RolePill level={currentAccessLevel} label={accessLevelLabels[currentAccessLevel] || currentAccessLevel} active disabled />}
-              {rolePills.map((role) => <RolePill key={role.key} level={role.level} label={role.label} active disabled />)}
-            </div>
-          )}
         </div>
         {/* actions intentionally rendered outside for consistent placement */}
       </div>
@@ -138,7 +188,7 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
         <TextField label="Email" value={person.linkedProfile?.email || person.email || ""} onChange={(value) => onUpdate({ email: value })} readOnly={!editable || Boolean(person.linkedProfile?.email)} />
         <TextField label="Nome no Slack" value={effectiveSlackName} onChange={(value) => onUpdate({ slackName: value })} readOnly={!editable} />
         <TextField label="Slack Member ID" value={effectiveSlackMemberId} onChange={(value) => onUpdate({ slackMemberId: value })} readOnly={!editable} />
-        <TextField label="Avatar URL" value={effectiveImageUrl} onChange={(value) => onUpdate({ imageUrl: value })} readOnly={!editable} />
+        <AvatarSourceField value={effectiveImageUrl} onChange={(value) => onUpdate({ imageUrl: value })} disabled={!editable} />
         <label className="mbw-field">
           <span>Cor</span>
           <div className="mb-profile-color-field">
@@ -180,7 +230,7 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
           </label>
         )}
         <label className="mbw-field mb-span-2">
-          <span>Papeis</span>
+          <span>Funções</span>
           <div className="mb-profile-role-row">
             {roleDefs.map((role) => (
               <RolePill
@@ -204,7 +254,7 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
               key="role-admin"
               level="admin"
               label="Admin"
-              active={Boolean(person.isAdmin || person.linkedProfile?.isAdmin || currentAccessLevel === accessLevels.admin)}
+              active={isAdminPerson(person)}
               disabled={!editable || !canChangeAdmin}
               onToggle={() => {
                 if (currentAccessLevel === accessLevels.admin) {
@@ -216,9 +266,26 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
             />
           </div>
         </label>
-        <label className="mb-profile-check">
-          <input type="checkbox" checked={Boolean(person.fixedMention)} disabled={!isGestao || !editable} onChange={(event) => onUpdate({ fixedMention: event.target.checked })} />
-          <span>FYI fixo no Slack</span>
+        <label className="mbw-field mb-span-2">
+          <span>FYI no Slack</span>
+          <div className="mb-profile-role-row">
+            <button
+              type="button"
+              className={`mb-profile-fyi-pill all ${person.fixedMention ? "active" : ""}`}
+              disabled={!isGestao || !editable}
+              onClick={() => onUpdate({ fixedMention: !Boolean(person.fixedMention) })}
+            >
+              <i className="bi bi-megaphone-fill" /> Todos os resultados
+            </button>
+            <button
+              type="button"
+              className={`mb-profile-fyi-pill failure ${person.fixedMentionOnFailure ? "active" : ""}`}
+              disabled={!isGestao || !editable}
+              onClick={() => onUpdate({ fixedMentionOnFailure: !Boolean(person.fixedMentionOnFailure) })}
+            >
+              <i className="bi bi-exclamation-triangle-fill" /> Fail / Limitation
+            </button>
+          </div>
         </label>
       </div>
     </div>
@@ -312,6 +379,39 @@ export function CollaboratorsWorkbench() {
     });
   }
 
+  function exportCollaboratorsCsv() {
+    downloadCsv(`colaboradores-${dateStamp()}.csv`, [
+      "Nome Azure",
+      "Email",
+      "Nome Slack",
+      "Slack Member ID",
+      "Nivel",
+      "Dev",
+      "QA",
+      "Gestao",
+      "Meta horas",
+      "FYI todos",
+      "FYI Fail/Limitation",
+      "Aliases"
+    ], visibleCollaborators.map((person) => {
+      const effective = withProfileFallback(person);
+      return [
+        effective.azureName || "",
+        person.linkedProfile?.email || person.email || "",
+        effective.slackName || "",
+        effective.slackMemberId || "",
+        accessLevelLabels[getEffectiveAccessLevel(person)] || getEffectiveAccessLevel(person) || "",
+        hasRoleFlag(person, roleDefs[0]) ? "sim" : "nao",
+        hasRoleFlag(person, roleDefs[1]) ? "sim" : "nao",
+        hasRoleFlag(person, roleDefs[2]) ? "sim" : "nao",
+        person.goalHours || "",
+        person.fixedMention ? "sim" : "nao",
+        person.fixedMentionOnFailure ? "sim" : "nao",
+        (effective.aliases || []).join("|")
+      ];
+    }));
+  }
+
   return (
     <section className="mbw-page mb-settings-page">
       <WorkbenchHeader
@@ -319,7 +419,7 @@ export function CollaboratorsWorkbench() {
         title="Perfil"
         subtitle={isGestao ? "Cadastro unico de identidade, aliases, permissoes, Slack, avatar e cor de todo o time." : "Suas informacoes de identidade, Slack, avatar e cor."}
         demoMode={demoMode}
-        actions={isGestao && <Button onClick={addPerson}>+ Adicionar</Button>}
+        actions={<>{isGestao && <Button onClick={addPerson}>+ Adicionar</Button>}<Button onClick={exportCollaboratorsCsv}><i className="bi bi-download" /> CSV</Button></>}
       />
       <div className="mb-collaborators-list-react">
         {isGestao && (profilesLoading ? <WorkbenchCardSkeleton rows={1} mode="list" /> : pendingProfiles.length > 0 && (
@@ -372,9 +472,7 @@ export function CollaboratorsWorkbench() {
         })}
         {isGestao && visibleCollaborators.map((person) => {
           const currentAccessLevel = getEffectiveAccessLevel(person);
-          const rolePills = [...roleDefs.filter((role) => hasRoleFlag(person, role))];
-          if (currentAccessLevel === "gerente" && !rolePills.some((r) => r.level === "gerente")) rolePills.push({ key: "isGerente", level: "gerente", label: "Gerente" });
-          if (currentAccessLevel === "admin" && !rolePills.some((r) => r.level === "admin")) rolePills.push({ key: "isAdmin", level: "admin", label: "Admin" });
+          const rolePills = computeRolePills(person);
           const showAccessLevelPill = !(rolePills && rolePills.length > 0) && Boolean(currentAccessLevel);
           const editing = editingId === person.id;
           return (

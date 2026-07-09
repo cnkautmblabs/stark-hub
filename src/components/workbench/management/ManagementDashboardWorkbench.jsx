@@ -5,6 +5,7 @@ import { useCollaborators } from "../../../hooks/useCollaborators.js";
 import { useTestEvidence } from "../../../hooks/useTestEvidence.js";
 import { usePersistentState } from "../../../hooks/usePersistentState.js";
 import { compactSprintLabel } from "../../../utils/sprints.js";
+import { dateStamp, downloadCsv } from "../../../utils/csvExport.js";
 import { evidenceDedupeKey, evidenceEnvironments, isQaEvidenceEntry, normalizeResult } from "../../../utils/workbench/formatters.js";
 import { AvatarDot, ChartSkeleton, FilterCombobox, Kpi, KpiSkeleton, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
 
@@ -126,6 +127,24 @@ export function ManagementDashboardWorkbench() {
   const maxBugValue = Math.max(1, ...bugsPerSprint.map((row) => row.total));
   const loading = itemsLoading;
 
+  function exportManagementCsv() {
+    const rows = [
+      ["KPI", "Delivery rate", `${deliveryStats.rate}%`],
+      ["KPI", "Features entregues", featuresPerSprint.reduce((sum, row) => sum + row.delivered, 0)],
+      ["KPI", "Bugs no periodo", bugsPerSprint.reduce((sum, row) => sum + row.total, 0)],
+      ["KPI", "Pass rate testes", `${testMetrics.passRate}%`],
+      ["KPI", "Itens no periodo", deliveryStats.total],
+      ...featuresPerSprint.map((row) => ["Feature por sprint", row.sprint, `${row.delivered}/${row.total}`]),
+      ...bugsPerSprint.map((row) => ["Bugs por sprint", row.sprint, row.total]),
+      ...devDeliveries.map((row) => ["Entrega por Dev", row.name, `Tasks ${row.tasks}; Bugs ${row.bugs}; Total ${row.total}`]),
+      ...qaWorkload.map((row) => ["Carga por QA", row.name, row.count]),
+      ["Testes", "Approved", testMetrics.pass],
+      ["Testes", "Fail", testMetrics.fail],
+      ["Testes", "Limitation", testMetrics.limitation]
+    ];
+    downloadCsv(`gestao-projeto-${dateStamp()}.csv`, ["Secao", "Item", "Valor"], rows);
+  }
+
   return (
     <section className="mbw-page mb-mgmt-dashboard">
       <WorkbenchHeader
@@ -133,7 +152,7 @@ export function ManagementDashboardWorkbench() {
         title="Dash executiva"
         subtitle="Metricas agrupadas do projeto: entregas, QA, dev e governanca — multiplas sprints."
         demoMode={demoMode}
-        actions={<button type="button" className="mb-mgmt-refresh" onClick={reloadEvidence}><i className="bi bi-arrow-clockwise" /> Atualizar</button>}
+        actions={<><button type="button" className="mb-mgmt-refresh" onClick={exportManagementCsv}><i className="bi bi-download" /> CSV</button><button type="button" className="mb-mgmt-refresh" onClick={reloadEvidence}><i className="bi bi-arrow-clockwise" /> Atualizar</button></>}
       />
 
       <div className="mb-mgmt-filters">

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FiUpload } from "react-icons/fi";
+import { FiDownload, FiUpload } from "react-icons/fi";
 import { useAuth } from "../../../contexts/AuthContext.jsx";
 import { useAppSettings } from "../../../hooks/useAppSettings.js";
 import { useHierarchyImport } from "../../../hooks/useHierarchyImport.js";
@@ -13,9 +13,47 @@ import {
   parseCsv
 } from "../../../utils/hierarchyImport.js";
 import { csvCell } from "../../../utils/workbench/formatters.js";
+import { dateStamp, downloadCsv } from "../../../utils/csvExport.js";
 import { Button, EmptyState, Kpi, TextField, TypeBadge, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
 
 const manualTypeOptions = ["Epic", "Feature", "User Story", "Task", "Test Case", "Bug"];
+
+const workItemAllowedChildren = {
+  Epic: ["Feature", "User Story", "Task", "Test Case", "Bug"],
+  Feature: ["User Story", "Task", "Test Case", "Bug"],
+  "User Story": ["Task", "Test Case"],
+  Task: ["Test Case"],
+  "Test Case": [],
+  Bug: []
+};
+
+function validateTree(root) {
+  const errors = {};
+  function addError(nodeId, message) {
+    if (!nodeId) return;
+    errors[nodeId] = [...(errors[nodeId] || []), message];
+  }
+
+  function walk(node) {
+    const children = node.children || [];
+    children.forEach((child) => {
+      if (node.type !== "root") {
+        const allowed = workItemAllowedChildren[node.type] || [];
+        if (!allowed.includes(child.type)) {
+          addError(node.id, `Tipo ${node.type} não pode ter filho ${child.type}.`);
+          addError(child.id, `Tipo ${child.type} não pode ser filho de ${node.type}.`);
+        }
+      }
+      if (child.children?.length > 0 && (workItemAllowedChildren[child.type] || []).length === 0) {
+        addError(child.id, `Tipo ${child.type} não pode ter filhos.`);
+      }
+      walk(child);
+    });
+  }
+
+  walk(root);
+  return errors;
+}
 
 function buildDefaultQaCsv(defaults = {}) {
   const area = defaults.areaPath || "WebApp\\MB Labs";
@@ -62,12 +100,174 @@ function flattenWithDepth(items) {
   return result;
 }
 
-function TreePreview({ node }) {
-  if (!node || node.type === "root") return <>{(node?.children || []).map((child, index) => <TreePreview key={index} node={child} />)}</>;
+function cloneTree(node) {
+  return {
+    ...node,
+    children: (node.children || []).map(cloneTree)
+  };
+}
+
+function findNodeById(node, id) {
+  if (!node || !id) return null;
+  if (node.id === id) return node;
+  for (const child of node.children || []) {
+    const found = findNodeById(child, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+function flattenTree(node, depth = 0, rows = []) {
+  if (!node) return rows;
+  rows.push({ ...node, depth });
+  (node.children || []).forEach((child) => flattenTree(child, depth + 1, rows));
+  return rows;
+}
+
+function normalizeTag(value) {
+  return String(value || "").trim().replace(/^,+|,+$/g, "");
+}
+
+function TagInput({ tags, value, onChange, onAdd, onRemove, placeholder }) {
   return (
-    <div className="mbwi-node-preview">
-      <div><TypeBadge type={node.type} /> <strong>{node.title}</strong></div>
-      {(node.children || []).length > 0 && <div className="mbwi-node-children">{node.children.map((child, index) => <TreePreview key={index} node={child} />)}</div>}
+    <div className="mbwi-tag-input">
+      <div className="mbwi-tag-row">
+        {tags.map((tag) => (
+          <span key={tag} className="mbwi-tag-pill">
+            {tag}
+            <button type="button" onClick={() => onRemove(tag)} aria-label={`Remover tag ${tag}`}><i className="bi bi-x" /></button>
+          </span>
+        ))}
+        <input
+          className="mbwi-tag-input-field"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              const next = normalizeTag(value);
+              if (next) onAdd(next);
+            }
+          }}
+          placeholder={placeholder}
+        />
+      </div>
+    </div>
+  );
+}
+
+function removeNodeById(node, nodeId) {
+  let removed = null;
+  const children = [];
+  for (const child of node.children || []) {
+    if (child.id === nodeId) {
+      removed = child;
+      continue;
+    }
+    const [nextChild, childRemoved] = removeNodeById(child, nodeId);
+    if (childRemoved) removed = childRemoved;
+    children.push(nextChild);
+  }
+  return [{ ...node, children }, removed];
+}
+
+function countDescendants(node) {
+  return (node.children || []).reduce((count, child) => count + 1 + countDescendants(child), 0);
+}
+
+function collectAllNodeIds(node, collector = []) {
+  if (node.type !== "root" && node.id) collector.push(node.id);
+  for (const child of node.children || []) collectAllNodeIds(child, collector);
+  return collector;
+}
+
+function assignTreeIds(root) {
+  let counter = 1;
+  function walk(node) {
+    if (node.type !== "root") node.id = node.id || `import-node-${counter++}`;
+    for (const child of node.children || []) walk(child);
+  }
+  walk(root);
+  return root;
+}
+
+function isAncestorOf(root, ancestorId, nodeId) {
+  if (!ancestorId || !nodeId || ancestorId === nodeId) return false;
+  const ancestor = findNodeById(root, ancestorId);
+  return Boolean(ancestor && findNodeById(ancestor, nodeId));
+}
+
+function TreePreview({ node, depth = 0, draggingId, dropTargetId, onToggle, onMove, errors = {} }) {
+  if (!node || node.type === "root") {
+    return <>{(node?.children || []).map((child) => <TreePreview key={child.id} node={child} depth={0} draggingId={draggingId} dropTargetId={dropTargetId} onToggle={onToggle} onMove={onMove} />)}</>;
+  }
+
+  const hasChildren = (node.children || []).length > 0;
+  const isExpanded = hasChildren ? onToggle?.isExpanded?.(node.id) : false;
+  const childCount = node.children?.length || 0;
+  const descendantCount = countDescendants(node);
+  const isDropTarget = dropTargetId === node.id;
+
+  const nodeErrors = errors[node.id] || [];
+  return (
+    <div className={`mbwi-tree-node${isDropTarget ? " drop-target" : ""}${draggingId === node.id ? " dragging" : ""}${nodeErrors.length ? " invalid" : ""}`}>
+      <div
+        className={`mbwi-node-row${nodeErrors.length ? " error" : ""}`}
+        draggable
+        onDragStart={(event) => {
+          event.dataTransfer.setData("text/plain", node.id);
+          event.dataTransfer.effectAllowed = "move";
+          onToggle.setDragging(node.id);
+        }}
+        onDragEnd={() => onToggle.clearDrag()}
+        onDragOver={(event) => {
+          event.preventDefault();
+          onToggle.setDropTarget(node.id);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const payload = event.dataTransfer.getData("text/plain") || "";
+          if (payload.startsWith("new-type:")) {
+            onToggle.onDropNewType?.(payload.replace("new-type:", ""), node.id);
+            onToggle.clearDrag();
+            return;
+          }
+          onMove(payload, node.id);
+          onToggle.clearDrag();
+        }}
+        onDragLeave={() => onToggle.clearDropTarget()}
+      >
+        <button
+          type="button"
+          className={`mbwi-node-toggle${hasChildren ? "" : " empty"}`}
+          onClick={(event) => {
+            event.preventDefault();
+            if (hasChildren) onToggle.toggle(node.id);
+          }}
+          aria-label={hasChildren ? (isExpanded ? "Recolher" : "Expandir") : "Sem filhos"}
+        >
+          {hasChildren ? (isExpanded ? "−" : "+") : ""}
+        </button>
+        <div className="mbwi-node-title">
+          <TypeBadge type={node.type} />
+          <strong>{node.title || node.type}</strong>
+        </div>
+        <span className="mbwi-node-meta">
+          {childCount > 0 ? `${childCount} filho${childCount === 1 ? "" : "s"} · ${descendantCount} nós` : "Sem filhos"}
+        </span>
+        {onToggle?.onEdit && (
+          <button type="button" className="mbwi-node-edit" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onToggle.onEdit(node.id); }} title="Editar item">
+            <i className="bi bi-pencil" />
+          </button>
+        )}
+      </div>
+      {nodeErrors.length > 0 && (
+        <div className="mbwi-node-error">
+          {nodeErrors.map((message, index) => <div key={index}>{message}</div>)}
+        </div>
+      )}
+      {hasChildren && isExpanded && <div className="mbwi-node-children">{node.children.map((child) => <TreePreview key={child.id} node={child} depth={depth + 1} draggingId={draggingId} dropTargetId={dropTargetId} onToggle={onToggle} onMove={onMove} />)}</div>}
     </div>
   );
 }
@@ -133,12 +333,20 @@ export function ImportWorkbench() {
   const [raw, setRaw] = useState("");
   const [manualItems, setManualItems] = useState([]);
   const [tree, setTree] = useState(null);
+  const [manualDraft, setManualDraft] = useState({ type: "Epic", title: "", tags: [], tagInput: "", description: "", parentId: "" });
+  const [manualEditItemId, setManualEditItemId] = useState(null);
+  const [manualEditOpen, setManualEditOpen] = useState(false);
+  const [draggingId, setDraggingId] = useState(null);
+  const [dropTargetId, setDropTargetId] = useState(null);
+  const [dragOverRoot, setDragOverRoot] = useState(false);
+  const [expandedNodeIds, setExpandedNodeIds] = useState(new Set());
   const [areaPath, setAreaPath] = useState(profile?.azureTeam ? `${profile.azureProject}\\${profile.azureTeam}` : defaults.areaPath || "");
   const [iterationPath, setIterationPath] = useState(defaults.iterationPath || profile?.azureProject || "");
   const [countryField, setCountryField] = useState(getSetting("azureCountryField", ""));
   const [log, setLog] = useState([]);
   const [progress, setProgress] = useState(0);
   const counts = tree ? countNodes(tree) : {};
+  const validationErrors = tree ? validateTree(tree) : {};
 
   useEffect(() => {
     if (!importing) return undefined;
@@ -151,9 +359,84 @@ export function ImportWorkbench() {
   useEffect(() => {
     if (result) setProgress(100);
   }, [result]);
+  useEffect(() => {
+    if (tab === "manual") {
+      setTreeWithIds(buildTreeFromManualItems(manualItems));
+    }
+  }, [manualItems, tab]);
 
   function append(message, kind = "info") {
     setLog((current) => [...current.slice(-30), { message, kind }]);
+  }
+
+  function updateManualDraft(updates) {
+    setManualDraft((current) => ({ ...current, ...updates }));
+  }
+
+  function openManualEditor({ type = manualDraft.type, parentId = "", itemId = null }) {
+    const existing = itemId ? manualItems.find((item) => item.id === itemId) : null;
+    setManualDraft({
+      type,
+      title: existing?.title || "",
+      tags: existing?.tags ? String(existing.tags).split(";").map((tag) => tag.trim()).filter(Boolean) : [],
+      tagInput: "",
+      description: existing?.description || "",
+      parentId: existing?.parentId || parentId || ""
+    });
+    setManualEditItemId(itemId);
+    setManualEditOpen(true);
+  }
+
+  function clearManualEditor() {
+    setManualEditItemId(null);
+    setManualDraft({ type: "Epic", title: "", tags: [], tagInput: "", description: "", parentId: "" });
+    setManualEditOpen(false);
+  }
+
+  function handleManualTagAdd(value) {
+    const normalized = normalizeTag(value);
+    if (!normalized) return;
+    if (manualDraft.tags.includes(normalized)) return;
+    updateManualDraft({ tags: [...manualDraft.tags, normalized], tagInput: "" });
+  }
+
+  function handleManualTagRemove(tag) {
+    updateManualDraft({ tags: manualDraft.tags.filter((current) => current !== tag) });
+  }
+
+  function saveManualDraft() {
+    const title = manualDraft.title.trim();
+    if (!title) {
+      append("Titulo é obrigatório para o item manual.", "error");
+      return;
+    }
+    const tags = manualDraft.tags.map((tag) => normalizeTag(tag)).filter(Boolean);
+    const nextItem = {
+      id: manualEditItemId || `manual-${Date.now()}`,
+      parentId: manualDraft.parentId || null,
+      type: manualDraft.type,
+      title,
+      areaPath: areaPath,
+      iterationPath: iterationPath,
+      countryValue: countryField || "",
+      tags: tags.join(";"),
+      description: manualDraft.description.trim()
+    };
+
+    setManualItems((current) => {
+      if (manualEditItemId) {
+        return current.map((item) => (item.id === manualEditItemId ? nextItem : item));
+      }
+      return [...current, nextItem];
+    });
+    clearManualEditor();
+    append(`${nextItem.type} adicionado à prévia manual.`, "success");
+  }
+
+  function setTreeWithIds(nextTree) {
+    const treeCopy = assignTreeIds(cloneTree(nextTree));
+    setTree(treeCopy);
+    setExpandedNodeIds(new Set(collectAllNodeIds(treeCopy)));
   }
 
   function parseInput(value = raw) {
@@ -165,7 +448,7 @@ export function ImportWorkbench() {
     const source = findFirstConfigSource(nextTree);
     if (source?.opts.areaPath) setAreaPath(source.opts.areaPath);
     if (source?.opts.iterationPath) setIterationPath(source.opts.iterationPath);
-    setTree(nextTree);
+    setTreeWithIds(nextTree);
     setTab("preview");
     append(`Parsed ${Object.values(countNodes(nextTree)).reduce((a, b) => a + b, 0)} work items.`, "success");
   }
@@ -201,6 +484,34 @@ export function ImportWorkbench() {
     });
   }
 
+  function moveTreeNode(sourceId, targetParentId) {
+    if (!tree || sourceId === targetParentId) return;
+    if (targetParentId && isAncestorOf(tree, sourceId, targetParentId)) {
+      append("Nao e possivel mover um item para dentro de seu proprio descendente.", "error");
+      return;
+    }
+
+    const [nextTree, removed] = removeNodeById(tree, sourceId);
+    if (!removed) return;
+
+    const updatedTree = cloneTree(nextTree);
+    if (targetParentId) {
+      const parent = findNodeById(updatedTree, targetParentId);
+      if (!parent) return;
+      parent.children = [...(parent.children || []), removed];
+      setExpandedNodeIds((current) => new Set(current).add(parent.id));
+    } else {
+      updatedTree.children = [...(updatedTree.children || []), removed];
+    }
+
+    setTree(updatedTree);
+  }
+
+  function openNewManualItem(type, parentId = "") {
+    openManualEditor({ type, parentId, itemId: null });
+    if (tab !== "manual") setTab("manual");
+  }
+
   function useManualHierarchy() {
     if (!manualItems.length) {
       append("Adicione ao menos um item na hierarquia manual.", "error");
@@ -210,7 +521,7 @@ export function ImportWorkbench() {
     const source = findFirstConfigSource(nextTree);
     if (source?.opts.areaPath) setAreaPath(source.opts.areaPath);
     if (source?.opts.iterationPath) setIterationPath(source.opts.iterationPath);
-    setTree(nextTree);
+    setTreeWithIds(nextTree);
     setTab("preview");
     append(`${manualItems.length} work item(s) prontos para revisao.`, "success");
   }
@@ -223,6 +534,24 @@ export function ImportWorkbench() {
     setTab("csv");
   }
 
+  function toggleNodeExpanded(nodeId) {
+    setExpandedNodeIds((current) => {
+      const next = new Set(current);
+      if (next.has(nodeId)) next.delete(nodeId);
+      else next.add(nodeId);
+      return next;
+    });
+  }
+
+  function expandAll() {
+    if (!tree) return;
+    setExpandedNodeIds(new Set(collectAllNodeIds(tree)));
+  }
+
+  function collapseAll() {
+    setExpandedNodeIds(new Set());
+  }
+
   async function executeImport() {
     if (!tree || demoMode) return;
     append("Executando importacao...", "info");
@@ -231,6 +560,20 @@ export function ImportWorkbench() {
   }
 
   const manualFlat = flattenWithDepth(manualItems);
+  const exportRows = tree ? flattenTree(tree) : manualFlat;
+
+  function exportImportCsv() {
+    downloadCsv(`import-work-items-${dateStamp()}.csv`, ["Nivel", "Tipo", "Titulo", "Area Path", "Iteration Path", "Pais", "Tags", "Descricao"], exportRows.map((item) => [
+      item.depth,
+      item.type,
+      item.title,
+      item.areaPath || areaPath,
+      item.iterationPath || iterationPath,
+      item.countryValue || item.country || "",
+      item.tags || "",
+      item.description || ""
+    ]));
+  }
 
   return (
     <section className="mbw-page mbwi-page">
@@ -239,7 +582,6 @@ export function ImportWorkbench() {
         title="Import Work Items"
         subtitle="Monte a hierarquia manualmente ou cole um CSV, revise a previa e importe."
         demoMode={demoMode}
-        actions={<Button onClick={() => fileRef.current?.click()}><FiUpload /> Carregar arquivo CSV</Button>}
       />
       <input ref={fileRef} type="file" hidden accept=".csv,.tsv,.txt" onChange={handleFile} />
       <div className="mbwi-drawer-react">
@@ -250,23 +592,88 @@ export function ImportWorkbench() {
           {tab === "manual" && (
             <div className="mbwi-grid-react">
               <section className="mbwi-card-react">
-                <h3>Adicionar item</h3>
-                <p>Monte a hierarquia (Epic {'>'} Feature {'>'} User Story {'>'} Task {'>'} Test Case) item por item.</p>
-                <ManualItemForm items={manualItems} onAdd={addManualItem} />
-                <div className="mbw-actions"><Button onClick={loadDefaultManual}>Exemplo QA</Button></div>
+                <h3>Manual</h3>
+                <p>Arraste um tipo para a prévia ou clique num badge para abrir o editor.</p>
+                <div className="mbw-form-grid mbwi-shared-settings">
+                  <TextField label="Area Path" value={areaPath} onChange={setAreaPath} />
+                  <TextField label="Iteration Path" value={iterationPath} onChange={setIterationPath} />
+                  <TextField label="Country" value={countryField} onChange={setCountryField} placeholder="All, BR, AR..." />
+                </div>
+                <div className="mbwi-type-pills">
+                  {manualTypeOptions.map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      className={`mbwi-type-pill ${manualDraft.type === type ? "active" : ""}`}
+                      draggable
+                      onDragStart={(event) => {
+                        event.dataTransfer.setData("text/plain", `new-type:${type}`);
+                        event.dataTransfer.effectAllowed = "copy";
+                      }}
+                      onClick={() => openManualEditor({ type, parentId: "" })}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+                <div className="mbwi-manual-help">
+                  <strong>Como usar:</strong>
+                  <p>Clique num tipo para abrir o editor, informe o título, tags e descrição e depois confirme. Arraste o tipo para a prévia para criar com pai direto.</p>
+                  <div className="mbw-actions"><Button onClick={loadDefaultManual}>Exemplo QA</Button></div>
+                </div>
+                {manualEditOpen && (
+                  <div className="mbwi-manual-editor">
+                    <div className="mbwi-manual-editor-head">
+                      <h4>{manualEditItemId ? "Editar item" : "Criar item manual"}</h4>
+                      <span className="mbwi-manual-editor-tip">Preencha título e confirme para adicionar à prévia.</span>
+                    </div>
+                    <div className="mbw-form-grid">
+                      <label className="mbw-field"><span>Tipo</span><input readOnly value={manualDraft.type} /></label>
+                      <label className="mbw-field"><span>Pai</span>
+                        <select value={manualDraft.parentId} onChange={(event) => updateManualDraft({ parentId: event.target.value })}>
+                          <option value="">Raiz</option>
+                          {manualItems.map((item) => (
+                            <option key={item.id} value={item.id}>{item.type}: {item.title}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <TextField label="Titulo" value={manualDraft.title} onChange={(value) => updateManualDraft({ title: value })} placeholder="Digite o titulo do work item" />
+                      <label className="mbw-field mb-span-2"><span>Tags</span><TagInput tags={manualDraft.tags} value={manualDraft.tagInput} onChange={(value) => updateManualDraft({ tagInput: value })} onAdd={handleManualTagAdd} onRemove={handleManualTagRemove} placeholder="Enter para adicionar" /></label>
+                      <label className="mbw-field mb-span-2"><span>Description</span><textarea value={manualDraft.description} onChange={(event) => updateManualDraft({ description: event.target.value })} rows={4} placeholder="Descricao ou Steps/Expected Result para Test Case" /></label>
+                    </div>
+                    <div className="mbw-actions">
+                      <Button tone="primary" onClick={saveManualDraft}>{manualEditItemId ? "Salvar" : "Confirmar"}</Button>
+                      <Button tone="secondary" onClick={clearManualEditor}>Cancelar</Button>
+                    </div>
+                  </div>
+                )}
               </section>
               <section className="mbwi-card-react">
-                <h3>Hierarquia montada</h3>
-                <div className="mbwi-manual-list">
-                  {manualFlat.map((item) => (
-                    <div key={item.id} className="mbwi-manual-item" style={{ paddingLeft: item.depth * 18 }}>
-                      <TypeBadge type={item.type} /><span>{item.title}</span>
-                      <button type="button" onClick={() => removeManualItem(item.id)} title="Remover"><i className="bi bi-x" /></button>
-                    </div>
-                  ))}
-                  {!manualFlat.length && <EmptyState title="Nenhum item adicionado ainda" />}
+                <h3>Prévia</h3>
+                <div className={`mbwi-tree-preview${dragOverRoot ? " mbwi-tree-root-active" : ""}`}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    if (event.target === event.currentTarget) {
+                      setDragOverRoot(true);
+                      setDropTargetId(null);
+                    }
+                  }}
+                  onDragLeave={() => setDragOverRoot(false)}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const payload = event.dataTransfer.getData("text/plain") || "";
+                    if (payload.startsWith("new-type:")) {
+                      openManualEditor({ type: payload.replace("new-type:", ""), parentId: "" });
+                      setDragOverRoot(false);
+                      return;
+                    }
+                    if (payload) moveTreeNode(payload, null);
+                    setDragOverRoot(false);
+                  }}
+                >
+                  <div className="mbwi-tree-drop-hint">Arraste aqui para criar item na raiz ou soltar sobre outro item para torná-lo filho.</div>
+                  {tree ? <TreePreview node={tree} draggingId={draggingId} dropTargetId={dropTargetId} onToggle={{ toggle: toggleNodeExpanded, setDragging: setDraggingId, clearDrag: () => { setDraggingId(null); setDropTargetId(null); }, setDropTarget: setDropTargetId, clearDropTarget: () => setDropTargetId(null), isExpanded: (id) => expandedNodeIds.has(id), onDropNewType: (type, parentId) => openManualEditor({ type, parentId }), onEdit: (id) => openManualEditor({ itemId: id }) }} onMove={moveTreeNode} errors={validationErrors} /> : <EmptyState title="Nenhum item criado ainda" />}
                 </div>
-                {Boolean(manualItems.length) && <Button tone="primary" onClick={useManualHierarchy}>Usar esta hierarquia</Button>}
               </section>
             </div>
           )}
@@ -276,9 +683,31 @@ export function ImportWorkbench() {
                 <h3>CSV / TSV</h3>
                 <p>Aceita ID, Work Item Type, Title 1...Title 5, Area Path, Iteration Path, Country, Tags e Description.</p>
                 <textarea value={raw} onChange={(event) => setRaw(event.target.value)} placeholder="Cole o CSV/TSV aqui" />
-                <div className="mbw-actions"><Button tone="primary" onClick={() => parseInput()}>Parse CSV</Button><Button onClick={loadDefaultCsv}>Exemplo QA</Button></div>
+                <div className="mbw-actions"><Button tone="primary" onClick={() => parseInput()}>Visualizar</Button><Button onClick={() => fileRef.current?.click()}>Carregar arquivo CSV</Button><Button onClick={loadDefaultCsv}>Exemplo QA</Button></div>
               </section>
-              <section className="mbwi-card-react"><h3>Preview</h3>{tree ? <TreePreview node={tree} /> : <EmptyState title="Nenhum item carregado" />}</section>
+              <section className="mbwi-card-react">
+                <h3>Preview</h3>
+                <div
+                  className={`mbwi-tree-preview${dragOverRoot ? " mbwi-tree-root-active" : ""}`}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    if (event.target === event.currentTarget) {
+                      setDragOverRoot(true);
+                      setDropTargetId(null);
+                    }
+                  }}
+                  onDragLeave={() => setDragOverRoot(false)}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const sourceId = event.dataTransfer.getData("text/plain");
+                    if (sourceId) moveTreeNode(sourceId, null);
+                    setDragOverRoot(false);
+                  }}
+                >
+                  <div className="mbwi-tree-drop-hint">Arraste aqui para mover para raiz</div>
+                  {tree ? <TreePreview node={tree} draggingId={draggingId} dropTargetId={dropTargetId} onToggle={{ toggle: toggleNodeExpanded, setDragging: setDraggingId, clearDrag: () => { setDraggingId(null); setDropTargetId(null); }, setDropTarget: setDropTargetId, clearDropTarget: () => setDropTargetId(null), isExpanded: (id) => expandedNodeIds.has(id) }} onMove={moveTreeNode} /> : <EmptyState title="Nenhum item carregado" />}
+                </div>
+              </section>
             </div>
           )}
           {tab === "preview" && (
@@ -289,12 +718,38 @@ export function ImportWorkbench() {
                 <TextField label="Country field" value={countryField} onChange={setCountryField} placeholder="Custom.Country" />
               </div>
               <div className="mbw-kpi-row">{Object.entries(counts).map(([type, count]) => <Kpi key={type} label={type} value={count} />)}</div>
-              <div className="mbwi-tree-preview">{tree ? <TreePreview node={tree} /> : <EmptyState title="Nenhuma previa gerada. Monte a hierarquia manual ou cole um CSV." />}</div>
+              <div className="mbwi-tree-controls">
+                <div>
+                  <Button tone="secondary" onClick={collapseAll}>Recolher tudo</Button>
+                  <Button tone="secondary" onClick={expandAll}>Expandir tudo</Button>
+                </div>
+                <span className="mbwi-tree-hint">Arraste um item e solte sobre outro para torná-lo filho; solte fora de um item para torná-lo raiz.</span>
+              </div>
+              <div
+                className={`mbwi-tree-preview${dragOverRoot ? " mbwi-tree-root-active" : ""}`}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  if (event.target === event.currentTarget) {
+                    setDragOverRoot(true);
+                    setDropTargetId(null);
+                  }
+                }}
+                onDragLeave={() => setDragOverRoot(false)}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const sourceId = event.dataTransfer.getData("text/plain");
+                  if (sourceId) moveTreeNode(sourceId, null);
+                  setDragOverRoot(false);
+                }}
+              >
+                <div className="mbwi-tree-drop-hint">Arraste aqui para mover para raiz</div>
+                {tree ? <TreePreview node={tree} draggingId={draggingId} dropTargetId={dropTargetId} onToggle={{ toggle: toggleNodeExpanded, setDragging: setDraggingId, clearDrag: () => { setDraggingId(null); setDropTargetId(null); }, setDropTarget: setDropTargetId, clearDropTarget: () => setDropTargetId(null), isExpanded: (id) => expandedNodeIds.has(id) }} onMove={moveTreeNode} /> : <EmptyState title="Nenhuma previa gerada. Monte a hierarquia manual ou cole um CSV." />}
+              </div>
             </section>
           )}
         </div>
         <footer className="mbwi-footer-react">
-          <Button onClick={() => parseInput()} disabled={tab !== "csv"}>Validar CSV</Button>
+          <Button onClick={() => parseInput()} disabled={tab !== "csv"}>Visualizar</Button>
           <Button disabled={!tree || demoMode || importing} onClick={executeImport} tone="primary">{importing ? "Importando..." : "Executar importacao"}</Button>
           <span className="mbwi-spacer" />
           {demoMode && <span className="mbw-muted">Import real indisponivel no modo demo.</span>}

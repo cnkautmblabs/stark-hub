@@ -6,6 +6,7 @@ import { useWorkItems } from "../../../hooks/useWorkItems.js";
 import { usePersistentState } from "../../../hooks/usePersistentState.js";
 import { usePersistentActiveWorkItem } from "../../../hooks/usePersistentActiveWorkItem.js";
 import { compactSprintLabel, findCurrentSprint } from "../../../utils/sprints.js";
+import { exportEvidenceCsv } from "../../../utils/csvExport.js";
 import {
   evidenceDateRangeForPreset,
   evidenceDedupeKey,
@@ -128,7 +129,7 @@ export function TestsWorkbench() {
           title="Testes"
           subtitle="Historico de evidencias por Work Item, incluindo Discussions do Azure."
           demoMode={demoMode}
-          actions={<><IconButton title="Lista" onClick={() => setViewMode("list")}><i className="bi bi-list-ul" /></IconButton><IconButton title="Grid" onClick={() => setViewMode("grid")}><i className="bi bi-grid-3x3-gap" /></IconButton><IconButton title="Compacto" onClick={() => setViewMode("compact")}><i className="bi bi-view-stacked" /></IconButton><Button onClick={copyRows}><FiCopy /> Copiar</Button><IconButton title="Atualizar" onClick={reloadAll}><FiRefreshCw /></IconButton></>}
+          actions={<><IconButton title="Lista" onClick={() => setViewMode("list")}><i className="bi bi-list-ul" /></IconButton><IconButton title="Grid" onClick={() => setViewMode("grid")}><i className="bi bi-grid-3x3-gap" /></IconButton><IconButton title="Compacto" onClick={() => setViewMode("compact")}><i className="bi bi-view-stacked" /></IconButton><Button onClick={() => exportEvidenceCsv("testes", rows)}><i className="bi bi-download" /> CSV</Button><Button onClick={copyRows}><FiCopy /> Copiar</Button><IconButton title="Atualizar" onClick={reloadAll}><FiRefreshCw /></IconButton></>}
         />
         <div className="mbaz-evidence-filter-accordion">
           <div className="mbaz-evidence-filter-body">

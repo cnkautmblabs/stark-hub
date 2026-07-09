@@ -9,6 +9,7 @@ import { useAppSettings } from "../../../hooks/useAppSettings.js";
 import { accessLevelLabels, accessLevels, defaultGoalHours, hasManagementAccess } from "../../../utils/constants.js";
 import { formatHours, normalize } from "../../../utils/workbench/formatters.js";
 import { compactSprintLabel, findCurrentSprint } from "../../../utils/sprints.js";
+import { dateStamp, downloadCsv } from "../../../utils/csvExport.js";
 import {
   buildExecutiveReportText,
   buildPersonalSummaryText,
@@ -631,6 +632,15 @@ export function WorkbenchHome() {
       ? buildExecutiveReportText({ title: 'Governanca da equipe — Resumo rapido', period: 'Atual', totals: governanceTotals, rows: developerRows })
       : buildPersonalSummaryText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel });
 
+  function exportHomeCsv() {
+    downloadCsv(`home-${dateStamp()}.csv`, ["Secao", "Tipo", "Titulo", "Detalhe"], [
+      ...widgets.map((widget) => ["Painel", widget.type, widget.title, widget.url || widget.text || ""]),
+      ...activityFeed.map((entry) => ["Atualizacoes recentes", "atividade", entry.text, entry.meta]),
+      ...autoEntries.map((entry) => ["Relatorio executivo", autoLabel, entry.title, "automatico"]),
+      ...summaryEntries.map((entry) => ["Relatorio executivo", entry.type || "manual", entry.title, entry.text || ""])
+    ]);
+  }
+
   return (
     <section className="mbw-page mb-home-page">
       <WorkbenchHeader
@@ -638,6 +648,7 @@ export function WorkbenchHome() {
         title={`Ola, ${displayName.split(" ")[0] || "time"}`}
         subtitle={`${accessLabel} · ${now.toLocaleDateString("pt-BR")} · ${now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`}
         demoMode={demoMode}
+        actions={<Button onClick={exportHomeCsv}><FiDownload /> CSV</Button>}
       />
       <section className="mb-home-quick">
         {quickLinks.map(({ to, label, icon: Icon }) => <Link key={to} to={to}><Icon /> {label}</Link>)}

@@ -78,8 +78,7 @@ export default function Layout() {
           <Outlet />
         </main>
         <footer className="stark-app-footer">
-          <MBLabsMark />
-          <span>Desenvolvido por <a href="https://matheusbonotto.com.br" target="_blank" rel="noreferrer">Matheus Bonotto</a> para mblabs.</span>
+          <span>Desenvolvido por <a href="https://matheusbonotto.com.br" target="_blank" rel="noreferrer">Matheus Bonotto</a> para <MBLabsMark />.</span>
         </footer>
       </div>
     </div>

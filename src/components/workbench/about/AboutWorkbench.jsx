@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
+import { Button, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
+import { dateStamp, downloadCsv } from "../../../utils/csvExport.js";
 
 const faqItems = [
   {
@@ -130,12 +131,25 @@ function AboutContent() {
 
 export function AboutWorkbench({ kind = "about" }) {
   const isFaq = kind === "faq";
+  function exportCsv() {
+    if (isFaq) {
+      downloadCsv(`faq-${dateStamp()}.csv`, ["Pergunta", "Resposta"], faqItems.map((item) => [item.q, item.a]));
+      return;
+    }
+    downloadCsv(`sobre-${dateStamp()}.csv`, ["Secao", "Conteudo"], [
+      ["Modulos", modules.map((item) => `${item.title}: ${item.text}`).join("\n")],
+      ["Niveis de acesso", accessLevelRows.map((row) => `${row.level}: ${row.scope}`).join("\n")],
+      ["Seguranca", "Azure via backend, conexoes pessoais locais e configuracoes globais protegidas por policy."],
+      ["Creditos", "Desenvolvido por Matheus Bonotto, QA na mblabs."]
+    ]);
+  }
   return (
     <section className="mbw-page">
       <WorkbenchHeader
         kicker="Stark Hub"
         title={isFaq ? "FAQ" : "Sobre"}
         subtitle={isFaq ? "Perguntas frequentes sobre módulos, dados e acesso." : "O que é o Stark Hub, como é organizado e quem pode ver o quê."}
+        actions={<Button onClick={exportCsv}><i className="bi bi-download" /> CSV</Button>}
       />
       <div className="mb-settings-card-react wide">
         {isFaq ? <FaqContent /> : <AboutContent />}

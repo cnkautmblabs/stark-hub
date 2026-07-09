@@ -54,8 +54,8 @@ import {
 import { copyExecutiveReportText, downloadExecutiveReportPdf } from "../../utils/executiveReport.js";
 import { buildGovernanceSlackText, buildHoursNoticeText, sendSlackWebhook } from "../../utils/slackReport.js";
 import { compactSprintLabel, findCurrentSprint } from "../../utils/sprints.js";
+import { dateStamp, downloadCsv, exportWorkItemsCsv } from "../../utils/csvExport.js";
 import {
-  csvCell,
   evidenceDedupeKey,
   evidenceEnv,
   evidenceEnvironments as parseEvidenceEnvironments,
@@ -105,28 +105,7 @@ function workTypeInfo(type) {
 }
 
 function exportQaCsv(itemsToExport) {
-  const rows = [
-    ["ID", "Type", "Title", "State", "Environment", "Countries", "Sprint", "Assignee", "QA", "Result"],
-    ...itemsToExport.map((item) => [
-      item.id,
-      item.type,
-      item.title,
-      item.state,
-      item.env,
-      (item.countries || []).join("|"),
-      compactSprintLabel(item.sprint || item.iteration),
-      item.assigneeName || "",
-      item.qaCollaboratorId || "",
-      item.lastTestResult || ""
-    ])
-  ];
-  const blob = new Blob(["\uFEFF" + rows.map((row) => row.map(csvCell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `qa-board-${new Date().toISOString().slice(0, 10)}.csv`;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  exportWorkItemsCsv("qa-board", itemsToExport);
 }
 
 function identityNameVariants(value) {
@@ -996,6 +975,7 @@ export function MyItemsWorkbench() {
           <IconButton title="Lista" onClick={() => setViewMode("list")}><i className="bi bi-list-ul" /></IconButton>
           <IconButton title="Grid" onClick={() => setViewMode("grid")}><i className="bi bi-grid-3x3-gap" /></IconButton>
           <IconButton title="Compacto" onClick={() => setViewMode("compact")}><i className="bi bi-list" /></IconButton>
+          <IconButton title="Exportar CSV" onClick={() => exportWorkItemsCsv("meus-itens", visibleItems)}><FiDownload /></IconButton>
           {demoMode && <IconButton title="Nova tarefa" onClick={createDemoTask}><i className="bi bi-plus-lg" /></IconButton>}
           <IconButton title="Atualizar" onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /></IconButton>
         </>}
@@ -1645,8 +1625,8 @@ export function HoursWorkbench() {
         subtitle={ownIsQaOnly ? "Seu card com metricas de teste. A visao completa do time e restrita a Gestao/Gerente." : "Horas, metas, cards sem apontamento e distribuicao por pais."}
         demoMode={demoMode}
         actions={ownIsQaOnly
-          ? <Button onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /> Atualizar</Button>
-          : <><Button onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /> Atualizar</Button><Button onClick={copyReport}><FiCopy /> Copiar</Button><Button onClick={sendGovernanceSlack}><i className="bi bi-slack" /> Slack</Button><Button onClick={pdfReport}><FiDownload /> PDF</Button></>}
+          ? <><Button onClick={() => downloadCsv(`minhas-metricas-${dateStamp()}.csv`, ["Colaborador", "Cards", "Tasks", "Bugs", "Horas", "Meta", "Sem horas"], ownDev ? [[ownDev.displayName, ownDev.items.length, ownDev.tasks, ownDev.bugs, ownDev.completed, ownDev.goalHours, ownDev.cardsWithoutHours]] : [])}><FiDownload /> CSV</Button><Button onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /> Atualizar</Button></>
+          : <><Button onClick={() => downloadCsv(`governanca-equipe-${dateStamp()}.csv`, ["Colaborador", "Papel", "Cards", "Tasks", "Bugs", "User Stories", "Features", "Horas", "Meta", "Com horas", "Sem horas", "Saldo"], filteredDevelopers.map((dev) => [dev.displayName, accessLevelLabels[dev.person?.accessLevel || dev.person?.linkedProfile?.accessLevel] || (dev.person?.isQa ? "QA" : dev.person?.isDev ? "Dev" : dev.person?.isManagement ? "Gestao" : ""), dev.items.length, dev.tasks, dev.bugs, dev.userStories, dev.features, dev.completed, dev.goalHours, dev.cardsWithHours, dev.cardsWithoutHours, dev.completed - dev.goalHours]))}><FiDownload /> CSV</Button><Button onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /> Atualizar</Button><Button onClick={copyReport}><FiCopy /> Copiar</Button><Button onClick={sendGovernanceSlack}><i className="bi bi-slack" /> Slack</Button><Button onClick={pdfReport}><FiDownload /> PDF</Button></>}
       />
       {error && <div className="mbw-alert error">{error}</div>}
       {/* O card fixo so faz sentido pra QA: pra ele e o UNICO conteudo desta
@@ -1896,6 +1876,29 @@ export function SettingsWorkbench() {
     URL.revokeObjectURL(url);
   }
 
+  function exportSettingsCsv() {
+    const rows = [
+      ["Escopo", isGestao ? configScope : profile?.accessLevel || accessLevels.dev],
+      ["Produto", isGestao ? productName : "Configuracao pessoal"],
+      ["Pipeline QA", pipelineQaName],
+      ["Pipeline BETA", pipelineBetaName],
+      ["Slack modo teste", isGestao ? slackTestMode : personalSlackTestMode],
+      ["Canal Slack principal", isGestao ? slackPrimaryWebhookName : personalSlackPrimaryWebhookName],
+      ["Webhook Slack", isGestao ? "Configurado no banco (oculto)" : (personalSlackWebhookUrl ? "Configurado localmente (oculto)" : "Nao configurado")],
+      ["Webhook testes", isGestao ? (slackTestWebhookUrl ? "Configurado no banco (oculto)" : "Nao configurado") : (personalSlackTestWebhookUrl ? "Configurado localmente (oculto)" : "Nao configurado")]
+    ];
+    if (isGestao) {
+      rows.push(
+        ["Meta padrao de horas", goalHours],
+        ["Limite Azure", azureMaxItems],
+        ["Auto-refresh segundos", azureAutoRefreshSeconds],
+        ["Iteration pattern", iterationPattern],
+        ["Colaboradores", collaborators.length]
+      );
+    }
+    downloadCsv(`configuracoes-${dateStamp()}.csv`, ["Campo", "Valor"], rows);
+  }
+
   async function importConfig(event) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1971,7 +1974,7 @@ export function SettingsWorkbench() {
         title="Configuracoes"
         subtitle={isGestao ? "Produto, funcionalidades, conexoes e governanca." : "Conexoes pessoais do Azure, pipelines e Slack."}
         demoMode={demoMode}
-        actions={<>{isGestao && <div className="mb-settings-scope"><FilterCombobox label="Escopo" options={[{ value: accessLevels.dev, label: "Dev" }, { value: accessLevels.qa, label: "QA" }, { value: accessLevels.gestao, label: "Gestao" }, { value: accessLevels.gerente, label: "Gerente" }]} values={[configScope]} multiple={false} onChange={(value) => setConfigScope(value || accessLevels.gestao)} /></div>}<Button onClick={() => importRef.current?.click()}><FiUpload /> Importar</Button><Button onClick={exportConfig}><FiDownload /> Exportar</Button><Button onClick={previewSlack}><FiCopy /> Testar Slack</Button><Button onClick={saveSettings} tone="primary">{saving ? "Aplicando..." : "Aplicar"}</Button></>}
+        actions={<>{isGestao && <div className="mb-settings-scope"><FilterCombobox label="Escopo" options={[{ value: accessLevels.dev, label: "Dev" }, { value: accessLevels.qa, label: "QA" }, { value: accessLevels.gestao, label: "Gestao" }, { value: accessLevels.gerente, label: "Gerente" }]} values={[configScope]} multiple={false} onChange={(value) => setConfigScope(value || accessLevels.gestao)} /></div>}<Button onClick={() => importRef.current?.click()}><FiUpload /> Importar</Button><Button onClick={exportSettingsCsv}><FiDownload /> CSV</Button><Button onClick={exportConfig}><FiDownload /> Exportar</Button><Button onClick={previewSlack}><FiCopy /> Testar Slack</Button><Button onClick={saveSettings} tone="primary">{saving ? "Aplicando..." : "Aplicar"}</Button></>}
       />
       <input ref={importRef} type="file" accept="application/json" hidden onChange={importConfig} />
       {saveStatus && <div className={`mb-settings-save-status ${saveStatus.type}`}><i className={`bi ${saveStatus.type === "error" ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill"}`} /> {saveStatus.message}</div>}

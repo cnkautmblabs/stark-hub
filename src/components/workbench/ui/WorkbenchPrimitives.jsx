@@ -242,9 +242,9 @@ export function AvatarDot({ person, name, compact = false }) {
   );
 }
 
-function firstDisplayName(person, fallback = "") {
+function fullDisplayName(person, fallback = "") {
   const value = person?.azureName || person?.full_name || person?.name || fallback || "";
-  return String(value).trim().split(/\s+/)[0] || "QA";
+  return String(value).trim() || "QA";
 }
 
 export function QaPicker({ value, onChange, people = [], emptyLabel = "Sem QA", showEmptyAvatar = false, emptyImageUrl = "" }) {
@@ -270,13 +270,16 @@ export function QaPicker({ value, onChange, people = [], emptyLabel = "Sem QA", 
     setOpen(false);
   }
 
+  const selectedPerson = current || fallbackPerson;
+  const selectedLabel = fullDisplayName(selectedPerson, emptyLabel);
+
   return (
     <div ref={rootRef} className="mbw-qa-picker">
-      <button type="button" className="mbw-qa-picker-trigger" onClick={() => setOpen((value) => !value)} title={current?.azureName || emptyLabel}>
-        {current || fallbackPerson ? (
+      <button type="button" className="mbw-qa-picker-trigger" onClick={() => setOpen((value) => !value)} title={selectedLabel}>
+        {selectedPerson ? (
           <>
-            <AvatarDot person={current || fallbackPerson} compact />
-            <span className="mbw-qa-picker-name">{firstDisplayName(current || fallbackPerson, emptyLabel)}</span>
+            <AvatarDot person={selectedPerson} compact />
+            <span className="mbw-qa-picker-name">{selectedLabel}</span>
           </>
         ) : <span className="mbw-qa-picker-empty">{emptyLabel}</span>}
         <i className={`bi ${open ? "bi-chevron-up" : "bi-chevron-down"}`} />
@@ -363,7 +366,7 @@ export function IdentityAvatar({ name, imageUrl, color = "#0b74de", accessLevel,
   );
 }
 
-const typeIconFiles = { Bug: "bug.png", Task: "task.png", Feature: "feature.png", Epic: "epic.png" };
+const typeIconFiles = { Bug: "bug.png", Task: "task.png", Feature: "feature.png", Epic: "epic.png", "Test Case": "test-tag.png" };
 export function typeIconSrc(type) {
   return `${import.meta.env.BASE_URL}icons/${typeIconFiles[type] || "us.png"}`;
 }
