@@ -3563,7 +3563,12 @@ body {
 .mbwi-spacer { flex: 1; }
 .mbwi-grid-react {
   display: grid;
-  grid-template-columns: minmax(320px, .85fr) minmax(360px, 1.15fr);
+  /* auto-fit + minmax(min(...)) em vez de duas colunas com minimo fixo —
+     assim a grade colapsa pra 1 coluna sempre que o espaco disponivel de
+     verdade (nao so a largura da viewport) for menor que os dois minimos
+     somados, sem depender so do breakpoint de media query (que olha a
+     viewport inteira, nao o espaco que sobra depois da sidebar). */
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
   gap: 14px;
 }
 .mbwi-card-react,
@@ -9615,6 +9620,13 @@ body {
   gap: 6px;
   padding: 6px 4px;
   font-size: 12px;
+}
+.mb-mgmt-dev-head.cols-wide,
+.mb-mgmt-dev-row.cols-wide {
+  grid-template-columns: minmax(120px, 1.4fr) repeat(6, 48px) 56px;
+}
+.mb-mgmt-dev-table.cols-wide {
+  overflow-x: auto;
 }
 .mb-mgmt-dev-head {
   color: var(--starkMuted);

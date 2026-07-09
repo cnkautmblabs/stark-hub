@@ -1,5 +1,22 @@
 export const evidenceEnvironmentOrder = ["DEV", "QA", "BETA", "PROD"];
 
+// Uma pessoa pode ter mais de uma funcao (ex.: Dev cadastrado + Admin) — os
+// selos de papel devem mostrar TODAS as que se aplicam, nao só uma. So os 5
+// niveis reais (QA/Dev/Gestao/Gerente/Admin); nunca um rotulo solto tipo
+// "Desenvolvimento"/"Trilha de testes" que so duplicava o que o selo de
+// papel ja mostra.
+export function collaboratorRoleLevels(person) {
+  if (!person) return [];
+  const levels = [];
+  if (person.accessLevel === "gerente") levels.push("gerente");
+  else if (person.isManagement || person.accessLevel === "gestao") levels.push("gestao");
+  if (person.isDev || person.accessLevel === "dev") levels.push("dev");
+  if (person.isQa || person.accessLevel === "qa") levels.push("qa");
+  if (person.isAdmin) levels.push("admin");
+  if (!levels.length && person.accessLevel === "pending") levels.push("pending");
+  return Array.from(new Set(levels));
+}
+
 // Remove acentos e normaliza espacos alem de minusculizar — o nome do
 // assignee que vem do Azure DevOps e o azureName cadastrado no Stark Hub
 // podem ter o MESMO nome com acentuacao unicode composta de formas

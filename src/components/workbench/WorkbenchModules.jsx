@@ -31,9 +31,11 @@ import {
 } from "./ui/WorkbenchPrimitives.jsx";
 import { AzureWorkItemModal, workItemUrl } from "./ui/AzureWorkItemModal.jsx";
 import { CollaboratorCountryMatrix, CountryStateMatrix } from "./ui/MatrixCharts.jsx";
+import { supabase } from "../../lib/supabaseClient.js";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { useFeatureFlags } from "../../contexts/FeatureFlagsContext.jsx";
 import { useWorkItems } from "../../hooks/useWorkItems.js";
+import { usePipelineStatus } from "../../hooks/usePipelineStatus.js";
 import { useCollaborators } from "../../hooks/useCollaborators.js";
 import { useTestEvidence } from "../../hooks/useTestEvidence.js";
 import { useAppSettings } from "../../hooks/useAppSettings.js";
@@ -54,10 +56,12 @@ import {
   workItemTypes
 } from "../../utils/constants.js";
 import { copyExecutiveReportText, downloadExecutiveReportPdf } from "../../utils/executiveReport.js";
-import { buildGovernanceSlackText, buildHoursNoticeText, sendSlackWebhook } from "../../utils/slackReport.js";
+import { buildGovernanceSlackText, buildHoursNoticeText } from "../../utils/slackReport.js";
+import { resolveSlackWebhooks } from "../../utils/slack.js";
 import { compactSprintLabel, findCurrentSprint } from "../../utils/sprints.js";
 import { dateStamp, downloadCsv, exportWorkItemsCsv } from "../../utils/csvExport.js";
 import {
+  collaboratorRoleLevels,
   evidenceDedupeKey,
   evidenceEnv,
   evidenceEnvironments as parseEvidenceEnvironments,
@@ -275,11 +279,42 @@ function evidenceRecordsForEnvironment(records = [], environment) {
   return records.filter((entry) => evidenceRecordHasEnvironment(entry, environment));
 }
 
+// Badge de ambiente confirmado por Pipeline (equivalente ao "mbaz-pr-env-pill"
+// do userscript legado). "pipeline" vem do hook usePipelineStatus (Edge
+// Function azurePipelineStatus); os campos item.prUrl/pipelineEnv nunca sao
+// preenchidos por nenhum fluxo do app, entao sem esse dado real o pill ficava
+// sempre travado em "N/A" — pedido do usuario: "configurei a pipeline mas nao
+// funciona".
+function PipelineEnvPill({ item, pipeline }) {
+  const kind = pipeline?.kind ? String(pipeline.kind).toUpperCase() : "";
+  const legacyEnv = String(item?.pipelineEnv || item?.prEnvironment || item?.env || "").toUpperCase();
+  const label = kind === "QA" || kind === "BETA" ? kind : (legacyEnv === "PROD" ? "PROD" : "N/A");
+  const url = pipeline?.url || item?.prUrl || item?.pullRequestUrl || item?.pipelineUrl || "";
+  const className = label === "N/A" ? "none" : label.toLowerCase();
+  const statusIcon = pipeline?.status === "error" ? "bi-exclamation-triangle" : pipeline?.status === "active" ? "bi-arrow-repeat" : "bi-git";
+  const title = pipeline
+    ? `${pipeline.definitionName || "Pipeline"}${pipeline.buildNumber ? ` #${pipeline.buildNumber}` : ""} - ${pipeline.status === "completed" ? "Build concluido" : pipeline.status === "active" ? "Build em execucao" : "Falha no build"}`
+    : (url ? `Abrir PR/Pipeline: ${label}` : "Nenhuma pipeline confirmada para este item");
+  return (
+    <button
+      type="button"
+      className={`mbaz-pr-env-pill ${className}`}
+      disabled={!url}
+      title={title}
+      onClick={() => url && window.open(url, "_blank", "noopener,noreferrer")}
+    >
+      <i className={`bi ${statusIcon}`} />
+      <span>{label}</span>
+    </button>
+  );
+}
+
 export function QaBoardWorkbench() {
   const { profile, demoMode } = useAuth();
   const { items, updateItem, addItem, reload, loading, refreshing, needsAzureIntegration, error } = useWorkItems();
   const { collaborators } = useCollaborators();
   const { evidence, reload: reloadEvidence } = useTestEvidence();
+  const { getSetting } = useAppSettings();
   const [search, setSearch] = usePersistentState("starkHubFilters:qaBoard:search", "");
   const [showCreate, setShowCreate] = useState(false);
   const [viewMode, setViewMode] = usePersistentState("starkHubFilters:qaBoard:viewMode", "grid");
@@ -322,6 +357,9 @@ export function QaBoardWorkbench() {
     const testableType = ["Bug", "User Story"].includes(item.type);
     return testableType && hasQaState && (showExcluded || !excluded);
   });
+
+  const pipelineNames = getSetting("azurePipelines", {});
+  const { byWorkItemId: pipelineByWorkItemId } = usePipelineStatus(boardItems.map((item) => item.id), pipelineNames);
 
   const sprintOptions = Array.from(new Set(boardItems.map((item) => item.sprint || item.iteration).filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b), "pt-BR"));
   const currentSprint = findCurrentSprint(sprintOptions);
@@ -448,22 +486,7 @@ export function QaBoardWorkbench() {
   }
 
   function prBadgeFor(item) {
-    const env = String(item.pipelineEnv || item.prEnvironment || item.env || "").toUpperCase();
-    const label = env === "QA" || env === "BETA" || env === "PROD" ? env : "N/A";
-    const url = item.prUrl || item.pullRequestUrl || item.pipelineUrl || "";
-    const className = label === "N/A" ? "none" : label.toLowerCase();
-    return (
-      <button
-        type="button"
-        className={`mbaz-pr-env-pill ${className}`}
-        disabled={!url}
-        title={url ? `Abrir PR/Pipeline: ${label}` : "Nenhuma evidencia de PR/Pipeline localizada"}
-        onClick={() => url && window.open(url, "_blank", "noopener,noreferrer")}
-      >
-        <i className="bi bi-git" />
-        <span>{label}</span>
-      </button>
-    );
+    return <PipelineEnvPill item={item} pipeline={pipelineByWorkItemId[item.id]} />;
   }
 
   function renderCard(item) {
@@ -826,6 +849,9 @@ export function MyItemsWorkbench() {
     if (hoursFilter === "without" && Number(item.completedHours || 0) > 0) return false;
     return true;
   });
+  const pipelineNames = getSetting("azurePipelines", {});
+  const { byWorkItemId: pipelineByWorkItemId } = usePipelineStatus(visibleItems.map((item) => item.id), pipelineNames);
+  const pipelineConfirmedTotal = visibleItems.filter((item) => Boolean(pipelineByWorkItemId[item.id])).length;
   const totalHours = allMine.reduce((sum, item) => sum + (Number(item.completedHours) || 0), 0);
   const goal = myCollaborator?.goalHours || getSetting("defaultGoalHours", defaultGoalHours);
   const balance = totalHours - goal;
@@ -943,8 +969,8 @@ export function MyItemsWorkbench() {
 
   function renderMyCard(item) {
     return isQa && item.myItemCardType === "qa"
-      ? <MyQaBoardItemCard key={item.id} item={item} collaboratorsById={collaboratorById} qaPeople={qaPeople} onOpen={setActiveItem} onQaChange={(qaCollaboratorId) => updateItem(item.id, { qaCollaboratorId })} evidence={evidence} />
-      : <MyItemCard key={item.id} item={item} checked={selectedIds.includes(item.id)} onCheck={toggleSelected} onOpen={setActiveItem} onHours={openHours} />;
+      ? <MyQaBoardItemCard key={item.id} item={item} collaboratorsById={collaboratorById} qaPeople={qaPeople} onOpen={setActiveItem} onQaChange={(qaCollaboratorId) => updateItem(item.id, { qaCollaboratorId })} evidence={evidence} pipeline={pipelineByWorkItemId[item.id]} />
+      : <MyItemCard key={item.id} item={item} checked={selectedIds.includes(item.id)} onCheck={toggleSelected} onOpen={setActiveItem} onHours={openHours} pipeline={pipelineByWorkItemId[item.id]} />;
   }
 
   function groupsForItems(list) {
@@ -989,7 +1015,7 @@ export function MyItemsWorkbench() {
               <AvatarDot person={myCollaborator || { azureName: identityName, imageUrl: profile?.avatarUrl }} name={identityName} />
               <small>{visibleItems.length} de {allMine.length} item(ns) no filtro atual</small>
             </div>
-            <div className="mb-my-summary-card-kpis"><span><small>Total</small><b>{allMine.length}</b></span><span><small>Tasks</small><b>{tasks}</b></span><span><small>Bugs</small><b>{bugs}</b></span>{isQa && <><span><small>Testados por mim</small><b>{testedByMe}</b></span><span><small>Testados</small><b>{testedTotal}</b></span><span><small>QA responsavel</small><b>{qaResponsibleTotal}</b></span><span><small>Atribuidos Azure</small><b>{azureAssignedTotal}</b></span></>}</div>
+            <div className="mb-my-summary-card-kpis"><span><small>Total</small><b>{allMine.length}</b></span><span><small>Tasks</small><b>{tasks}</b></span><span><small>Bugs</small><b>{bugs}</b></span>{!isQa && <span title="Itens com build confirmado via Pipeline (QA/BETA)"><small>Confirmados em pipeline</small><b>{pipelineConfirmedTotal}</b></span>}{isQa && <><span><small>Testados por mim</small><b>{testedByMe}</b></span><span><small>Testados</small><b>{testedTotal}</b></span><span><small>QA responsavel</small><b>{qaResponsibleTotal}</b></span><span><small>Atribuidos Azure</small><b>{azureAssignedTotal}</b></span></>}</div>
           </div>
           <div className="mb-my-summary-hours-row">
             <div className="mb-my-summary-hour-kpis"><span><small>Horas</small><b>{formatHours(totalHours)}</b></span><span><small>Meta</small><b>{formatHours(goal)}</b></span><span className={balance > 0 ? "above" : balance < 0 ? "below" : "met"}><small>{balance > 0 ? "Excedente" : balance < 0 ? "Restante" : "Meta"}</small><b>{formatHours(Math.abs(balance))}</b></span></div>
@@ -1126,7 +1152,7 @@ function testSummaryForItem(item, evidence = []) {
   }, { total: 0, pass: 0, fail: 0, limitation: 0, pending: 0, byEnv: {} });
 }
 
-function MyQaBoardItemCard({ item, collaboratorsById, qaPeople, onOpen, onQaChange, evidence = [] }) {
+function MyQaBoardItemCard({ item, collaboratorsById, qaPeople, onOpen, onQaChange, evidence = [], pipeline }) {
   const [expanded, setExpanded] = useState(false);
   const status = qaStatusInfo(item.state);
   const type = workTypeInfo(item.type);
@@ -1141,9 +1167,6 @@ function MyQaBoardItemCard({ item, collaboratorsById, qaPeople, onOpen, onQaChan
     "qa-responsavel": "QA responsavel",
     "qa-testado": "Testado por mim"
   };
-  const prEnv = String(item.pipelineEnv || item.prEnvironment || item.env || "").toUpperCase();
-  const prLabel = prEnv === "QA" || prEnv === "BETA" || prEnv === "PROD" ? prEnv : "N/A";
-  const prUrl = item.prUrl || item.pullRequestUrl || item.pipelineUrl || "";
 
   return (
     <article className={`mbaz-card mb-my-qa-board-card ${expanded ? "expanded" : ""} ${age >= 7 ? "mbaz-critical-highlight" : ""}`} data-id={item.id} data-work-item-id={item.id} data-work-item-type={String(item.type || "work item").toLowerCase()} style={{ borderLeftColor: type.color, "--wi-type-color": type.color, "--wi-type-bg": type.bg }}>
@@ -1153,15 +1176,7 @@ function MyQaBoardItemCard({ item, collaboratorsById, qaPeople, onOpen, onQaChan
           {(item.myItemSources || []).map((source) => <span key={source} className={`mb-my-source-pill ${source}`}>{sourceLabels[source] || source}</span>)}
         </div>
         <div className="mbaz-card-right">
-          <button
-            type="button"
-            className={`mbaz-pr-env-pill ${prLabel === "N/A" ? "none" : prLabel.toLowerCase()}`}
-            disabled={!prUrl}
-            title={prUrl ? `Abrir PR/Pipeline: ${prLabel}` : "Nenhuma evidencia de PR/Pipeline localizada"}
-            onClick={() => prUrl && window.open(prUrl, "_blank", "noopener,noreferrer")}
-          >
-            <i className="bi bi-git" /><span>{prLabel}</span>
-          </button>
+          <PipelineEnvPill item={item} pipeline={pipeline} />
         </div>
       </div>
       <div className="mbaz-card-row mbaz-card-title-row">
@@ -1214,7 +1229,7 @@ function MyQaBoardItemCard({ item, collaboratorsById, qaPeople, onOpen, onQaChan
   );
 }
 
-function MyItemCard({ item, checked, onCheck, onOpen, onHours }) {
+function MyItemCard({ item, checked, onCheck, onOpen, onHours, pipeline }) {
   const typeClass = normalize(item.type) === "bug" ? "bug" : "task";
   const typeInfo = workItemTypes[item.type] || workItemTypes.Task;
   const visibleTags = (item.tags || []).filter((tag) => !/^0-[A-Z]{2}$/i.test(String(tag).trim()));
@@ -1233,7 +1248,7 @@ function MyItemCard({ item, checked, onCheck, onOpen, onHours }) {
       <div className="mb-my-item-main">
         <div className="mb-my-item-normal-content">
           <div className="mb-my-item-topline">
-            <div className="mb-my-item-type"><img className="mb-my-item-type-icon" src={typeIconSrc(item.type)} alt={item.type} /><strong>{String(item.type || "Work Item").toUpperCase()}</strong><button type="button" className="mb-my-item-id" onClick={() => onOpen(item)}>{formatWorkItemCode(item.id, item.type)}</button></div>
+            <div className="mb-my-item-type"><img className="mb-my-item-type-icon" src={typeIconSrc(item.type)} alt={item.type} /><strong>{String(item.type || "Work Item").toUpperCase()}</strong><button type="button" className="mb-my-item-id" onClick={() => onOpen(item)}>{formatWorkItemCode(item.id, item.type)}</button>{pipeline && <PipelineEnvPill item={item} pipeline={pipeline} />}</div>
             <div className="mb-my-item-right">
               <div className="mb-my-item-country-tags">{(item.countries || []).length ? (item.countries || []).map((country) => <span key={country} className="mb-country-pill"><CountryVisual code={country} /></span>) : <span className="mb-country-pill na">N/A</span>}{(item.myItemSources || []).map((source) => <span key={source} className={`mb-my-source-pill ${source}`}>{sourceLabels[source] || source}</span>)}</div>
               <div className="mb-my-item-tags">{visibleTags.map((tag) => <span key={tag} className={/^(critico|crítico|critical)$/i.test(String(tag)) ? "critical" : ""}>{tag}</span>)}</div>
@@ -1500,9 +1515,10 @@ export function HoursWorkbench() {
       tone: dev.goalStatus === "below" ? "danger" : dev.goalStatus === "above" ? "warning" : "primary"
     }));
     const text = buildGovernanceSlackText({ totals: { developers: totals.developers, cards: totals.cards, hours: totals.completed, goal: totals.goal, missing: totals.missing, extra: totals.extra }, rows });
-    const webhookUrl = getSetting("slackWebhookUrl", "");
-    const { error } = await sendSlackWebhook(webhookUrl, text);
-    if (error) alert(`Nao foi possivel enviar ao Slack: ${error.message}`);
+    const webhooks = resolveSlackWebhooks(getSetting);
+    if (!webhooks.length) { alert("Nenhum webhook do Slack configurado. Configure em Configuracoes > Slack."); return; }
+    const { data, error } = await supabase.functions.invoke("slackNotify", { body: { webhooks, text } });
+    if (error || !data?.ok) alert(`Nao foi possivel enviar ao Slack: ${error?.message || "verifique o webhook configurado."}`);
   }
 
   function copyHoursNotice(dev) {
@@ -1611,15 +1627,19 @@ export function HoursWorkbench() {
     const hiddenCountryTitle = countryEntries.slice(5).map(([country, count]) => `${country}: ${count}`).join("\n");
     const envStats = ["DEV", "QA", "BETA", "PROD"].map((env) => ({ env, ...(dev.testMetrics.byEnv[env] || { total: 0, pass: 0, fail: 0, limitation: 0, pending: 0 }) })).filter((row) => row.total > 0);
     const progressColor = goalProgressColor(dev.progressPercent);
-    const workKindLabel = useTestMetrics ? "Trilha de testes" : "Desenvolvimento";
+    // Uma pessoa pode ter mais de uma funcao (ex.: Dev + Admin) — mostra
+    // todos os selos que se aplicam, nunca um rotulo solto tipo
+    // "Desenvolvimento"/"Trilha de testes" duplicando o que o selo ja diz.
+    const rolePillLevels = collaboratorRoleLevels(dev.person).length ? collaboratorRoleLevels(dev.person) : (roleLevel ? [roleLevel] : []);
     return (
       <article key={dev.key} className={`mbdhc-dev-card role-${roleLevel || "none"} status-${dev.goalStatus} ${dev.goalStatus === "above" ? "pulse-over" : ""} ${pinned ? "mbdhc-dev-card-pinned" : ""}`} style={{ "--goal-progress": `${progressWidth}%`, "--goal-progress-color": progressColor }}>
         {pinned && <div className="mbdhc-dev-pinned-label"><i className="bi bi-person-fill" /> Seu card</div>}
         <div className="mbdhc-dev-head">
           <div className="mbdhc-dev-identity">
             <AvatarDot person={dev.person || { azureName: dev.displayName, imageUrl: dev.avatarUrl, color: dev.color }} name={dev.displayName} />
-            <span className={`mbdhc-work-kind role-${roleLevel || "none"}`}>{workKindLabel}</span>
-            {roleLevel && <span className={`mbdhc-role-pill role-${roleLevel}`}><RoleBadgeIcon level={roleLevel} /> {accessLevelLabels[roleLevel] || roleLevel}</span>}
+            {rolePillLevels.map((level) => (
+              <span key={level} className={`mbdhc-role-pill role-${level}`}><RoleBadgeIcon level={level} /> {accessLevelLabels[level] || level}</span>
+            ))}
           </div>
           <div className="mbdhc-dev-status"><strong>{formatHours(dev.completed)}</strong><span>de {formatHours(dev.goalHours)}</span><em>{statusLabel}</em></div>
         </div>

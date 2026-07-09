@@ -6,7 +6,7 @@ import { useTestEvidence } from "../../../hooks/useTestEvidence.js";
 import { usePersistentState } from "../../../hooks/usePersistentState.js";
 import { compactSprintLabel } from "../../../utils/sprints.js";
 import { dateStamp, downloadCsv } from "../../../utils/csvExport.js";
-import { evidenceDedupeKey, evidenceEnvironments, isQaEvidenceEntry, normalizeResult } from "../../../utils/workbench/formatters.js";
+import { buildCollaboratorNameIndex, evidenceDedupeKey, evidenceEnvironments, findCollaboratorByName, isQaEvidenceEntry, normalizeResult } from "../../../utils/workbench/formatters.js";
 import { AvatarDot, ChartSkeleton, FilterCombobox, Kpi, KpiSkeleton, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
 
 const monthOrder = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
@@ -78,15 +78,30 @@ export function ManagementDashboardWorkbench() {
     }));
   }, [filteredItems, selectedSprints]);
 
+  // Indice por nome (azureName/slackName/aliases/variacoes de ordem) — sem
+  // isso, qualquer diferenca de formatacao entre o assignee exibido pelo
+  // Azure e o azureName cadastrado (acento, ordem "Sobrenome, Nome") fazia o
+  // item nao bater com NENHUM Dev, e a soma de Tasks/Bugs por pessoa dava
+  // zero mesmo com itens de verdade atribuidos a ela.
+  const devNameIndex = useMemo(() => buildCollaboratorNameIndex(collaborators), [collaborators]);
+
+  const workItemTypeCounters = [
+    { key: "epics", label: "Epic", match: "epic" },
+    { key: "features", label: "Feature", match: "feature" },
+    { key: "userStories", label: "US", match: "user story" },
+    { key: "tasks", label: "Task", match: "task" },
+    { key: "bugs", label: "Bug", match: "bug" },
+    { key: "testCases", label: "Test Case", match: "test case" }
+  ];
+
   const devDeliveries = useMemo(() => {
     const devs = collaborators.filter((person) => person.isDev);
     return devs.map((dev) => {
-      const own = filteredItems.filter((item) => item.assigneeId === dev.id || item.assigneeName === dev.azureName);
-      const tasks = own.filter((item) => item.type === "Task").length;
-      const bugs = own.filter((item) => item.type === "Bug").length;
-      return { id: dev.id, name: dev.azureName || "Sem nome", color: dev.color, imageUrl: dev.imageUrl || dev.avatarUrl || "", tasks, bugs, total: tasks + bugs };
+      const own = filteredItems.filter((item) => item.assigneeId === dev.id || findCollaboratorByName(devNameIndex, item.assigneeName)?.id === dev.id);
+      const counts = Object.fromEntries(workItemTypeCounters.map(({ key, match }) => [key, own.filter((item) => String(item.type || "").toLowerCase() === match).length]));
+      return { id: dev.id, name: dev.azureName || "Sem nome", color: dev.color, imageUrl: dev.imageUrl || dev.avatarUrl || "", ...counts, total: own.length };
     }).filter((row) => row.total > 0).sort((a, b) => b.total - a.total);
-  }, [filteredItems, collaborators]);
+  }, [filteredItems, collaborators, devNameIndex]);
 
   const testMetrics = useMemo(() => {
     const localByItem = new Map();
@@ -136,7 +151,7 @@ export function ManagementDashboardWorkbench() {
       ["KPI", "Itens no periodo", deliveryStats.total],
       ...featuresPerSprint.map((row) => ["Feature por sprint", row.sprint, `${row.delivered}/${row.total}`]),
       ...bugsPerSprint.map((row) => ["Bugs por sprint", row.sprint, row.total]),
-      ...devDeliveries.map((row) => ["Entrega por Dev", row.name, `Tasks ${row.tasks}; Bugs ${row.bugs}; Total ${row.total}`]),
+      ...devDeliveries.map((row) => ["Entrega por Dev", row.name, `Epic ${row.epics}; Feature ${row.features}; US ${row.userStories}; Task ${row.tasks}; Bug ${row.bugs}; Test Case ${row.testCases}; Total ${row.total}`]),
       ...qaWorkload.map((row) => ["Carga por QA", row.name, row.count]),
       ["Testes", "Approved", testMetrics.pass],
       ["Testes", "Fail", testMetrics.fail],
@@ -207,15 +222,14 @@ export function ManagementDashboardWorkbench() {
         </section>
 
         <section className="mb-mgmt-card">
-          <header><strong>Entregas por Dev</strong><small>Tasks, Bugs e total no periodo</small></header>
+          <header><strong>Entregas por Dev</strong><small>Epic, Feature, US, Task, Bug e Test Case no periodo</small></header>
           {loading ? <WorkbenchCardSkeleton rows={4} /> : (
-            <div className="mb-mgmt-dev-table">
-              <div className="mb-mgmt-dev-head"><span>Dev</span><span>Tasks</span><span>Bugs</span><span>Total</span></div>
+            <div className="mb-mgmt-dev-table cols-wide">
+              <div className="mb-mgmt-dev-head cols-wide"><span>Dev</span>{workItemTypeCounters.map(({ key, label }) => <span key={key}>{label}</span>)}<span>Total</span></div>
               {devDeliveries.map((row) => (
-                <div key={row.id} className="mb-mgmt-dev-row">
+                <div key={row.id} className="mb-mgmt-dev-row cols-wide">
                   <span><AvatarDot person={row} compact /> {row.name}</span>
-                  <span>{row.tasks}</span>
-                  <span>{row.bugs}</span>
+                  {workItemTypeCounters.map(({ key }) => <span key={key}>{row[key]}</span>)}
                   <strong>{row.total}</strong>
                 </div>
               ))}

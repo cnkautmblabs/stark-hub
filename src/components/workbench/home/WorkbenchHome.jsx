@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { FiCheckCircle, FiClock, FiCopy, FiDownload, FiPlus, FiPrinter, FiShield, FiUser } from "react-icons/fi";
+import { supabase } from "../../../lib/supabaseClient.js";
 import { useAuth } from "../../../contexts/AuthContext.jsx";
 import { useWorkItems } from "../../../hooks/useWorkItems.js";
 import { useTestEvidence } from "../../../hooks/useTestEvidence.js";
@@ -11,16 +12,14 @@ import { formatHours, normalize } from "../../../utils/workbench/formatters.js";
 import { compactSprintLabel, findCurrentSprint } from "../../../utils/sprints.js";
 import { dateStamp, downloadCsv } from "../../../utils/csvExport.js";
 import {
-  buildExecutiveReportText,
   buildPersonalSummaryText,
-  buildQaTestEvidenceReportText,
   copyExecutiveReportText,
   copyPersonalSummaryText,
-  copyQaTestEvidenceReportText,
   downloadExecutiveReportPdf,
   downloadPersonalSummaryPdf
 } from "../../../utils/executiveReport.js";
-import { buildGovernanceSlackText, buildPersonalSummarySlackText, sendSlackWebhook } from "../../../utils/slackReport.js";
+import { buildGovernanceSlackText, buildPersonalSummarySlackText } from "../../../utils/slackReport.js";
+import { resolveSlackWebhooks } from "../../../utils/slack.js";
 import { Button, Kpi, KpiSkeleton, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
 
 const widgetIcons = { note: "bi-sticky", link: "bi-link-45deg", shortcut: "bi-rocket-takeoff" };
@@ -330,9 +329,7 @@ function QaPanel({ loading, availableForTesting, evidenceToday, currentSprintLab
   );
 }
 
-const reportTypeLabels = { dev: "Dev (PRs)", qa: "QA (testes)", gestao: "Gestao (Gestao)" };
-
-function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, reportType, previewText, canOverrideReportType, onReportTypeChange, onAdd, onRemove, onCopy, onPdf, onPrint, onSlack }) {
+function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, previewText, onAdd, onRemove, onCopy, onPdf, onPrint, onSlack }) {
   const [title, setTitle] = useState("");
   const [type, setType] = useState("temporaria");
   const [showPreview, setShowPreview] = useState(true);
@@ -349,13 +346,6 @@ function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, reportT
       <header>
         <div><strong>Resumo executivo</strong><small>Itens recorrentes, do dia e atualizacoes automaticas, prontos para copiar, imprimir ou exportar.</small></div>
         <div className="mb-home-summary-actions">
-          {canOverrideReportType && (
-            <div className="mb-home-summary-type admin">
-              {Object.entries(reportTypeLabels).map(([key, label]) => (
-                <button key={key} type="button" className={reportType === key ? "active" : ""} onClick={() => onReportTypeChange(key)}>{label}</button>
-              ))}
-            </div>
-          )}
           <Button onClick={onCopy}><FiCopy /> Copiar</Button>
           <Button onClick={onSlack}><i className="bi bi-slack" /> Slack</Button>
           <Button onClick={onPrint}><FiPrinter /> Imprimir</Button>
@@ -416,11 +406,10 @@ export function WorkbenchHome() {
   const accessLabel = isAdmin && isQa ? `${accessLevelLabels[access]} (Admin)` : accessLevelLabels[access] || "Acesso";
   const userKey = profile?.id || user?.email || "anonymous";
   const goalDefault = getSetting("defaultGoalHours", defaultGoalHours);
-  const adminEmail = import.meta.env.VITE_ADMIN_EMAIL || "";
-  const canOverrideReportType = isAdmin || (Boolean(adminEmail) && (profile?.email === adminEmail || user?.email === adminEmail));
-  const defaultReportType = isDev ? "dev" : isQa ? "qa" : isGestao ? "gestao" : "dev";
-  const [reportTypeOverride, setReportTypeOverride] = useState(() => readLocal(storageKey("HomeReportTypeOverride", userKey), null));
-  const reportType = (canOverrideReportType && reportTypeOverride) || defaultReportType;
+  // Admin ja tem o sandbox global "Ver como" (Layout.jsx) pra simular
+  // qualquer nivel de acesso — nao precisa mais de um segundo seletor so
+  // pra este widget trocar o tipo de relatorio.
+  const reportType = isDev ? "dev" : isQa ? "qa" : isGestao ? "gestao" : "dev";
   const today = now.toISOString().slice(0, 10);
 
   const [widgets, setWidgets] = useState(() => readLocal(storageKey("HomeWidgets", userKey), []));
@@ -428,11 +417,6 @@ export function WorkbenchHome() {
 
   useEffect(() => { writeLocal(storageKey("HomeWidgets", userKey), widgets); }, [widgets, userKey]);
   useEffect(() => { writeLocal(storageKey("HomeSummary", userKey), summaryEntries); }, [summaryEntries, userKey]);
-  useEffect(() => {
-    if (canOverrideReportType) {
-      writeLocal(storageKey("HomeReportTypeOverride", userKey), reportTypeOverride);
-    }
-  }, [canOverrideReportType, reportTypeOverride, userKey]);
 
   const quickLinks = [
     { to: "/dev", label: "Meus itens", icon: FiUser, show: [accessLevels.dev, accessLevels.qa, accessLevels.gestao, accessLevels.gerente].includes(access) },
@@ -486,7 +470,7 @@ export function WorkbenchHome() {
   const currentSprintLabel = compactSprintLabel(findCurrentSprint(sprintOptions));
 
   const developerRows = useMemo(() => {
-    if (!isGestao && !(canOverrideReportType && reportType === "gestao")) return [];
+    if (!isGestao) return [];
     const map = new Map();
     collaborators.filter((person) => person.isDev || person.isQa || person.isManagement).forEach((person) => {
       map.set(person.id, { name: person.azureName, hours: 0, goal: Number(person.goalHours || goalDefault) });
@@ -550,46 +534,22 @@ export function WorkbenchHome() {
   function removeSummaryEntry(id) {
     setSummaryEntries((current) => current.filter((entry) => entry.id !== id));
   }
+  // O resumo executivo e sempre PESSOAL (notas manuais "recorrente"/"hoje" +
+  // destaques automaticos do proprio dia, ja variando por papel via
+  // autoEntries/autoLabel acima) — nao troca pra um relatorio totalmente
+  // diferente por papel, senao os itens manuais que a pessoa acabou de
+  // adicionar somem da previa/copia/impressao/PDF pra quem e QA ou Gestao
+  // (o bug reportado: "adicionei um item e a previa nao atualiza").
+  // Relatorios especializados de QA/Gestao continuam disponiveis nas
+  // proprias telas de Testes/Governanca.
   function copySummary() {
-    if (reportType === 'qa') {
-      return copyQaTestEvidenceReportText({ generatedAt: now, scope: 'Filtered records', records: evidence, workItems: items, collaborators });
-    }
-    if (reportType === 'gestao') {
-      return copyExecutiveReportText({
-        title: 'Gestao da equipe — Resumo rapido',
-        period: 'Atual',
-        totals: governanceTotals,
-        rows: developerRows
-      });
-    }
     return copyPersonalSummaryText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel });
   }
   function pdfSummary() {
-    if (reportType === 'gestao') {
-      return downloadExecutiveReportPdf({
-        title: 'Gestao da equipe — Resumo rapido',
-        period: 'Atual',
-        totals: governanceTotals,
-        rows: developerRows,
-        filename: `stark-hub-Gestao-resumo-${new Date().toISOString().slice(0, 10)}.pdf`
-      });
-    }
     return downloadPersonalSummaryPdf({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel, filename: `stark-hub-resumo-${displayName.split(" ")[0].toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf` });
   }
   function printSummary() {
-    let text;
-    if (reportType === 'qa') {
-      text = buildQaTestEvidenceReportText({ generatedAt: now, scope: 'Filtered records', records: evidence, workItems: items, collaborators });
-    } else if (reportType === 'gestao') {
-      text = buildExecutiveReportText({
-        title: 'Gestao da equipe — Resumo rapido',
-        period: 'Atual',
-        totals: governanceTotals,
-        rows: developerRows
-      });
-    } else {
-      text = buildPersonalSummaryText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel });
-    }
+    const text = buildPersonalSummaryText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel });
     const printWindow = window.open("", "_blank", "width=640,height=800");
     if (!printWindow) return;
     const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -605,32 +565,19 @@ export function WorkbenchHome() {
     downloadExecutiveReportPdf({ title: "Stark Hub - Gestao da equipe (resumo rapido)", period: "Atual", totals: governanceTotals, rows: developerRows, filename: `stark-hub-Gestao-resumo-${new Date().toISOString().slice(0, 10)}.pdf` });
   }
   async function sendSlack(text) {
-    const webhookUrl = getSetting("slackWebhookUrl", "");
-    const { error } = await sendSlackWebhook(webhookUrl, text);
-    if (error) alert(`Nao foi possivel enviar ao Slack: ${error.message}`);
+    const webhooks = resolveSlackWebhooks(getSetting);
+    if (!webhooks.length) { alert("Nenhum webhook do Slack configurado. Configure em Configuracoes > Slack."); return; }
+    const { data, error } = await supabase.functions.invoke("slackNotify", { body: { webhooks, text } });
+    if (error || !data?.ok) alert(`Nao foi possivel enviar ao Slack: ${error?.message || "verifique o webhook configurado."}`);
   }
   function slackSummary() {
-    if (reportType === 'qa') {
-      const text = buildQaTestEvidenceReportText({ generatedAt: now, scope: 'Filtered records', records: evidence, workItems: items, collaborators });
-      sendSlack(text);
-      return;
-    }
-    if (reportType === 'gestao') {
-      const text = buildGovernanceSlackText({ totals: governanceTotals, rows: developerRows });
-      sendSlack(text);
-      return;
-    }
     sendSlack(buildPersonalSummarySlackText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel }));
   }
   function slackGovernance() {
     sendSlack(buildGovernanceSlackText({ totals: governanceTotals, rows: developerRows }));
   }
 
-  const summaryPreviewText = reportType === 'qa'
-    ? buildQaTestEvidenceReportText({ generatedAt: now, scope: 'Filtered records', records: evidence, workItems: items, collaborators })
-    : reportType === 'gestao'
-      ? buildExecutiveReportText({ title: 'Gestao da equipe — Resumo rapido', period: 'Atual', totals: governanceTotals, rows: developerRows })
-      : buildPersonalSummaryText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel });
+  const summaryPreviewText = buildPersonalSummaryText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel });
 
   function exportHomeCsv() {
     downloadCsv(`home-${dateStamp()}.csv`, ["Secao", "Tipo", "Titulo", "Detalhe"], [
@@ -734,10 +681,7 @@ export function WorkbenchHome() {
         role={accessLabel}
         autoEntries={autoEntries}
         autoLabel={autoLabel}
-        reportType={reportType}
         previewText={summaryPreviewText}
-        canOverrideReportType={canOverrideReportType}
-        onReportTypeChange={setReportTypeOverride}
         onAdd={addSummaryEntry}
         onRemove={removeSummaryEntry}
         onCopy={copySummary}
