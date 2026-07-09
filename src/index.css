@@ -5042,6 +5042,40 @@ body {
   object-fit: contain;
   vertical-align: middle;
 }
+.mbaz-slack-preview a,
+.mbaz-slack-mention,
+.mbaz-slack-link {
+  color: #1264a3;
+  text-decoration: underline;
+  font-weight: 800;
+}
+.mbaz-slack-preview-split {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mbaz-slack-preview-block > small {
+  display: block;
+  margin-bottom: 4px;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.mbaz-slack-raw {
+  max-height: 140px;
+  overflow: auto;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .mb-profile-check {
   min-height: 34px;
   display: inline-flex;

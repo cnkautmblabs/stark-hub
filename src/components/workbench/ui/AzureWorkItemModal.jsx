@@ -113,7 +113,7 @@ function SlackPreview({ text }) {
 
 // Enhanced Slack preview that supports clickable Slack links, attachments and
 // a raw-toggle to show the underlying Slack text (tokens like :us-tag:).
-function EnhancedSlackPreview({ text, item, environments = [], countries = [], attachments = [], assignee, fyi = [], reporter, showRaw = false, collaborators = [] }) {
+function EnhancedSlackPreview({ text, item, attachments = [], collaborators = [] }) {
   const tokenMap = {
     ":us-tag:": <img src={typeIconSrc("User Story")} alt="US" />,
     ":bug-tag:": <img src={typeIconSrc("Bug")} alt="Bug" />,
@@ -140,8 +140,15 @@ function EnhancedSlackPreview({ text, item, environments = [], countries = [], a
     const linkMatch = part.match(/^<([^|>]+)\|([^>]+)>$/);
     if (linkMatch) {
       const href = linkMatch[1];
-      const label = linkMatch[2];
-      return <a key={i} href={href} target="_blank" rel="noopener noreferrer">{label}</a>;
+      let label = linkMatch[2];
+      // O texto de verdade enviado ao Slack usa so o numero do ID (fiel ao
+      // legado) — a previa troca o numero pelo codigo com prefixo de tipo
+      // (ex.: "38309" -> "BUG38309") so pra ficar mais legivel aqui, sem
+      // alterar o que realmente e enviado.
+      if (item?.id && label.startsWith(String(item.id))) {
+        label = formatWorkItemCode(item.id, item.type) + label.slice(String(item.id).length);
+      }
+      return <a key={i} className="mbaz-slack-link" href={href} target="_blank" rel="noopener noreferrer">{label}</a>;
     }
     if (tokenMap[part]) return <span key={i} className="mbaz-slack-token">{tokenMap[part]}</span>;
     const fm = part.match(flagMatch);
@@ -156,37 +163,39 @@ function EnhancedSlackPreview({ text, item, environments = [], countries = [], a
         <a key={i} className="mbaz-slack-mention" href={href} target="_blank" rel="noopener noreferrer">@{name}</a>
       );
     }
+    // Item sem URL (ex.: work item local/demo) vira texto puro no lugar de
+    // link — mesma troca do numero pelo codigo tipado, so que sem o <a>.
+    if (item?.id && part.trimStart().startsWith(String(item.id))) {
+      const leading = part.match(/^\s*/)[0];
+      return <span key={i}>{leading}{formatWorkItemCode(item.id, item.type)}{part.trimStart().slice(String(item.id).length)}</span>;
+    }
     return <span key={i}>{part}</span>;
   }
 
-  if (showRaw) return <pre className="mbaz-slack-raw">{String(text || "")}</pre>;
-
   return (
-    <div className="mbaz-slack-preview enhanced">
-      {String(text || "").split("\n").map((line, idx) => (
-        <p key={idx}>
-          {line.split(/(:[a-z0-9-]+:|<[^>]+>)/gi).filter(Boolean).map((part, i) => renderPart(part, i))}
-        </p>
-      ))}
-      {attachments && attachments.length > 0 && (
-        <div className="mbaz-slack-attachments">
-          {attachments.map((url) => (
-            <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="mbaz-slack-attachment">
-              <img src={url} alt="evidence" />
-            </a>
+    <div className="mbaz-slack-preview-split">
+      <div className="mbaz-slack-preview-block">
+        <small>Visualizacao do codigo</small>
+        <pre className="mbaz-slack-raw">{String(text || "")}</pre>
+      </div>
+      <div className="mbaz-slack-preview-block">
+        <small>Visualizacao previa</small>
+        <div className="mbaz-slack-preview enhanced">
+          {String(text || "").split("\n").map((line, idx) => (
+            <p key={idx}>
+              {line.split(/(:[a-z0-9-]+:|<[^>]+>)/gi).filter(Boolean).map((part, i) => renderPart(part, i))}
+            </p>
           ))}
+          {attachments && attachments.length > 0 && (
+            <div className="mbaz-slack-attachments">
+              {attachments.map((url) => (
+                <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="mbaz-slack-attachment">
+                  <img src={url} alt="evidence" />
+                </a>
+              ))}
+            </div>
+          )}
         </div>
-      )}
-      <div className="mbaz-slack-meta">
-        {environments && environments.length > 0 && (
-          <div><strong>Ambientes:</strong> {environments.join(", ")}</div>
-        )}
-        {countries && countries.length > 0 && (
-          <div><strong>Paises:</strong> {countries.join(", ")}</div>
-        )}
-        {assignee && <div><strong>Assignee:</strong> {assignee.azureName || assignee.slackName || assignee.email}</div>}
-        {fyi && fyi.length > 0 && <div><strong>FYI:</strong> {fyi.map((p) => p.azureName || p.slackName || p.email).join(", ")}</div>}
-        {reporter && <div><strong>Reported by:</strong> {reporter.azureName || reporter.slackName || reporter.email}</div>}
       </div>
     </div>
   );
@@ -204,7 +213,6 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
   const [attachments, setAttachments] = useState([]);
   const [dragActive, setDragActive] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [showRawSlack, setShowRawSlack] = useState(true);
   const [liveDiscussions, setLiveDiscussions] = useState(null);
   const [liveDiscussionEvidence, setLiveDiscussionEvidence] = useState(null);
   const [discussionsLoading, setDiscussionsLoading] = useState(false);
@@ -619,23 +627,12 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
                   <RichAzureHtml html={discussionPreviewHtml} />
                 </div>
                 <div className="mbaz-new-modal-preview-column">
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                    <strong>Previa Slack</strong>
-                    <div>
-                      <button type="button" className="mbaz-btn" onClick={() => setShowRawSlack((v) => !v)}>{showRawSlack ? 'Ocultar codigo' : 'Ver codigo Slack'}</button>
-                    </div>
-                  </div>
+                  <strong>Previa Slack</strong>
                   <EnhancedSlackPreview
                     text={slackPreviewText}
                     item={item}
-                    environments={selectedEnvironments}
-                    countries={selectedCountries}
                     attachments={attachmentPreviewUrls}
-                    assignee={assigneePerson}
-                    fyi={fixedFyi}
-                    reporter={qaResponsible}
                     collaborators={collaborators}
-                    showRaw={showRawSlack}
                   />
                 </div>
               </div>
