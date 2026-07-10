@@ -4,7 +4,7 @@ import { useWorkItems } from "../../../hooks/useWorkItems.js";
 import { useToast } from "../../../contexts/ToastContext.jsx";
 import { useAppSettings } from "../../../hooks/useAppSettings.js";
 import { supabase } from "../../../lib/supabaseClient.js";
-import { Button, CountryVisual, InfoTooltip } from "../ui/WorkbenchPrimitives.jsx";
+import { Button, CountryVisual, FilterCombobox, InfoTooltip, envIconSrc, typeIconSrc } from "../ui/WorkbenchPrimitives.jsx";
 import { resolveSlackWebhooks } from "../../../utils/slack.js";
 import {
   breakpointOptions,
@@ -16,11 +16,11 @@ import {
   countryList,
   demandTypeOptions,
   environmentOptions,
-  featurePageGroups,
   featurePageOptions,
   planningPriorityOptions,
   reasonOptions,
   serviceLayerOptions,
+  userTypeIconSrc,
   userTypeOptions,
   validateWorkItemWizardForm,
   workItemWizardTypes
@@ -59,10 +59,10 @@ function emptyFormFor(typeKey) {
     iterationPath: ""
   };
   if (typeKey === "bug") {
-    return { ...base, title: "", authorName: "", serviceLayers: [], backendDocumentation: "", environments: [], reproducibleInProd: false, reproSteps: "", breakpoints: [], location: "", user: "", password: "", userTypes: [] };
+    return { ...base, title: "", serviceLayers: [], backendDocumentation: "", environments: [], reproducibleInProd: false, reproSteps: "", breakpoints: [], location: "", user: "", password: "", userTypes: [] };
   }
   if (typeKey === "feature" || typeKey === "userStory") {
-    return { ...base, title: "", authorName: "", validated: false, demandType: "", asA: "", iWant: "", soThat: "", acceptanceCriteria: "" };
+    return { ...base, title: "", validated: false, demandType: "", asA: "", iWant: "", soThat: "", acceptanceCriteria: "" };
   }
   if (typeKey === "task") {
     return { ...base, title: "", acceptanceCriteria: "", originalEstimate: "", completedHours: "", remainingHours: "0" };
@@ -101,74 +101,90 @@ function MultiChip({ options, values, onChange, renderLabel }) {
   );
 }
 
-function FeaturePageMultiSelect({ values = [], onChange }) {
+// Cor por tipo de work item nos resultados de busca — mesmo mapa usado no
+// acento do proprio wizard (typeColor), generalizado pra qualquer item
+// encontrado na busca (nao so o tipo que esta sendo criado agora).
+function azureTypeColorVar(type) {
+  const key = String(type || "").toLowerCase();
+  if (key === "bug") return "var(--starkTypeBug)";
+  if (key === "task") return "var(--starkTypeTask)";
+  if (key === "user story") return "var(--starkTypeStory)";
+  if (key === "feature") return "#7c3aed";
+  if (key === "epic") return "#ea580c";
+  if (key === "test case") return "#0ea5e9";
+  return "var(--starkAccent)";
+}
+
+// Um unico buscador de work items pra linkar Parent/Related/Child — antes
+// eram 3 campos de busca identicos e separados; agora e uma busca so, e
+// cada resultado pode ser marcado com o papel certo direto na lista.
+function WorkItemLinkPicker({ form, setField, items = [] }) {
   const [query, setQuery] = useState("");
-  const selected = new Set(values);
-  const filteredGroups = featurePageGroups.map((group) => ({
-    ...group,
-    pages: group.pages.filter((page) => `${group.feature} ${page}`.toLowerCase().includes(query.toLowerCase()))
-  })).filter((group) => group.pages.length);
-  function toggle(value) {
-    onChange(selected.has(value) ? values.filter((item) => item !== value) : [...values, value]);
+  const results = useMemo(() => {
+    const tokens = query.trim().toLowerCase().split(/[,\s;]+/).filter(Boolean);
+    if (!tokens.length) return [];
+    return items.filter((item) => tokens.some((token) => String(item.id).includes(token) || String(item.title || "").toLowerCase().includes(token))).slice(0, 8);
+  }, [query, items]);
+
+  function idsFor(key) {
+    return String(form[key] || "").split(/[,\s;]+/).filter(Boolean);
   }
+
+  function addToRole(item, role) {
+    if (role === "parent") { setField("parentId", String(item.id)); return; }
+    const key = role === "related" ? "relatedIds" : "childIds";
+    const ids = new Set(idsFor(key));
+    ids.add(String(item.id));
+    setField(key, Array.from(ids).join(", "));
+  }
+
+  function removeFromRole(id, role) {
+    if (role === "parent") { setField("parentId", ""); return; }
+    const key = role === "related" ? "relatedIds" : "childIds";
+    setField(key, idsFor(key).filter((value) => value !== String(id)).join(", "));
+  }
+
+  const roleRows = [
+    { key: "parent", label: "Parent", ids: form.parentId ? [String(form.parentId)] : [] },
+    { key: "related", label: "Related", ids: idsFor("relatedIds") },
+    { key: "child", label: "Child", ids: idsFor("childIds") }
+  ];
+
   return (
-    <div className="mbwiz-multiselect">
-      <div className="mbwiz-multiselect-head">
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar feature ou pagina..." />
-        <button type="button" onClick={() => onChange([])}>Limpar selecao</button>
-      </div>
-      <div className="mbwiz-multiselect-list">
-        {filteredGroups.map((group) => (
-          <div key={group.feature} className="mbwiz-multiselect-group">
-            <strong>{group.feature}</strong>
-            {group.pages.map((page) => {
-              const value = `${group.feature} :: ${page}`;
-              return (
-                <label key={value}>
-                  <input type="checkbox" checked={selected.has(value)} onChange={() => toggle(value)} />
-                  <span>{page}</span>
-                </label>
-              );
-            })}
+    <div className="mbwiz-link-picker">
+      <label className="mbwiz-field">
+        <span>Vincular work items (parent, related, child)</span>
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por ID ou titulo..." />
+      </label>
+      {results.length > 0 && (
+        <div className="mbwiz-id-results">
+          {results.map((item) => (
+            <div key={item.id} className="mbwiz-id-result">
+              <img className="mbwiz-id-result-icon" src={typeIconSrc(item.type)} alt="" />
+              <b className="mbwiz-id-result-id" style={{ color: azureTypeColorVar(item.type) }}>{item.id}</b>
+              <span className="mbwiz-id-result-title">{item.title}</span>
+              <div className="mbwiz-id-result-actions">
+                <button type="button" onClick={() => addToRole(item, "parent")}>Pai</button>
+                <button type="button" onClick={() => addToRole(item, "related")}>Relacionado</button>
+                <button type="button" onClick={() => addToRole(item, "child")}>Filho</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="mbwiz-link-roles">
+        {roleRows.map((row) => (
+          <div key={row.key} className="mbwiz-link-role">
+            <strong>{row.label}</strong>
+            <div className="mbwiz-chip-row">
+              {row.ids.length ? row.ids.map((id) => (
+                <span key={id} className="mbwiz-chip active">{id}<button type="button" onClick={() => removeFromRole(id, row.key)}><i className="bi bi-x" /></button></span>
+              )) : <em className="mbwiz-link-role-empty">Nenhum</em>}
+            </div>
           </div>
         ))}
       </div>
     </div>
-  );
-}
-
-function WorkItemSearchField({ label, value = "", onChange, items = [], placeholder }) {
-  const [query, setQuery] = useState(value);
-  const [results, setResults] = useState([]);
-  function search() {
-    const tokens = query.toLowerCase().split(/[,\s;]+/).filter(Boolean);
-    const found = items.filter((item) => tokens.some((token) => String(item.id).includes(token) || String(item.title || "").toLowerCase().includes(token))).slice(0, 8);
-    setResults(found);
-  }
-  function addId(id) {
-    const ids = new Set(String(value || "").split(/[,\s;]+/).filter(Boolean));
-    ids.add(String(id));
-    onChange(Array.from(ids).join(", "));
-  }
-  return (
-    <label className="mbwiz-field">
-      <span>{label}</span>
-      <div className="mbwiz-search-id">
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder || "Digite ID ou titulo"} />
-        <button type="button" onClick={search}>Buscar</button>
-      </div>
-      <input value={value} onChange={(event) => onChange(event.target.value)} placeholder="IDs selecionados" />
-      {results.length > 0 && (
-        <div className="mbwiz-id-results">
-          {results.map((item) => (
-            <button key={item.id} type="button" onClick={() => addId(item.id)}>
-              <b>{item.type || "WI"} {item.id}</b>
-              <span>{item.title}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </label>
   );
 }
 
@@ -401,13 +417,9 @@ export function CreateWorkItemWizard({ onClose, embedded = false, initialType = 
 
               <label className={`mbwiz-field${fieldClass("title")}`}><span>Titulo *</span><input value={form.title || ""} onChange={(event) => setField("title", event.target.value)} placeholder="Titulo do work item" /></label>
 
-              {(typeKey === "bug" || typeKey === "feature" || typeKey === "userStory") && (
-                <label className="mbwiz-field"><span>Seu nome (referencia)</span><input value={form.authorName || ""} onChange={(event) => setField("authorName", event.target.value)} placeholder="Pra ajudar a entender de quem e o pedido" /></label>
-              )}
-
-              <label className={`mbwiz-field${fieldClass("relatedFeatures")}`}>
+              <label className={`mbwiz-field mbwiz-field-full${fieldClass("relatedFeatures")}`}>
                 <span>Feature/Pagina relacionada</span>
-                <FeaturePageMultiSelect values={form.relatedFeatures || []} onChange={(values) => setField("relatedFeatures", values)} />
+                <FilterCombobox label="Feature/Pagina" options={featurePageOptions} values={form.relatedFeatures || []} onChange={(values) => setField("relatedFeatures", values)} placeholder="Buscar feature ou pagina..." renderOption={(option) => <span title={option.group}>{option.label}</span>} />
                 {(form.relatedFeatures || []).length > 0 && (
                   <div className="mbwiz-chip-row">
                     {form.relatedFeatures.map((value) => {
@@ -420,9 +432,9 @@ export function CreateWorkItemWizard({ onClose, embedded = false, initialType = 
 
               {typeKey === "bug" && (
                 <>
-                  <label className={`mbwiz-field${fieldClass("serviceLayers")}`}><span>Service Layer / Parceiro</span><MultiChip options={[{ value: "Nao sei / nao aplica", label: "Nao sei / nao aplica" }, ...serviceLayerOptions]} values={form.serviceLayers || []} onChange={(values) => setField("serviceLayers", values)} /></label>
+                  <label className={`mbwiz-field mbwiz-field-full${fieldClass("serviceLayers")}`}><span>Service Layer / Parceiro</span><MultiChip options={[{ value: "Nao sei / nao aplica", label: "Nao sei / nao aplica" }, ...serviceLayerOptions]} values={form.serviceLayers || []} onChange={(values) => setField("serviceLayers", values)} /></label>
                   <label className="mbwiz-field"><span>Documentacao de backend</span><input value={form.backendDocumentation || ""} onChange={(event) => setField("backendDocumentation", event.target.value)} placeholder="Link ou 'Not available'" /></label>
-                  <label className={`mbwiz-field${fieldClass("environments")}`}><span>Ambiente</span><MultiChip options={environmentOptions} values={selectedEnvironments} onChange={(values) => setField("environments", values)} renderLabel={(option) => <><i className={`bi ${option === "QA" ? "bi-patch-check-fill" : option === "BETA" ? "bi-flask" : "bi-shield-check"}`} /> {option}</>} /></label>
+                  <label className={`mbwiz-field${fieldClass("environments")}`}><span>Ambiente</span><MultiChip options={environmentOptions} values={selectedEnvironments} onChange={(values) => setField("environments", values)} renderLabel={(option) => <><img className="mbwiz-chip-icon" src={envIconSrc(option)} alt="" /> {option}</>} /></label>
                   <label className="mbwiz-switch-row"><span>Possivel reproduzir em PROD?</span><span className="mb-switch"><input type="checkbox" checked={Boolean(form.reproducibleInProd)} onChange={(event) => setField("reproducibleInProd", event.target.checked)} /><span className="mb-switch-slider" /></span></label>
                   <label className="mbwiz-field"><span>Passos para reproducao</span><textarea className="mbwiz-textarea" rows={4} value={form.reproSteps || ""} onChange={(event) => setField("reproSteps", event.target.value)} placeholder={"1. ...\n2. ...\n3. ..."} /></label>
                   <label className="mbwiz-field"><span>Breakpoint</span><MultiChip options={breakpointOptions} values={form.breakpoints || []} onChange={(values) => setField("breakpoints", values)} renderLabel={(option) => <><i className={`bi ${option.value === "360px" ? "bi-phone" : "bi-display"}`} /> {option.label}</>} /></label>
@@ -431,7 +443,7 @@ export function CreateWorkItemWizard({ onClose, embedded = false, initialType = 
                     <label className="mbwiz-field"><span>Usuario</span><input value={form.user || ""} onChange={(event) => setField("user", event.target.value)} placeholder="email@email.com" /></label>
                     <label className="mbwiz-field"><span>Senha</span><input type="text" value={form.password || ""} onChange={(event) => setField("password", event.target.value)} /></label>
                   </div>
-                  <label className="mbwiz-field"><span>Tipo de usuario</span><MultiChip options={userTypeOptions} values={form.userTypes || []} onChange={(values) => setField("userTypes", values)} renderLabel={(option) => <><i className="bi bi-person-badge" /> {option}</>} /></label>
+                  <label className="mbwiz-field mbwiz-field-full"><span>Tipo de usuario</span><MultiChip options={userTypeOptions} values={form.userTypes || []} onChange={(values) => setField("userTypes", values)} renderLabel={(option) => { const icon = userTypeIconSrc(option); return <>{icon ? <img className="mbwiz-chip-icon" src={icon} alt="" /> : <i className="bi bi-person-badge" />} {option}</>; }} /></label>
                 </>
               )}
 
@@ -475,13 +487,9 @@ export function CreateWorkItemWizard({ onClose, embedded = false, initialType = 
                   <label className="mbwiz-field"><span>Remaining</span><input type="number" min="0" value={form.remainingHours || "0"} readOnly /></label>
                 </div>
               )}
-              <div className="mbwiz-field-grid">
-                <WorkItemSearchField label="Parent ID" value={form.parentId || ""} onChange={(value) => setField("parentId", value.replace(/[^\d,;\s]+/g, ""))} items={items} placeholder="Buscar pai por ID ou titulo" />
-                <WorkItemSearchField label="Related IDs" value={form.relatedIds || ""} onChange={(value) => setField("relatedIds", value)} items={items} placeholder="Buscar relacionados por ID ou titulo" />
-                <WorkItemSearchField label="Child IDs" value={form.childIds || ""} onChange={(value) => setField("childIds", value)} items={items} placeholder="Buscar filhos por ID ou titulo" />
-              </div>
+              <WorkItemLinkPicker form={form} setField={setField} items={items} />
 
-              <label className="mbwiz-field">
+              <label className="mbwiz-field mbwiz-field-full">
                 <span>Imagens/gifs (evidencia) <InfoTooltip text="Anexado direto no Azure DevOps e embutido na descricao do item." /></span>
                 <input ref={fileInputRef} type="file" accept="image/*" multiple hidden onChange={handleAttachmentPick} />
                 <div className="mbwiz-dropzone" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); addFiles(event.dataTransfer.files); }}>

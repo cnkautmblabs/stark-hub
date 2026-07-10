@@ -41,6 +41,18 @@ export const serviceLayerOptions = [
 
 export const userTypeOptions = ["Comum", "Cine Fan/Club", "Cine Fan/Club Plus", "Cine Fan/Club Black", "Employee", "YPF"];
 
+// So 3 dos 6 tipos de usuario tem imagem propria na pasta icons (as demais
+// caem no fallback bi-person-badge) — nao ha arte pronta pra Employee/YPF.
+const userTypeIconFiles = {
+  "Comum": "common-translucent.png",
+  "Cine Fan/Club": "fan.png",
+  "Cine Fan/Club Plus": "plus.png",
+  "Cine Fan/Club Black": "black.png"
+};
+export function userTypeIconSrc(type) {
+  return userTypeIconFiles[type] ? `${import.meta.env.BASE_URL}icons/${userTypeIconFiles[type]}` : null;
+}
+
 export const breakpointOptions = [
   { value: "1280px", label: "1280px" },
   { value: "360px", label: "360px" }

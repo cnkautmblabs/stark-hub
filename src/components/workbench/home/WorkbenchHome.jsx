@@ -473,7 +473,7 @@ function HomeSection({ title, subtitle, summary, collapsed, onToggleCollapse, dr
   );
 }
 
-function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, previewText, onAdd, onRemove, onCopy, onPdf, onPrint, onSlack, collapsed, onToggleCollapse, summary, dragging, onDragStart, onDragOver, onDrop, onDragEnd }) {
+function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, dateFrom, dateTo, onDateFromChange, onDateToChange, previewText, onAdd, onRemove, onCopy, onPdf, onPrint, onSlack, collapsed, onToggleCollapse, summary, dragging, onDragStart, onDragOver, onDrop, onDragEnd }) {
   const [title, setTitle] = useState("");
   const [type, setType] = useState("temporaria");
   const [showPreview, setShowPreview] = useState(true);
@@ -514,6 +514,11 @@ function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, preview
             </div>
             <button type="submit" className="mb-home-summary-submit"><FiPlus /> Adicionar</button>
           </form>
+          <div className="mb-home-summary-range">
+            <span>Periodo dos itens automaticos ({autoLabel})</span>
+            <label>De<input type="date" value={dateFrom} max={dateTo} onChange={(event) => onDateFromChange(event.target.value)} /></label>
+            <label>Ate<input type="date" value={dateTo} min={dateFrom} onChange={(event) => onDateToChange(event.target.value)} /></label>
+          </div>
           <div className="mb-home-summary-list">
             {entries.map((entry) => (
               <div key={entry.id} className={`mb-home-summary-item ${entry.type}`}>
@@ -572,12 +577,16 @@ export function WorkbenchHome() {
 
   const [widgets, setWidgets] = useState(() => readLocal(storageKey("HomeWidgets", userKey), []));
   const [summaryEntries, setSummaryEntries] = useState(() => readLocal(storageKey("HomeSummary", userKey), []));
+  const [summaryDateFrom, setSummaryDateFrom] = useState(() => readLocal(storageKey("HomeSummaryFrom", userKey), today));
+  const [summaryDateTo, setSummaryDateTo] = useState(() => readLocal(storageKey("HomeSummaryTo", userKey), today));
   const [rawSectionOrder, setRawSectionOrder] = useState(() => readLocal(storageKey("HomeSectionOrder", userKey), HOME_SECTION_DEFAULT_ORDER));
   const [collapsedSections, setCollapsedSections] = useState(() => readLocal(storageKey("HomeSectionsCollapsed", userKey), {}));
   const [dragSectionId, setDragSectionId] = useState(null);
 
   useEffect(() => { writeLocal(storageKey("HomeWidgets", userKey), widgets); }, [widgets, userKey]);
   useEffect(() => { writeLocal(storageKey("HomeSummary", userKey), summaryEntries); }, [summaryEntries, userKey]);
+  useEffect(() => { writeLocal(storageKey("HomeSummaryFrom", userKey), summaryDateFrom); }, [summaryDateFrom, userKey]);
+  useEffect(() => { writeLocal(storageKey("HomeSummaryTo", userKey), summaryDateTo); }, [summaryDateTo, userKey]);
   useEffect(() => { writeLocal(storageKey("HomeSectionOrder", userKey), rawSectionOrder); }, [rawSectionOrder, userKey]);
   useEffect(() => { writeLocal(storageKey("HomeSectionsCollapsed", userKey), collapsedSections); }, [collapsedSections, userKey]);
 
@@ -774,11 +783,24 @@ export function WorkbenchHome() {
     extra: developerRows.reduce((sum, row) => sum + Math.max(row.hours - row.goal, 0), 0)
   }), [developerRows, items]);
 
-  const autoLabel = { dev: "PRs de hoje", qa: "Testes de hoje", gestao: "Gestao (snapshot)" }[reportType];
+  // "Hoje" era um recorte fixo (so a data de hoje, sem opcao de ver outro
+  // dia ou um intervalo) — vira um range inicio/fim que o usuario controla,
+  // defaultando pra hoje-hoje pra nao mudar o comportamento de quem nunca
+  // mexeu no filtro.
+  const summaryRangeFrom = summaryDateFrom || today;
+  const summaryRangeTo = summaryDateTo || today;
+  const isSingleDayRange = summaryRangeFrom === summaryRangeTo;
+  const autoLabel = isSingleDayRange
+    ? { dev: summaryRangeFrom === today ? "PRs de hoje" : "PRs no periodo", qa: summaryRangeFrom === today ? "Testes de hoje" : "Testes no periodo", gestao: "Gestao (snapshot)" }[reportType]
+    : { dev: "PRs no periodo", qa: "Testes no periodo", gestao: "Gestao (snapshot)" }[reportType];
   const autoEntries = useMemo(() => {
+    const inRange = (value) => {
+      const day = String(value || "").slice(0, 10);
+      return day >= summaryRangeFrom && day <= summaryRangeTo;
+    };
     if (reportType === "qa") {
       return evidence
-        .filter((entry) => String(entry.createdAt || "").slice(0, 10) === today)
+        .filter((entry) => inRange(entry.createdAt))
         .map((entry) => ({ title: `#${entry.workItemId} — ${entry.result || "resultado"} (${entry.authorName || "QA"})` }));
     }
     if (reportType === "gestao") {
@@ -786,9 +808,9 @@ export function WorkbenchHome() {
       return [{ title: `${governanceTotals.developers} colaborador(es), ${governanceTotals.cards} card(s), ${formatHours(governanceTotals.hours)} registradas, ${formatHours(governanceTotals.missing)} pendentes` }];
     }
     return myItems
-      .filter((item) => String(item.updatedAt || "").slice(0, 10) === today)
+      .filter((item) => inRange(item.updatedAt))
       .map((item) => ({ title: `#${item.id} ${item.title} — ${item.state || "sem status"}` }));
-  }, [evidence, governanceTotals, myItems, reportType, today]);
+  }, [evidence, governanceTotals, myItems, reportType, summaryRangeFrom, summaryRangeTo]);
 
   function saveWidget(widget) {
     setWidgets((current) => (
@@ -978,6 +1000,10 @@ export function WorkbenchHome() {
               role={accessLabel}
               autoEntries={autoEntries}
               autoLabel={autoLabel}
+              dateFrom={summaryRangeFrom}
+              dateTo={summaryRangeTo}
+              onDateFromChange={setSummaryDateFrom}
+              onDateToChange={setSummaryDateTo}
               previewText={summaryPreviewText}
               onAdd={addSummaryEntry}
               onRemove={removeSummaryEntry}

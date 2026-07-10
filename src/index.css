@@ -1890,6 +1890,41 @@ body {
   grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
 }
+.mb-home-summary-range {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--starkBorder);
+  border-radius: 8px;
+  background: var(--starkSurfaceAlt);
+}
+.mb-home-summary-range > span {
+  color: var(--starkMuted);
+  font-size: 11px;
+  font-weight: 800;
+  flex: 1;
+  min-width: 160px;
+}
+.mb-home-summary-range label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--starkMuted);
+  font-size: 11px;
+  font-weight: 800;
+}
+.mb-home-summary-range input[type="date"] {
+  min-height: 28px;
+  border: 1px solid var(--starkBorder);
+  border-radius: 6px;
+  background: var(--starkSurface);
+  color: var(--starkText);
+  padding: 0 6px;
+  font-size: 11.5px;
+}
 .mb-home-summary-form input {
   min-height: 34px;
   border: 1px solid var(--starkBorder);
@@ -5670,6 +5705,52 @@ body {
 }
 .mbaz-donut-center strong { font-size: 18px; color: var(--starkText); line-height: 1.1; }
 .mbaz-donut-center small { font-size: 9px; color: var(--starkMuted); font-weight: 700; text-transform: uppercase; letter-spacing: 0; }
+/* "Status das metas": donut + legenda lado a lado, legenda em lista
+   vertical (nao mais uma linha horizontal discreta embaixo). */
+.mbdhc-donut-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.mbaz-donut-wrap.compact {
+  flex: 1 1 auto;
+  min-width: 160px;
+  max-width: 260px;
+}
+.mbdhc-legend-list {
+  flex: 1;
+  min-width: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.mbdhc-legend-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mbdhc-legend-list i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
+.mbdhc-legend-list i.red { background: var(--mbdhc-red); }
+.mbdhc-legend-list i.blue { background: var(--mbdhc-blue); }
+.mbdhc-legend-list i.gold { background: var(--mbdhc-gold); }
+.mbdhc-legend-list span {
+  flex: 1;
+  color: var(--starkMuted);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.mbdhc-legend-list b {
+  color: var(--starkText);
+  font-size: 14px;
+  font-weight: 900;
+}
 .mbaz-qa-stack-wrap {
   border-radius: 10px;
   overflow: hidden;
@@ -6620,10 +6701,32 @@ body {
 .mbwiz-modal.embedded .mbwiz-type-card {
   min-height: 120px;
 }
+/* Formulario em grid de 2 colunas em vez de uma coluna unica — campos
+   curtos (titulo, datas, selects) ocupavam a largura toda e sobrava muito
+   espaco em branco. Blocos que precisam da largura inteira (textareas,
+   grupos de campo, secoes, o buscador de work items e as acoes finais)
+   sao forcados a ocupar as 2 colunas via grid-column. */
 .mbwiz-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  align-items: start;
+}
+.mbwiz-form > .mbwiz-form-toolbar,
+.mbwiz-form > .mbwiz-field:has(textarea),
+.mbwiz-form > div.mbwiz-field,
+.mbwiz-form > .mbwiz-field-grid,
+.mbwiz-form > .mbwiz-section,
+.mbwiz-form > .mbwiz-link-picker,
+.mbwiz-form > .mbwiz-field-full,
+.mbwiz-form > .mbwiz-confirm-panel,
+.mbwiz-form > .mbwiz-submit-row {
+  grid-column: 1 / -1;
+}
+@media (max-width: 640px) {
+  .mbwiz-form {
+    grid-template-columns: 1fr;
+  }
 }
 .mbwiz-form-toolbar {
   display: flex;
@@ -6713,6 +6816,12 @@ body {
 .mbwiz-chip.active .mbw-country-visual span {
   color: inherit;
 }
+.mbwiz-chip-icon {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  object-fit: contain;
+}
 .mbwiz-multiselect {
   display: grid;
   gap: 8px;
@@ -6792,24 +6901,84 @@ body {
   background: var(--starkSurface);
   padding: 5px;
 }
-.mbwiz-id-results button {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+.mbwiz-id-result {
+  display: flex;
+  align-items: center;
   gap: 8px;
-  text-align: left;
-  border: 0;
   border-radius: 7px;
-  background: transparent;
-  color: var(--starkText);
   padding: 5px;
 }
-.mbwiz-id-results button:hover {
+.mbwiz-id-result:hover {
   background: var(--starkSurfaceAlt);
 }
-.mbwiz-id-results span {
+.mbwiz-id-result-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  flex: none;
+  object-fit: contain;
+}
+.mbwiz-id-result-id {
+  flex: none;
+  font-size: 12px;
+  font-weight: 900;
+}
+.mbwiz-id-result-title {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--starkText);
+  font-size: 12px;
+}
+.mbwiz-id-result-actions {
+  flex: none;
+  display: flex;
+  gap: 4px;
+}
+.mbwiz-id-result-actions button {
+  border: 1px solid var(--starkBorder);
+  border-radius: 6px;
+  background: var(--starkSurface);
+  color: var(--starkMuted);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 7px;
+  cursor: pointer;
+}
+.mbwiz-id-result-actions button:hover {
+  border-color: var(--mbwiz-accent, var(--starkAccent));
+  color: var(--mbwiz-accent, var(--starkAccent));
+}
+.mbwiz-link-picker {
+  display: grid;
+  gap: 8px;
+}
+.mbwiz-link-roles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.mbwiz-link-role {
+  border: 1px solid var(--starkBorder);
+  border-radius: 8px;
+  background: var(--starkSurfaceAlt);
+  padding: 7px 8px;
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.mbwiz-link-role strong {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+  color: var(--starkMuted);
+}
+.mbwiz-link-role-empty {
+  color: var(--starkMuted);
+  font-size: 11px;
+  font-style: normal;
 }
 .mbwiz-dropzone {
   display: grid;
@@ -7875,6 +8044,17 @@ body {
   border-radius: 6px;
   padding: 0 8px;
   font-size: 12px;
+}
+.mb-settings-workbench .mb-notification-sound-row > span:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.mb-settings-workbench .mb-notification-sound-row small {
+  display: block;
+  color: #605e5c;
+  font-weight: 400;
+  white-space: normal;
 }
 .mb-settings-workbench .mb-switch-row {
   display: flex;

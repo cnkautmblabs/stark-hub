@@ -1617,6 +1617,16 @@ export function HoursWorkbench() {
   const maxCompleted = Math.max(1, ...filteredDevelopers.map((dev) => Math.max(dev.completed, dev.goalHours)));
   const maxCards = Math.max(1, ...filteredDevelopers.map((dev) => dev.items.length));
   const maxCountry = Math.max(1, ...countryTotals.map(([, count]) => count));
+  // Cada grafico usa a altura que as PROPRIAS linhas precisam pra caber —
+  // nunca menos que isso, senao o Recharts pula nomes alternados no eixo
+  // pra nao sobrepor texto (bug real: forcar os 3 graficos numa altura
+  // menor, baseada no menor dos dois, deixava metade dos nomes de "Meta x
+  // realizado" invisiveis quando havia mais pessoas que paises). maxBarSize
+  // deixa as barras mais finas quando sobra espaco, sem arriscar esconder
+  // nomes quando nao sobra.
+  const metaChartHeight = Math.max(160, filteredDevelopers.slice(0, 12).length * 30);
+  const countryChartHeight = Math.max(160, countryTotals.length * 30);
+  const donutChartHeight = Math.max(metaChartHeight, countryChartHeight);
   // Card "Pai": o proprio usuario logado, sempre visivel (nao depende dos
   // filtros ativos). QA ve metricas de teste no lugar de Tasks/Bugs — para
   // QA, o que importa e o que ele testou, nao o que ele "entregou" como dev.
@@ -1967,12 +1977,12 @@ export function HoursWorkbench() {
                     <button type="button" className={metaMetric === "qty" ? "active" : ""} onClick={() => setMetaMetric("qty")}>Qtd</button>
                   </div>
                 </div>
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={filteredDevelopers.slice(0, 12).map((dev) => ({ key: dev.key, name: shortName(dev.displayName), value: metaMetric === "hours" ? dev.completed : dev.items.length, status: dev.goalStatus }))} layout="vertical" margin={{ top: 4, right: 36, bottom: 4, left: 4 }}>
+                <ResponsiveContainer width="100%" height={metaChartHeight}>
+                  <BarChart data={filteredDevelopers.slice(0, 12).map((dev) => ({ key: dev.key, name: shortName(dev.displayName), value: metaMetric === "hours" ? dev.completed : dev.items.length, status: dev.goalStatus }))} layout="vertical" margin={{ top: 4, right: 36, bottom: 4, left: 4 }} barCategoryGap="30%">
                     <XAxis type="number" hide domain={[0, metaMetric === "hours" ? maxCompleted : maxCards]} />
-                    <YAxis type="category" dataKey="name" width={90} tick={<CompactAxisTick width={82} />} axisLine={false} tickLine={false} />
+                    <YAxis type="category" dataKey="name" width={150} interval={0} tick={<CompactAxisTick width={144} />} axisLine={false} tickLine={false} />
                     <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
-                    <Bar dataKey="value" radius={[0, 6, 6, 0]}>
+                    <Bar dataKey="value" radius={[0, 6, 6, 0]} maxBarSize={16}>
                       {filteredDevelopers.slice(0, 12).map((dev) => <Cell key={dev.key} fill={metaMetric === "hours" ? goalStatusColor(dev.goalStatus) : "#0078d4"} />)}
                       <LabelList dataKey="value" position="right" formatter={metaMetric === "hours" ? formatHours : undefined} style={{ fill: "var(--starkMuted)", fontSize: 11 }} />
                     </Bar>
@@ -1982,20 +1992,26 @@ export function HoursWorkbench() {
               </section>
               <section className="mbdhc-chart-card">
                 <h3>Status das metas</h3>
-                <div className="mbaz-donut-wrap">
-                  <ResponsiveContainer width="100%" height={180}>
-                    <PieChart>
-                      <Pie data={[{ key: "below", name: "Abaixo", value: goalCounts.below }, { key: "met", name: "Cumprida", value: goalCounts.met }, { key: "above", name: "Acima", value: goalCounts.above }]} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="85%" paddingAngle={2}>
-                        <Cell fill={goalStatusColor("below")} stroke="var(--starkSurface)" strokeWidth={2} />
-                        <Cell fill={goalStatusColor("met")} stroke="var(--starkSurface)" strokeWidth={2} />
-                        <Cell fill={goalStatusColor("above")} stroke="var(--starkSurface)" strokeWidth={2} />
-                      </Pie>
-                      <Tooltip content={<RechartsTooltip />} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="mbaz-donut-center"><strong>{totals.developers}</strong><small>Equipe</small></div>
+                <div className="mbdhc-donut-row">
+                  <div className="mbaz-donut-wrap compact">
+                    <ResponsiveContainer width="100%" height={donutChartHeight}>
+                      <PieChart>
+                        <Pie data={[{ key: "below", name: "Abaixo", value: goalCounts.below }, { key: "met", name: "Cumprida", value: goalCounts.met }, { key: "above", name: "Acima", value: goalCounts.above }]} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="90%" paddingAngle={2}>
+                          <Cell fill={goalStatusColor("below")} stroke="var(--starkSurface)" strokeWidth={2} />
+                          <Cell fill={goalStatusColor("met")} stroke="var(--starkSurface)" strokeWidth={2} />
+                          <Cell fill={goalStatusColor("above")} stroke="var(--starkSurface)" strokeWidth={2} />
+                        </Pie>
+                        <Tooltip content={<RechartsTooltip />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="mbaz-donut-center"><strong>{totals.developers}</strong><small>Equipe</small></div>
+                  </div>
+                  <ul className="mbdhc-legend-list">
+                    <li><i className="red" /><span>Abaixo</span><b>{goalCounts.below}</b></li>
+                    <li><i className="blue" /><span>Cumprida</span><b>{goalCounts.met}</b></li>
+                    <li><i className="gold" /><span>Acima</span><b>{goalCounts.above}</b></li>
+                  </ul>
                 </div>
-                <div className="mbdhc-legend discreet"><span><i className="red" />Abaixo: {goalCounts.below}</span><span><i className="blue" />Cumprida: {goalCounts.met}</span><span><i className="gold" />Acima: {goalCounts.above}</span></div>
               </section>
               <section className="mbdhc-chart-card">
                 <div className="mbdhc-chart-card-head">
@@ -2005,12 +2021,12 @@ export function HoursWorkbench() {
                     <button type="button" className={countryMetric === "hours" ? "active" : ""} onClick={() => setCountryMetric("hours")}>Horas</button>
                   </div>
                 </div>
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={countryTotals.map(([country, value]) => ({ country, value }))} layout="vertical" margin={{ top: 4, right: 36, bottom: 4, left: 4 }}>
+                <ResponsiveContainer width="100%" height={countryChartHeight}>
+                  <BarChart data={countryTotals.map(([country, value]) => ({ country, value }))} layout="vertical" margin={{ top: 4, right: 36, bottom: 4, left: 4 }} barCategoryGap="30%">
                     <XAxis type="number" hide domain={[0, maxCountry]} />
-                    <YAxis type="category" dataKey="country" width={50} tick={<CountryFlagAxisTick width={46} />} axisLine={false} tickLine={false} />
+                    <YAxis type="category" dataKey="country" width={50} interval={0} tick={<CountryFlagAxisTick width={46} />} axisLine={false} tickLine={false} />
                     <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
-                    <Bar dataKey="value" radius={[0, 6, 6, 0]} fill="#0078d4">
+                    <Bar dataKey="value" radius={[0, 6, 6, 0]} fill="#0078d4" maxBarSize={16}>
                       <LabelList dataKey="value" position="right" formatter={countryMetric === "hours" ? formatHours : undefined} style={{ fill: "var(--starkMuted)", fontSize: 11 }} />
                     </Bar>
                   </BarChart>
