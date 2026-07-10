@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../../../contexts/AuthContext.jsx";
 import { useCollaborators } from "../../../hooks/useCollaborators.js";
 import { usePersistentState } from "../../../hooks/usePersistentState.js";
@@ -291,6 +292,7 @@ function PendingApprovalRow({ person, onApprove }) {
 }
 
 export function CollaboratorsWorkbench() {
+  const { t } = useTranslation();
   const { profile, demoMode } = useAuth();
   const currentUserAccess = profile?.accessLevel;
   // isAdmin e um flag independente do accessLevel (nao existe 'admin' no
@@ -388,8 +390,8 @@ export function CollaboratorsWorkbench() {
     <section className="mbw-page mb-settings-page">
       <WorkbenchHeader
         kicker="Perfil"
-        title="Perfil"
-        subtitle={isGestao ? "Cadastro unico de identidade, aliases, permissoes, Slack, avatar e cor de todo o time." : "Suas informacoes de identidade, Slack, avatar e cor."}
+        title={t("pages.collaborators.title")}
+        subtitle={isGestao ? t("pages.collaborators.subtitleGestao") : t("pages.collaborators.subtitleSelf")}
         demoMode={demoMode}
         actions={<>
           {isGestao && <Button onClick={addPerson}>+ Adicionar</Button>}

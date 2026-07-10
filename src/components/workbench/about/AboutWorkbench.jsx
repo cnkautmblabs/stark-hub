@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
 import { dateStamp, downloadCsv } from "../../../utils/csvExport.js";
 
@@ -13,7 +14,19 @@ const faqItems = [
   },
   {
     q: "Qual a diferença entre Quality Board, Meus itens e Testes?",
-    a: "Quality Board é a visão geral de todos os work items em fluxo de QA (In QA, In BETA, Ready to Beta, Ready to Prod), com filtros e gráficos por país/ambiente/QA responsável. Meus itens é a visão pessoal — para Dev, os cards atribuídos a você; para QA, além dos atribuídos, os cards em que você é QA responsável ou já registrou resultado. Testes foi fundido dentro de Meus itens: os resultados de evidência (Approved/Fail/Limitation) aparecem direto nos cards, sem uma tela separada."
+    a: "Quality Board é a visão geral de todos os work items em fluxo de QA (In QA, In BETA, Ready to Beta, Ready to Prod), com filtros e gráficos por país/ambiente/Tested by. Meus itens é a visão pessoal — para Dev, os cards Assigned a você; para QA, além dos Assigned, os cards em que você é Tested by ou já registrou resultado. Testes foi fundido dentro de Meus itens: os resultados de evidência (Approved/Fail/Limitation) aparecem direto nos cards, sem uma tela separada."
+  },
+  {
+    q: "O que significam os termos \"Assigned\" e \"Tested by\"?",
+    a: "São os dois papéis padronizados de um work item, nos mesmos termos usados pelo Azure DevOps: Assigned é quem desenvolve/executa o card (o campo Assigned To do Azure); Tested by é o QA responsável por validar o card. Antes cada tela usava um nome diferente pro mesmo conceito (\"atribuído\", \"QA responsável\", \"assignee\") — agora os dois termos são consistentes em cards, filtros, exports e no modal do Work Item."
+  },
+  {
+    q: "Como funciona a criação de Work Items pelo Stark Hub?",
+    a: "Em Import Work Items, o botão \"Criar Work Item\" abre um assistente com um formulário por tipo (Epic, Feature, User Story, Bug, Task, Test Case). Ele preenche os campos do Azure via API, monta a descrição em HTML seguindo o padrão do time, aplica as tags automáticas de país (0-PAIS) e das áreas afetadas, permite anexar imagens/gifs e permite exportar/importar um template em JSON para reaproveitar o preenchimento."
+  },
+  {
+    q: "Posso trocar o idioma do Stark Hub?",
+    a: "Sim — no menu do avatar (canto superior direito, abaixo de Perfil) existe um seletor de idioma com Português (BR), English e Español. A preferência fica salva por usuário/navegador e se aplica em toda a navegação, cabeçalhos e ações principais."
   },
   {
     q: "Como funciona o registro de resultado de teste?",
@@ -25,7 +38,7 @@ const faqItems = [
   },
   {
     q: "Quem pode ver o quê? (níveis de acesso)",
-    a: "Dev vê Meus itens, Horas e Configurações pessoais. QA vê tudo que Dev vê, mais Quality Board e o modo QA de Meus itens (cards atribuídos + QA responsável + testados por você). Gestão vê tudo, mais Governança do time, Colaboradores, Import Work Items e as configurações globais (Produto, Funcionalidades, Conexões e Governança)."
+    a: "Dev vê Meus itens, Horas e Configurações pessoais. QA vê tudo que Dev vê, mais Quality Board e o modo QA de Meus itens (cards Assigned + Tested by + testados por você). Gestão vê tudo, mais Governança do time, Colaboradores, Import Work Items (com o assistente de criação de Work Item) e as configurações globais (Produto, Funcionalidades, Conexões e Governança)."
   },
   {
     q: "Onde ficam minhas conexões pessoais (Azure, pipelines, Slack)?",
@@ -46,6 +59,10 @@ const faqItems = [
   {
     q: "Posso exportar ou importar minhas configurações?",
     a: "Sim. Dev e QA exportam/importam apenas suas conexões pessoais. Gestão exporta/importa por escopo (Produto, Funcionalidades, Conexões, Governança) separadamente. Um arquivo de um nível de acesso é rejeitado se um usuário de outro nível tentar importá-lo, e exports de Gestão nunca incluem PAT nem webhook secreto compartilhado."
+  },
+  {
+    q: "As notificações sonoras usam sons de verdade?",
+    a: "Sim. Cada evento (novo item, item movido para QA/BETA, teste aprovado, teste reprovado, item aprovado/reprovado pelo dev, toast de erro) toca um arquivo de áudio próprio. Em Configurações > Notificações sonoras dá pra ligar/desligar cada tipo individualmente e testar o som antes de salvar."
   },
   {
     q: "Encontrei um bug ou tenho uma sugestão. O que faço?",
@@ -74,12 +91,12 @@ function FaqContent() {
 }
 
 const modules = [
-  { icon: "bi-check-square", title: "Quality Board", text: "Visão geral dos work items em fluxo de QA, com filtros, gráficos de status por ambiente/país e métricas por QA responsável." },
-  { icon: "bi-person-workspace", title: "Meus itens", text: "Cards pessoais (Dev) ou cards atribuídos + QA responsável + testados por você (QA), com resultados de teste integrados." },
-  { icon: "bi-shield-check", title: "Governança do time", text: "Horas x meta, cards sem apontamento, distribuição por país e relatório executivo para Gestão." },
+  { icon: "bi-check-square", title: "Quality Board", text: "Visão geral dos work items em fluxo de QA, com filtros, gráficos de status por ambiente/país e carga por Tested by." },
+  { icon: "bi-person-workspace", title: "Meus itens", text: "Cards pessoais (Dev) ou cards Assigned + Tested by + testados por você (QA), com resultados de teste integrados." },
+  { icon: "bi-shield-check", title: "Governança do time", text: "Horas x meta, cards sem apontamento, distribuição por país (qtd. ou horas) e relatório executivo para Gestão." },
   { icon: "bi-people", title: "Colaboradores", text: "Identidade, avatar, papéis (Dev/QA/Gestão) e aliases usados para cruzar dados do Azure com evidências de teste." },
-  { icon: "bi-cloud-arrow-down", title: "Import Work Items", text: "Importação de hierarquia de work items do Azure DevOps com pré-visualização antes de confirmar." },
-  { icon: "bi-gear", title: "Configurações", text: "Conexões pessoais (Dev/QA) ou globais (Gestão): Azure DevOps, pipelines, Slack e metas de governança." }
+  { icon: "bi-cloud-arrow-down", title: "Import Work Items", text: "Importação de hierarquia de work items do Azure DevOps, com pré-visualização, e o assistente de criação de Work Item (Epic/Feature/US/Bug/Task/Test Case) com tags e descrição automáticas." },
+  { icon: "bi-gear", title: "Configurações", text: "Conexões pessoais (Dev/QA) ou globais (Gestão): Azure DevOps, pipelines, Slack, notificações sonoras e metas de governança." }
 ];
 
 const accessLevelRows = [
@@ -130,6 +147,7 @@ function AboutContent() {
 }
 
 export function AboutWorkbench({ kind = "about" }) {
+  const { t } = useTranslation();
   const isFaq = kind === "faq";
   function exportCsv() {
     if (isFaq) {
@@ -147,8 +165,8 @@ export function AboutWorkbench({ kind = "about" }) {
     <section className="mbw-page">
       <WorkbenchHeader
         kicker="Stark Hub"
-        title={isFaq ? "FAQ" : "Sobre"}
-        subtitle={isFaq ? "Perguntas frequentes sobre módulos, dados e acesso." : "O que é o Stark Hub, como é organizado e quem pode ver o quê."}
+        title={isFaq ? t("pages.faq.title") : t("pages.about.title")}
+        subtitle={isFaq ? t("pages.faq.subtitle") : t("pages.about.subtitle")}
         actions={<Button onClick={exportCsv}><i className="bi bi-download" /> CSV</Button>}
       />
       <div className="mb-settings-card-react wide">

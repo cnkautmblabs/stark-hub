@@ -22,6 +22,40 @@ export function RechartsTooltip({ active, payload, label }) {
   );
 }
 
+// Tick de eixo categoria compartilhado: nomes longos ("Gabriel Spontoni")
+// quebravam em 2 linhas dentro da largura fixa do YAxis — o Recharts faz
+// wrap automatico quando o texto nao cabe. Em vez de alargar o grafico,
+// trunca com reticencias e mostra o nome completo via <title> nativo do
+// SVG (funciona como tooltip no hover em qualquer navegador).
+export function CompactAxisTick({ x, y, payload, width = 90, fontSize = 11, formatter }) {
+  const rawLabel = payload?.value ?? "";
+  const label = String(formatter ? formatter(rawLabel) : rawLabel);
+  const maxChars = Math.max(3, Math.floor(width / (fontSize * 0.62)));
+  const truncated = label.length > maxChars ? `${label.slice(0, maxChars - 1)}…` : label;
+  return (
+    <text x={x} y={y} dy={4} textAnchor="end" fontSize={fontSize} fill="var(--starkMuted)">
+      {truncated}
+      {truncated !== label && <title>{label}</title>}
+    </text>
+  );
+}
+
+// Tick de eixo categoria com bandeira do pais — reaproveita o mesmo CDN de
+// bandeiras do CountryVisual, mas como SVG <image> (tick de eixo do
+// Recharts so aceita elementos SVG, nao componentes React comuns).
+export function CountryFlagAxisTick({ x, y, payload, width = 50 }) {
+  const code = String(payload?.value ?? "");
+  const info = countries[code];
+  const title = info?.label ? `${code} - ${info.label}` : code;
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <title>{title}</title>
+      {info?.iso2 && <image href={flagUrl(info.iso2, 20)} x={-width} y={-7} width={16} height={11} />}
+      <text x={-width + 22} y={0} dy={4} textAnchor="start" fontSize={11} fill="var(--starkMuted)">{code}</text>
+    </g>
+  );
+}
+
 function initials(name) {
   return String(name || "?").trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 }

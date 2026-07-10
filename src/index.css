@@ -275,7 +275,7 @@ body {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 190px;
+  width: 215px;
   display: grid;
   gap: 4px;
   padding: 7px;
@@ -304,6 +304,31 @@ body {
 .stark-user-menu a:hover,
 .stark-user-menu button:hover {
   background: var(--starkSurfaceAlt);
+}
+.stark-user-menu-language {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  padding: 0 9px;
+  color: var(--starkText);
+  font-size: 12px;
+  font-weight: 800;
+}
+.stark-user-menu-language span {
+  flex: none;
+}
+.stark-user-menu-language select {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--starkBorder);
+  border-radius: 6px;
+  background: var(--starkSurfaceAlt);
+  color: var(--starkText);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 4px;
 }
 .stark-app-footer {
   min-width: 0;
@@ -2800,6 +2825,28 @@ body {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 7px;
 }
+.mbdhc-governance .mbdhc-kpi-clusters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  gap: 8px;
+}
+.mbdhc-governance .mbdhc-kpi-clusters .mbdhc-metric-cluster {
+  background: #fff;
+  border-radius: 12px;
+  padding: 10px 12px;
+  gap: 8px;
+}
+.mbdhc-governance .mbdhc-kpi-clusters .mbdhc-metric-cluster > strong {
+  flex: 1 0 100%;
+  font-size: 11px;
+}
+.mbdhc-governance .mbdhc-kpi-clusters .mbdhc-metric-cluster span {
+  min-width: 64px;
+  padding: 5px 10px;
+}
+.mbdhc-governance .mbdhc-kpi-clusters .mbdhc-metric-cluster b {
+  font-size: 16px;
+}
 .mbdhc-governance .mbdhc-kpi {
   min-height: 70px;
   background: #fff;
@@ -2950,6 +2997,56 @@ body {
 .mbdhc-governance .mbdhc-chart-card h3 {
   margin: 0 0 10px;
   font-size: 14px;
+}
+.mbdhc-governance .mbdhc-chart-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.mbdhc-governance .mbdhc-chart-card-head h3 {
+  margin: 0;
+}
+.mbdhc-governance .mbdhc-metric-toggle {
+  display: inline-flex;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  overflow: hidden;
+  flex: none;
+}
+.mbdhc-governance .mbdhc-metric-toggle button {
+  border: 0;
+  background: #fff;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.mbdhc-governance .mbdhc-metric-toggle button.active {
+  background: #0078d4;
+  color: #fff;
+}
+/* Legenda "discreta": antes competia visualmente com o grafico (mesmo
+   tamanho de fonte dos KPIs) — pedido do usuario pra ficar mais sutil,
+   como um rodape de referencia e nao um segundo bloco de destaque. */
+.mbdhc-governance .mbdhc-legend.discreet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 12px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #e7ecf3;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 700;
+}
+.mbdhc-governance .mbdhc-legend.discreet i {
+  width: 6px;
+  height: 6px;
+  margin-right: 4px;
+  opacity: .8;
 }
 .mbdhc-governance .mbdhc-bars,
 .mbdhc-governance .mbdhc-country-bars {
@@ -3549,6 +3646,21 @@ body {
 }
 :root[data-theme="dark"] .mbdhc-governance :is(.mbdhc-bar-row,.mbdhc-legend,.mbdhc-dev-env-details summary,.mbdhc-dev-env-details small,.mbdhc-country-pill strong,.mbdhc-overview-card footer) {
   color: #cbd5e1;
+}
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-legend.discreet {
+  color: #64748b;
+  border-color: #263244;
+}
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-metric-toggle {
+  border-color: #334155;
+}
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-metric-toggle button {
+  background: #111827;
+  color: #94a3b8;
+}
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-metric-toggle button.active {
+  background: #0078d4;
+  color: #fff;
 }
 :root[data-theme="dark"] .mbdhc-work-test-panel .mbaz-evidence-env-block,
 :root[data-theme="dark"] .mbdhc-work-test-panel .mbaz-evidence-journey {
@@ -7499,6 +7611,53 @@ body {
 .mb-my-summary-hour-kpis .above b { color: #9a6c00; }
 .mb-my-summary-hour-kpis .below b { color: #b42318; }
 .mb-my-summary-hour-kpis .met b { color: #107c10; }
+.mb-my-summary-card-kpis {
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 8px;
+}
+.mb-my-summary-card-kpis .mb-my-metric-cluster {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #dce3ec;
+  border-radius: 10px;
+  background: #fff;
+  padding: 7px 9px;
+}
+.mb-my-summary-card-kpis .mb-my-metric-cluster > strong {
+  flex: 1 0 100%;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.mb-my-summary-card-kpis .mb-my-metric-cluster span {
+  min-width: 56px;
+  min-height: 0;
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: #f8fafc;
+  padding: 4px 9px;
+  text-align: left;
+}
+.mb-my-summary-card-kpis .mb-my-metric-cluster b {
+  color: #0f172a;
+  font-size: 14px;
+  line-height: 1;
+}
+.mb-my-summary-card-kpis .mb-my-metric-cluster small {
+  color: #64748b;
+  font-size: 8px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.mb-my-summary-card-kpis .mb-my-metric-cluster.quality span { background: #eef6ff; }
 .mb-my-summary-links {
   display: inline-grid;
   grid-template-columns: repeat(3, minmax(82px, 1fr));
@@ -10009,6 +10168,28 @@ body {
 .mb-mgmt-dot {
   width: 9px;
   height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+.mb-mgmt-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--starkBorder, #e7ecf3);
+  color: var(--starkMuted, #64748b);
+  font-size: 10px;
+  font-weight: 700;
+}
+.mb-mgmt-chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.mb-mgmt-chart-legend i {
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex: none;
 }

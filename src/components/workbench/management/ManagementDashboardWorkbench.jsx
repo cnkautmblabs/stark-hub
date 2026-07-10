@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Bar, BarChart, Cell, LabelList, Tooltip, XAxis, YAxis, ResponsiveContainer } from "recharts";
 import { useAuth } from "../../../contexts/AuthContext.jsx";
 import { useWorkItems } from "../../../hooks/useWorkItems.js";
@@ -8,7 +9,7 @@ import { usePersistentState } from "../../../hooks/usePersistentState.js";
 import { compactSprintLabel } from "../../../utils/sprints.js";
 import { dateStamp, downloadCsv } from "../../../utils/csvExport.js";
 import { buildCollaboratorNameIndex, evidenceDedupeKey, evidenceEnvironments, findCollaboratorByName, isQaEvidenceEntry, normalizeResult } from "../../../utils/workbench/formatters.js";
-import { AvatarDot, ChartSkeleton, FilterCombobox, Kpi, KpiSkeleton, RechartsTooltip, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
+import { AvatarDot, ChartSkeleton, CompactAxisTick, FilterCombobox, Kpi, KpiSkeleton, RechartsTooltip, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
 
 const monthOrder = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
@@ -26,6 +27,7 @@ function sprintSortValue(label) {
 const deliveredTypes = ["Feature", "User Story", "Task", "Bug"];
 
 export function ManagementDashboardWorkbench() {
+  const { t } = useTranslation();
   const { profile, demoMode } = useAuth();
   const { items, loading: itemsLoading } = useWorkItems({ includeClosed: true });
   const { collaborators } = useCollaborators();
@@ -165,8 +167,8 @@ export function ManagementDashboardWorkbench() {
     <section className="mbw-page mb-mgmt-dashboard">
       <WorkbenchHeader
         kicker="Gerenciamento"
-        title="Dash executiva"
-        subtitle="Metricas agrupadas do projeto: entregas, QA, dev e governanca — multiplas sprints."
+        title={t("pages.managementDashboard.title")}
+        subtitle={t("pages.managementDashboard.subtitle")}
         demoMode={demoMode}
         actions={<><button type="button" className="mb-mgmt-refresh" onClick={exportManagementCsv}><i className="bi bi-download" /> CSV</button><button type="button" className="mb-mgmt-refresh" onClick={reloadEvidence}><i className="bi bi-arrow-clockwise" /> Atualizar</button></>}
       />
@@ -196,7 +198,7 @@ export function ManagementDashboardWorkbench() {
             <ResponsiveContainer width="100%" height={Math.max(160, featuresPerSprint.length * 34)}>
               <BarChart data={featuresPerSprint} layout="vertical" margin={{ top: 4, right: 30, bottom: 4, left: 4 }}>
                 <XAxis type="number" hide domain={[0, maxFeatureValue]} />
-                <YAxis type="category" dataKey="sprint" width={56} tick={{ fontSize: 11, fill: "var(--starkMuted)" }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="sprint" width={78} tick={<CompactAxisTick width={72} formatter={compactSprintLabel} />} axisLine={false} tickLine={false} />
                 <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
                 <Bar dataKey="total" name="Total" fill="#cbd5e1" radius={[0, 6, 6, 0]} barSize={10} />
                 <Bar dataKey="delivered" name="Entregue" fill="#16a34a" radius={[0, 6, 6, 0]} barSize={10}>
@@ -205,6 +207,7 @@ export function ManagementDashboardWorkbench() {
               </BarChart>
             </ResponsiveContainer>
           ) : <span className="mb-mgmt-empty">Sem dados no periodo.</span>}
+          {!loading && featuresPerSprint.length > 0 && <div className="mb-mgmt-chart-legend"><span><i style={{ background: "#cbd5e1" }} />Total</span><span><i style={{ background: "#16a34a" }} />Entregue</span></div>}
         </section>
 
         <section className="mb-mgmt-card">
@@ -213,7 +216,7 @@ export function ManagementDashboardWorkbench() {
             <ResponsiveContainer width="100%" height={Math.max(160, bugsPerSprint.length * 34)}>
               <BarChart data={bugsPerSprint} layout="vertical" margin={{ top: 4, right: 30, bottom: 4, left: 4 }}>
                 <XAxis type="number" hide domain={[0, maxBugValue]} />
-                <YAxis type="category" dataKey="sprint" width={56} tick={{ fontSize: 11, fill: "var(--starkMuted)" }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="sprint" width={78} tick={<CompactAxisTick width={72} formatter={compactSprintLabel} />} axisLine={false} tickLine={false} />
                 <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
                 <Bar dataKey="total" name="Bugs" fill="#dc2626" radius={[0, 6, 6, 0]}>
                   <LabelList dataKey="total" position="right" style={{ fill: "var(--starkMuted)", fontSize: 11 }} />
@@ -266,7 +269,7 @@ export function ManagementDashboardWorkbench() {
         </section>
 
         <section className="mb-mgmt-card">
-          <header><strong>Carga por QA</strong><small>Cards com QA responsavel no periodo</small></header>
+          <header><strong>Carga por QA</strong><small>Cards com Tested by no periodo</small></header>
           {loading ? <WorkbenchCardSkeleton rows={3} /> : (
             <div className="mb-mgmt-dev-table">
               <div className="mb-mgmt-dev-head"><span>QA</span><span /><span /><span>Cards</span></div>

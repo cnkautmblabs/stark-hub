@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   FiCopy,
   FiDownload,
@@ -13,7 +14,9 @@ import {
   AvatarDot,
   Button,
   ChartSkeleton,
+  CompactAxisTick,
   ConnectionGate,
+  CountryFlagAxisTick,
   CountryPills,
   CountryVisual,
   EmptyState,
@@ -393,6 +396,13 @@ export function QaBoardWorkbench() {
     return { id, label: person?.azureName || "Nao definido", count, color: person?.color || ["#64748b", "#2563eb", "#16a34a", "#d97706", "#7c3aed"][index % 5], person };
   });
   const qaBarData = [{ name: "carga", ...Object.fromEntries(qaMetrics.map((row) => [String(row.id || "none"), row.count])) }];
+  // O dominio do eixo TEM que ser a soma real dos buckets (nao filtered.length)
+  // — se algum item tiver qaCollaboratorId de alguem que nao esta mais em
+  // qaPeople (trocou de funcao, saiu do time), esse item nao cai em NENHUM
+  // bucket e a soma fica menor que filtered.length, deixando uma barra
+  // "incompleta" com um vao vazio no final mesmo a legenda batendo 100% do
+  // que ela mesma mostra — bug reportado em producao.
+  const qaBarTotal = qaMetrics.reduce((sum, row) => sum + row.count, 0);
   const testResultConfig = {
     pass: { label: "Approved", color: "#16a34a" },
     fail: { label: "Fail", color: "#dc2626" },
@@ -616,7 +626,7 @@ export function QaBoardWorkbench() {
                   <FilterCombobox label="QA" options={qaOptions} values={qaFilter} onChange={setQaFilter} placeholder="Buscar QA" renderOption={(option) => option.person ? <AvatarDot person={option.person} name={option.label} /> : option.label} />
                   <FilterCombobox label="Status" options={statusOptions} values={statusFilter} onChange={setStatusFilter} placeholder="Buscar status" />
                   <FilterCombobox label="Resultado" options={resultOptions} values={resultFilter} onChange={setResultFilter} placeholder="Buscar resultado" />
-                  <FilterCombobox label="Agrupar" options={[{ value: "none", label: "Sem agrupamento" }, { value: "ambiente", label: "Por ambiente" }, { value: "qa", label: "Por QA responsavel" }, { value: "assignee", label: "Por assignee" }, { value: "country", label: "Por pais" }]} values={[groupBy]} multiple={false} onChange={(value) => setGroupBy(value || "none")} />
+                  <FilterCombobox label="Agrupar" options={[{ value: "none", label: "Sem agrupamento" }, { value: "ambiente", label: "Por ambiente" }, { value: "qa", label: "Por Tested by" }, { value: "assignee", label: "Por Assigned" }, { value: "country", label: "Por pais" }]} values={[groupBy]} multiple={false} onChange={(value) => setGroupBy(value || "none")} />
                   <div className="mbaz-sort-wrap"><label>Detalhes dos testes</label><button id="mbaz-toggle-all-tests" className="mbaz-btn" type="button" aria-pressed={expandedIds.size > 0} onClick={toggleAllTests}>{expandedIds.size === filtered.length && filtered.length ? "Recolher todos" : "Expandir todos"}</button></div>
                   <div className="mbaz-sort-wrap"><label>Ordenar</label><select id="mbaz-sort" className="mbaz-select" value={sort} onChange={(event) => setSort(event.target.value)}><option value="changed_desc">Mais recentes</option><option value="title_asc">A-Z</option><option value="title_desc">Z-A</option><option value="bug_first">Bug primeiro</option><option value="story_first">User Story primeiro</option></select></div>
                   <div id="mbaz-sprint-filter" ref={sprintFilterRef} className={`mbw-combobox ${sprintOpen ? "open" : ""}`} data-kind="sprint">
@@ -715,11 +725,11 @@ export function QaBoardWorkbench() {
                 <div className="mbaz-qa-metrics"><ChartSkeleton rows={3} /></div>
               ) : (
                 <div id="mbaz-qa-metrics" className="mbaz-qa-metrics">
-                  <div className="mbaz-chart-head"><h3>Carga por QA</h3><span>{filtered.length} item(s)</span></div>
+                  <div className="mbaz-chart-head"><h3>Carga por QA</h3><span>{qaBarTotal} item(s)</span></div>
                   <div className="mbaz-qa-stack-wrap">
                     <ResponsiveContainer width="100%" height={40}>
                       <BarChart data={qaBarData} layout="vertical" margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-                        <XAxis type="number" hide domain={[0, Math.max(1, filtered.length)]} />
+                        <XAxis type="number" hide domain={[0, Math.max(1, qaBarTotal)]} />
                         <YAxis type="category" dataKey="name" hide />
                         <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
                         {qaMetrics.map((row) => (
@@ -818,6 +828,7 @@ export function QaBoardWorkbench() {
 }
 
 export function MyItemsWorkbench() {
+  const { t } = useTranslation();
   const { profile, user, demoMode } = useAuth();
   const { items, loading, refreshing, updateItem, addItem, reload, needsAzureIntegration, error } = useWorkItems();
   const { collaborators } = useCollaborators();
@@ -912,6 +923,13 @@ export function MyItemsWorkbench() {
     { key: "pending", label: "Pending", icon: "bi-dash-lg" }
   ];
   const environmentOptions = ["DEV", "QA", "BETA", "PROD"];
+  const myTestResultConfig = {
+    pass: { label: "Approved", color: "#16a34a", icon: "bi-check-lg" },
+    fail: { label: "Fail", color: "#dc2626", icon: "bi-x-lg" },
+    limitation: { label: "Limitation", color: "#d97706", icon: "bi-exclamation-triangle-fill" },
+    pending: { label: "Pending", color: "#94a3b8", icon: "bi-dash-lg" }
+  };
+  const myTestResultOrder = ["pass", "fail", "limitation", "pending"];
   const visibleItems = allMine.filter((item) => {
     const itemRecords = recordsForItem(item, evidence);
     const itemResults = itemRecords.length ? itemRecords.map((entry) => normalizeResult(entry.result || entry.status)) : ["pending"];
@@ -1063,7 +1081,7 @@ export function MyItemsWorkbench() {
       return [
         { key: "azure", label: "Cards do Azure", count: list.filter((item) => (item.myItemSources || []).includes("azure")).length, items: list.filter((item) => (item.myItemSources || []).includes("azure")) },
         { key: "tested", label: "Cards testados por mim", count: list.filter((item) => (item.myItemSources || []).includes("qa-testado")).length, items: list.filter((item) => (item.myItemSources || []).includes("qa-testado")) },
-        { key: "qa-owner", label: "Cards como QA responsavel", count: list.filter((item) => (item.myItemSources || []).includes("qa-responsavel")).length, items: list.filter((item) => (item.myItemSources || []).includes("qa-responsavel")) }
+        { key: "qa-owner", label: "Cards como Tested by", count: list.filter((item) => (item.myItemSources || []).includes("qa-responsavel")).length, items: list.filter((item) => (item.myItemSources || []).includes("qa-responsavel")) }
       ];
     }
     return [{ key: "all", label: "Meus itens", count: list.length, items: list }];
@@ -1073,8 +1091,8 @@ export function MyItemsWorkbench() {
     <section className={`mbw-page mb-my-page mb-my-items-sidebar mode-${viewMode} ${fullscreen ? "is-fullscreen" : ""}`}>
       <WorkbenchHeader
         kicker="Stark Hub"
-        title="Meus itens"
-        subtitle={isQa ? "Cards atribuidos no Azure, cards como QA responsavel e historico de testes." : "Work Items atribuidos ao usuario logado"}
+        title={t("pages.myItems.title")}
+        subtitle={isQa ? t("pages.myItems.subtitleQa") : t("pages.myItems.subtitleDev")}
         demoMode={demoMode}
         actions={<>
           <IconButton title={summaryCollapsed ? "Mostrar resumo" : "Ocultar resumo"} onClick={() => setSummaryCollapsed((value) => !value)}><i className={`bi ${summaryCollapsed ? "bi-layout-text-window" : "bi-layout-sidebar-inset"}`} /></IconButton>
@@ -1094,7 +1112,28 @@ export function MyItemsWorkbench() {
               <AvatarDot person={myCollaborator || { azureName: identityName, imageUrl: profile?.avatarUrl }} name={identityName} />
               <small>{visibleItems.length} de {allMine.length} item(ns) no filtro atual</small>
             </div>
-            <div className="mb-my-summary-card-kpis"><span><small>Total</small><b>{allMine.length}</b></span><span><small>Tasks</small><b>{tasks}</b></span><span><small>Bugs</small><b>{bugs}</b></span>{!isQa && <span title="Itens com build confirmado via Pipeline (QA/BETA)"><small>Confirmados em pipeline</small><b>{pipelineConfirmedTotal}</b></span>}{isQa && <><span><small>Testados por mim</small><b>{testedByMe}</b></span><span><small>Testados</small><b>{testedTotal}</b></span><span><small>QA responsavel</small><b>{qaResponsibleTotal}</b></span><span><small>Atribuidos Azure</small><b>{azureAssignedTotal}</b></span></>}</div>
+            {/* Eram ate 7 mini-cards soltos pra QA (mesmo problema de excesso
+                de metricas do dashboard de Gestao de equipe) — agrupados em
+                2 clusters com rotulo proprio: o que foi atribuido a mim, e o
+                que eu fiz como QA. */}
+            <div className="mb-my-summary-card-kpis">
+              <div className="mb-my-metric-cluster primary">
+                <strong>Meus itens</strong>
+                <span><b>{allMine.length}</b><small>total</small></span>
+                <span><b>{tasks}</b><small>tasks</small></span>
+                <span><b>{bugs}</b><small>bugs</small></span>
+                {!isQa && <span title="Itens com build confirmado via Pipeline (QA/BETA)"><b>{pipelineConfirmedTotal}</b><small>confirmados</small></span>}
+              </div>
+              {isQa && (
+                <div className="mb-my-metric-cluster quality">
+                  <strong>Atividade de QA</strong>
+                  <span><b>{testedByMe}</b><small>testados por mim</small></span>
+                  <span><b>{testedTotal}</b><small>testados</small></span>
+                  <span><b>{qaResponsibleTotal}</b><small>Tested by</small></span>
+                  <span><b>{azureAssignedTotal}</b><small>Assigned</small></span>
+                </div>
+              )}
+            </div>
           </div>
           <div className="mb-my-summary-hours-row">
             <div className="mb-my-summary-hour-kpis"><span><small>Horas</small><b>{formatHours(totalHours)}</b></span><span><small>Meta</small><b>{formatHours(goal)}</b></span><span className={balance > 0 ? "above" : balance < 0 ? "below" : "met"}><small>{balance > 0 ? "Excedente" : balance < 0 ? "Restante" : "Meta"}</small><b>{formatHours(Math.abs(balance))}</b></span></div>
@@ -1115,10 +1154,29 @@ export function MyItemsWorkbench() {
               </header>
               {!insightsCollapsed && <div className="mb-my-test-dashboard">
                 <div className="mb-my-test-chart">
-                  <div className="mb-my-test-chart-bar">
-                    {["pass", "fail", "limitation"].map((key) => filteredTestCounts[key] ? <span key={key} className={key} style={{ width: `${Math.max(5, (filteredTestCounts[key] / Math.max(filteredTestCounts.total, 1)) * 100)}%` }}><i className={`bi ${key === "pass" ? "bi-check-lg" : key === "fail" ? "bi-x-lg" : "bi-exclamation-triangle-fill"}`} /> {filteredTestCounts[key]}</span> : null)}
+                  {/* Barra antiga so desenhava pass/fail/limitation mas dividia
+                      pela largura de TODAS as evidencias (incluindo "pending"),
+                      entao qualquer evidencia sem resultado claro deixava um
+                      vao vazio na barra sem nenhuma explicacao — mesma familia
+                      de bug do "Carga por QA" do Quality Board. Agora "pending"
+                      vira um 4o segmento visivel e os segmentos sempre somam
+                      exatamente o total mostrado ao lado. */}
+                  <div className="mbaz-qa-stack-wrap">
+                    <ResponsiveContainer width="100%" height={40}>
+                      <BarChart data={[{ name: "resultado", ...Object.fromEntries(myTestResultOrder.map((key) => [key, filteredTestCounts[key] || 0])) }]} layout="vertical" margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                        <XAxis type="number" hide domain={[0, Math.max(1, filteredTestCounts.total)]} />
+                        <YAxis type="category" dataKey="name" hide />
+                        <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
+                        {myTestResultOrder.map((key) => (
+                          <Bar key={key} dataKey={key} name={myTestResultConfig[key].label} stackId="result" fill={myTestResultConfig[key].color} />
+                        ))}
+                      </BarChart>
+                    </ResponsiveContainer>
                   </div>
-                  <div className="mb-my-test-legend"><span><i className="bi bi-check-lg" /> Approved {filteredTestCounts.pass}</span><span><i className="bi bi-x-lg" /> Fail {filteredTestCounts.fail}</span><span><i className="bi bi-exclamation-triangle-fill" /> Limitation {filteredTestCounts.limitation}</span><strong>{filteredTestCounts.total} evidencia(s)</strong></div>
+                  <div className="mb-my-test-legend">
+                    {myTestResultOrder.map((key) => <span key={key}><i className={`bi ${myTestResultConfig[key].icon}`} /> {myTestResultConfig[key].label} {filteredTestCounts[key] || 0}</span>)}
+                    <strong>{filteredTestCounts.total} evidencia(s)</strong>
+                  </div>
                 </div>
                 <div className="mb-my-env-kpis">
                   {environmentOptions.map((env) => {
@@ -1242,8 +1300,8 @@ function MyQaBoardItemCard({ item, collaboratorsById, qaPeople, onOpen, onQaChan
   const age = itemAgeDays(item);
   const visibleTags = (item.tags || []).filter((tag) => !/^0-/.test(String(tag)));
   const sourceLabels = {
-    azure: "Azure atribuido",
-    "qa-responsavel": "QA responsavel",
+    azure: "Assigned",
+    "qa-responsavel": "Tested by",
     "qa-testado": "Testado por mim"
   };
 
@@ -1317,8 +1375,8 @@ function MyItemCard({ item, checked, onCheck, onOpen, onHours, pipeline }) {
   const itemUrl = item.url || "#";
   const testSummary = testSummaryForItem(item);
   const sourceLabels = {
-    azure: "Azure atribuido",
-    "qa-responsavel": "QA responsavel",
+    azure: "Assigned",
+    "qa-responsavel": "Tested by",
     "qa-testado": "Testado por mim"
   };
   return (
@@ -1399,6 +1457,7 @@ function goalProgressColor(percent) {
 }
 
 export function HoursWorkbench() {
+  const { t } = useTranslation();
   const { profile, demoMode } = useAuth();
   const { items, error, loading, refreshing, reload } = useWorkItems();
   const { collaborators } = useCollaborators();
@@ -1413,6 +1472,8 @@ export function HoursWorkbench() {
   const [roleGroup, setRoleGroup] = usePersistentState("starkHubFilters:governance:roleGroup", "all");
   const [viewMode, setViewMode] = usePersistentState("starkHubFilters:governance:viewMode", "grid");
   const [chartsCollapsed, setChartsCollapsed] = usePersistentState("starkHubFilters:governance:chartsCollapsed", false);
+  const [metaMetric, setMetaMetric] = usePersistentState("starkHubFilters:governance:metaMetric", "hours");
+  const [countryMetric, setCountryMetric] = usePersistentState("starkHubFilters:governance:countryMetric", "count");
   const [expanded, setExpanded] = useState(() => new Set());
   const [expandedTests, setExpandedTests] = useState(() => new Set());
   const goalDefault = getSetting("defaultGoalHours", defaultGoalHours);
@@ -1509,8 +1570,12 @@ export function HoursWorkbench() {
       const progressPercent = goal ? (completed / goal) * 100 : 0;
       const status = progressPercent < 100 ? "below" : progressPercent > 100 ? "above" : "met";
       const countryCounts = {};
-      devItems.forEach((item) => (item.countries || ["N/A"]).forEach((country) => { countryCounts[country] = (countryCounts[country] || 0) + 1; }));
-      return { ...dev, items: devItems, completed, tasks, bugs, userStories, features, testableItems, nonTestableItems, testedItems, cardsWithHours, cardsWithoutHours, missingHours, extraHours, progressPercent, goalStatus: status, countries: countryCounts, testMetrics, qaResponsibleCount: qaResponsibleItems.length, azureAssignedCount, pendingToTestCount };
+      const countryHours = {};
+      devItems.forEach((item) => (item.countries || ["N/A"]).forEach((country) => {
+        countryCounts[country] = (countryCounts[country] || 0) + 1;
+        countryHours[country] = (countryHours[country] || 0) + Number(item.completedHours || 0);
+      }));
+      return { ...dev, items: devItems, completed, tasks, bugs, userStories, features, testableItems, nonTestableItems, testedItems, cardsWithHours, cardsWithoutHours, missingHours, extraHours, progressPercent, goalStatus: status, countries: countryCounts, countryHours, testMetrics, qaResponsibleCount: qaResponsibleItems.length, azureAssignedCount, pendingToTestCount };
     }).sort((a, b) => a.displayName.localeCompare(b.displayName, "pt-BR"));
   }, [collaborators, goalDefault, periodItems, peopleById, peopleByName, evidence]);
 
@@ -1545,13 +1610,19 @@ export function HoursWorkbench() {
     extra: acc.extra + dev.extraHours
   }), { developers: 0, cards: 0, tasks: 0, bugs: 0, userStories: 0, features: 0, testable: 0, nonTestable: 0, tests: 0, pass: 0, fail: 0, limitation: 0, completed: 0, goal: 0, missing: 0, extra: 0 });
 
-  const countryTotals = Object.entries(filteredDevelopers.reduce((acc, dev) => {
+  const countryCountTotals = Object.entries(filteredDevelopers.reduce((acc, dev) => {
     Object.entries(dev.countries).forEach(([country, count]) => { acc[country] = (acc[country] || 0) + count; });
     return acc;
   }, {})).sort((a, b) => b[1] - a[1]);
+  const countryHoursTotals = Object.entries(filteredDevelopers.reduce((acc, dev) => {
+    Object.entries(dev.countryHours).forEach(([country, hours]) => { acc[country] = (acc[country] || 0) + hours; });
+    return acc;
+  }, {})).sort((a, b) => b[1] - a[1]);
+  const countryTotals = countryMetric === "hours" ? countryHoursTotals : countryCountTotals;
 
   const goalCounts = filteredDevelopers.reduce((acc, dev) => ({ ...acc, [dev.goalStatus]: (acc[dev.goalStatus] || 0) + 1 }), { below: 0, met: 0, above: 0 });
   const maxCompleted = Math.max(1, ...filteredDevelopers.map((dev) => Math.max(dev.completed, dev.goalHours)));
+  const maxCards = Math.max(1, ...filteredDevelopers.map((dev) => dev.items.length));
   const maxCountry = Math.max(1, ...countryTotals.map(([, count]) => count));
   // Card "Pai": o proprio usuario logado, sempre visivel (nao depende dos
   // filtros ativos). QA ve metricas de teste no lugar de Tasks/Bugs — para
@@ -1653,7 +1724,7 @@ export function HoursWorkbench() {
             <div className={`mbdhc-work-type-line ${String(item.type || "").toLowerCase()}`}><img className="mbdhc-work-type-icon" src={type.image} alt={item.type} /><strong>{formatWorkItemCode(item.id, item.type)}</strong><span>{item.type}</span></div>
             <h4 title={item.title}>{item.title}</h4>
             <div className="mbdhc-work-country-row"><CountryPills codes={item.countries || []} />{item.sprint && <span className="mbdhc-work-sprint">{compactSprintLabel(item.sprint)}</span>}</div>
-            <small>{item.qaGovernanceCard ? "QA responsavel" : "Azure atribuido"} - {item.state || "Sem status"} - {item.areaPath || "Sem area"}</small>
+            <small>{item.qaGovernanceCard ? "Tested by" : "Assigned"} - {item.state || "Sem status"} - {item.areaPath || "Sem area"}</small>
           </div>
           <div className="mbdhc-work-hours">
             <strong>{formatHours(item.completedHours)}</strong>
@@ -1797,8 +1868,8 @@ export function HoursWorkbench() {
     <section className="mbw-page mbdhc-page mbdhc-governance">
       <WorkbenchHeader
         kicker="Modulo 4"
-        title={ownIsQaOnly ? "Minhas metricas" : "Gestao da equipe"}
-        subtitle={ownIsQaOnly ? "Seu card com metricas de teste. A visao completa do time e restrita a Gestao/Gerente." : "Horas, metas, cards sem apontamento e distribuicao por pais."}
+        title={ownIsQaOnly ? t("nav.myMetrics") : t("pages.governance.title")}
+        subtitle={ownIsQaOnly ? "Seu card com metricas de teste. A visao completa do time e restrita a Gestao/Gerente." : t("pages.governance.subtitle")}
         demoMode={demoMode}
         actions={ownIsQaOnly
           ? <><Button onClick={() => downloadCsv(`minhas-metricas-${dateStamp()}.csv`, ["Colaborador", "Cards", "Tasks", "Bugs", "Horas", "Meta", "Sem horas"], ownDev ? [[ownDev.displayName, ownDev.items.length, ownDev.tasks, ownDev.bugs, ownDev.completed, ownDev.goalHours, ownDev.cardsWithoutHours]] : [])}><FiDownload /> CSV</Button><Button onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /> Atualizar</Button></>
@@ -1829,17 +1900,27 @@ export function HoursWorkbench() {
           <div className="mbdhc-filter-actions"><button className="mbdhc-button secondary" type="button" onClick={resetFilters}>Limpar filtros</button></div>
         </div>
       </details>
-      <section className="mbdhc-kpi-grid">
-        {loading ? <KpiSkeleton count={8} /> : (
+      {/* Eram 8 cards KPI soltos e identicos em peso visual — o usuario
+          pediu menos quantidade e melhor apresentacao. Agrupados em 2
+          clusters (Equipe/Entregas e Horas), no mesmo estilo compacto ja
+          usado nos cards de pessoa abaixo (mbdhc-metric-cluster). */}
+      <section className="mbdhc-kpi-clusters">
+        {loading ? <KpiSkeleton count={2} /> : (
           <>
-            <Kpi icon="bi-people" label="Colaboradores" value={totals.developers} />
-            <Kpi icon="bi-kanban" label="Cards" value={totals.cards} />
-            <Kpi icon="bi-hammer" label="Tasks" value={totals.tasks} tone="gold" />
-            <Kpi icon="bi-bug-fill" label="Bugs" value={totals.bugs} tone="red" />
-            <Kpi icon="bi-clock" label="Horas registradas" value={formatHours(totals.completed)} tone="blue" />
-            <Kpi icon="bi-bullseye" label="Meta total" value={formatHours(totals.goal)} />
-            <Kpi icon="bi-dash-lg" label="Horas pendentes" value={formatHours(totals.missing)} tone="red" />
-            <Kpi icon="bi-plus-lg" label="Excedente" value={`+${formatHours(totals.extra)}`} tone="gold" />
+            <div className="mbdhc-metric-cluster primary">
+              <strong>Equipe &amp; entregas</strong>
+              <span><b>{totals.developers}</b><small>colaboradores</small></span>
+              <span><b>{totals.cards}</b><small>cards</small></span>
+              <span><b>{totals.tasks}</b><small>tasks</small></span>
+              <span><b>{totals.bugs}</b><small>bugs</small></span>
+            </div>
+            <div className="mbdhc-metric-cluster quality">
+              <strong>Horas</strong>
+              <span><b>{formatHours(totals.completed)}</b><small>registradas</small></span>
+              <span><b>{formatHours(totals.goal)}</b><small>meta total</small></span>
+              <span className="fail"><b>{formatHours(totals.missing)}</b><small>pendentes</small></span>
+              <span className="limitation"><b>+{formatHours(totals.extra)}</b><small>excedente</small></span>
+            </div>
           </>
         )}
       </section>
@@ -1884,18 +1965,25 @@ export function HoursWorkbench() {
           ) : (
             <>
               <section className="mbdhc-chart-card">
-                <h3>Meta x realizado</h3>
+                <div className="mbdhc-chart-card-head">
+                  <h3>Meta x realizado</h3>
+                  <div className="mbdhc-metric-toggle">
+                    <button type="button" className={metaMetric === "hours" ? "active" : ""} onClick={() => setMetaMetric("hours")}>Horas</button>
+                    <button type="button" className={metaMetric === "qty" ? "active" : ""} onClick={() => setMetaMetric("qty")}>Qtd</button>
+                  </div>
+                </div>
                 <ResponsiveContainer width="100%" height={Math.max(160, filteredDevelopers.slice(0, 12).length * 32)}>
-                  <BarChart data={filteredDevelopers.slice(0, 12).map((dev) => ({ key: dev.key, name: shortName(dev.displayName), value: dev.completed, status: dev.goalStatus }))} layout="vertical" margin={{ top: 4, right: 36, bottom: 4, left: 4 }}>
-                    <XAxis type="number" hide domain={[0, maxCompleted]} />
-                    <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11, fill: "var(--starkMuted)" }} axisLine={false} tickLine={false} />
+                  <BarChart data={filteredDevelopers.slice(0, 12).map((dev) => ({ key: dev.key, name: shortName(dev.displayName), value: metaMetric === "hours" ? dev.completed : dev.items.length, status: dev.goalStatus }))} layout="vertical" margin={{ top: 4, right: 36, bottom: 4, left: 4 }}>
+                    <XAxis type="number" hide domain={[0, metaMetric === "hours" ? maxCompleted : maxCards]} />
+                    <YAxis type="category" dataKey="name" width={90} tick={<CompactAxisTick width={82} />} axisLine={false} tickLine={false} />
                     <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
                     <Bar dataKey="value" radius={[0, 6, 6, 0]}>
-                      {filteredDevelopers.slice(0, 12).map((dev) => <Cell key={dev.key} fill={goalStatusColor(dev.goalStatus)} />)}
-                      <LabelList dataKey="value" position="right" formatter={formatHours} style={{ fill: "var(--starkMuted)", fontSize: 11 }} />
+                      {filteredDevelopers.slice(0, 12).map((dev) => <Cell key={dev.key} fill={metaMetric === "hours" ? goalStatusColor(dev.goalStatus) : "#0078d4"} />)}
+                      <LabelList dataKey="value" position="right" formatter={metaMetric === "hours" ? formatHours : undefined} style={{ fill: "var(--starkMuted)", fontSize: 11 }} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
+                {metaMetric === "hours" && <div className="mbdhc-legend discreet"><span><i className="red" />Abaixo da meta</span><span><i className="blue" />Meta cumprida</span><span><i className="gold" />Acima da meta</span></div>}
               </section>
               <section className="mbdhc-chart-card">
                 <h3>Status das metas</h3>
@@ -1912,17 +2000,23 @@ export function HoursWorkbench() {
                   </ResponsiveContainer>
                   <div className="mbaz-donut-center"><strong>{totals.developers}</strong><small>Equipe</small></div>
                 </div>
-                <div className="mbdhc-legend"><span><i className="red" />Abaixo: {goalCounts.below}</span><span><i className="blue" />Cumprida: {goalCounts.met}</span><span><i className="gold" />Acima: {goalCounts.above}</span></div>
+                <div className="mbdhc-legend discreet"><span><i className="red" />Abaixo: {goalCounts.below}</span><span><i className="blue" />Cumprida: {goalCounts.met}</span><span><i className="gold" />Acima: {goalCounts.above}</span></div>
               </section>
               <section className="mbdhc-chart-card">
-                <h3>Distribuicao por pais</h3>
+                <div className="mbdhc-chart-card-head">
+                  <h3>Distribuicao por pais</h3>
+                  <div className="mbdhc-metric-toggle">
+                    <button type="button" className={countryMetric === "count" ? "active" : ""} onClick={() => setCountryMetric("count")}>Qtd</button>
+                    <button type="button" className={countryMetric === "hours" ? "active" : ""} onClick={() => setCountryMetric("hours")}>Horas</button>
+                  </div>
+                </div>
                 <ResponsiveContainer width="100%" height={Math.max(140, countryTotals.length * 34)}>
-                  <BarChart data={countryTotals.map(([country, count]) => ({ country, count }))} layout="vertical" margin={{ top: 4, right: 30, bottom: 4, left: 4 }}>
+                  <BarChart data={countryTotals.map(([country, value]) => ({ country, value }))} layout="vertical" margin={{ top: 4, right: 36, bottom: 4, left: 4 }}>
                     <XAxis type="number" hide domain={[0, maxCountry]} />
-                    <YAxis type="category" dataKey="country" width={50} tick={{ fontSize: 11, fill: "var(--starkMuted)" }} axisLine={false} tickLine={false} />
+                    <YAxis type="category" dataKey="country" width={50} tick={<CountryFlagAxisTick width={46} />} axisLine={false} tickLine={false} />
                     <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
-                    <Bar dataKey="count" radius={[0, 6, 6, 0]} fill="#0078d4">
-                      <LabelList dataKey="count" position="right" style={{ fill: "var(--starkMuted)", fontSize: 11 }} />
+                    <Bar dataKey="value" radius={[0, 6, 6, 0]} fill="#0078d4">
+                      <LabelList dataKey="value" position="right" formatter={countryMetric === "hours" ? formatHours : undefined} style={{ fill: "var(--starkMuted)", fontSize: 11 }} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>

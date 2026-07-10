@@ -1,5 +1,6 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   FiBarChart2,
   FiCheckSquare,
@@ -24,34 +25,35 @@ import { accessLevels } from "../../utils/constants.js";
 
 const navByRole = {
   [accessLevels.dev]: [
-    { to: "/dev", label: "Meus itens", icon: FiClipboard, flag: "showMyItems" },
-    { to: "/management/collaborators", label: "Perfil", icon: FiUsers, flag: "showGovernance" }
+    { to: "/dev", labelKey: "nav.myItems", icon: FiClipboard, flag: "showMyItems" },
+    { to: "/management/collaborators", labelKey: "nav.profile", icon: FiUsers, flag: "showGovernance" }
   ],
   [accessLevels.qa]: [
-    { to: "/qa", label: "Quality Board", icon: FiCheckSquare, flag: "showQaBoard" },
-    { to: "/dev", label: "Meus itens", icon: FiClipboard, flag: "showMyItems" },
-    { to: "/management", label: "Minhas metricas", icon: FiShield, flag: "showGovernance" },
-    { to: "/management/collaborators", label: "Perfil", icon: FiUsers, flag: "showGovernance" },
-    { to: "/import", label: "Import Work Items", icon: FiGitBranch, flag: "showImportWorkItems" }
+    { to: "/qa", labelKey: "nav.qualityBoard", icon: FiCheckSquare, flag: "showQaBoard" },
+    { to: "/dev", labelKey: "nav.myItems", icon: FiClipboard, flag: "showMyItems" },
+    { to: "/management", labelKey: "nav.myMetrics", icon: FiShield, flag: "showGovernance" },
+    { to: "/management/collaborators", labelKey: "nav.profile", icon: FiUsers, flag: "showGovernance" },
+    { to: "/import", labelKey: "nav.importWorkItems", icon: FiGitBranch, flag: "showImportWorkItems" }
   ],
   [accessLevels.gestao]: [
-    { to: "/qa", label: "Quality Board", icon: FiCheckSquare, flag: "showQaBoard" },
-    { to: "/dev", label: "Meus itens", icon: FiClipboard, flag: "showMyItems" },
-    { to: "/management", label: "Gestao da equipe", icon: FiShield, flag: "showGovernance" },
-    { to: "/management/collaborators", label: "Perfil", icon: FiUsers, flag: "showGovernance" },
-    { to: "/import", label: "Import Work Items", icon: FiGitBranch, flag: "showImportWorkItems" }
+    { to: "/qa", labelKey: "nav.qualityBoard", icon: FiCheckSquare, flag: "showQaBoard" },
+    { to: "/dev", labelKey: "nav.myItems", icon: FiClipboard, flag: "showMyItems" },
+    { to: "/management", labelKey: "nav.teamManagement", icon: FiShield, flag: "showGovernance" },
+    { to: "/management/collaborators", labelKey: "nav.profile", icon: FiUsers, flag: "showGovernance" },
+    { to: "/import", labelKey: "nav.importWorkItems", icon: FiGitBranch, flag: "showImportWorkItems" }
   ],
   [accessLevels.gerente]: [
-    { to: "/qa", label: "Quality Board", icon: FiCheckSquare, flag: "showQaBoard" },
-    { to: "/dev", label: "Meus itens", icon: FiClipboard, flag: "showMyItems" },
-    { to: "/management", label: "Gestao da equipe", icon: FiShield, flag: "showGovernance" },
-    { to: "/management/dashboard", label: "Gestao do projeto", icon: FiBarChart2, flag: "showGovernance" },
-    { to: "/management/collaborators", label: "Perfil", icon: FiUsers, flag: "showGovernance" },
-    { to: "/import", label: "Import Work Items", icon: FiGitBranch, flag: "showImportWorkItems" }
+    { to: "/qa", labelKey: "nav.qualityBoard", icon: FiCheckSquare, flag: "showQaBoard" },
+    { to: "/dev", labelKey: "nav.myItems", icon: FiClipboard, flag: "showMyItems" },
+    { to: "/management", labelKey: "nav.teamManagement", icon: FiShield, flag: "showGovernance" },
+    { to: "/management/dashboard", labelKey: "nav.projectManagement", icon: FiBarChart2, flag: "showGovernance" },
+    { to: "/management/collaborators", labelKey: "nav.profile", icon: FiUsers, flag: "showGovernance" },
+    { to: "/import", labelKey: "nav.importWorkItems", icon: FiGitBranch, flag: "showImportWorkItems" }
   ]
 };
 
 export default function Sidebar({ collapsed, onToggle }) {
+  const { t } = useTranslation();
   const { profile } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { isEnabled } = useFeatureFlags();
@@ -70,28 +72,28 @@ export default function Sidebar({ collapsed, onToggle }) {
       </div>
 
       <nav className="flex-grow-1 py-2">
-        <NavLink to="/" end className="stark-nav-link">
-          <FiHome /> <span className="stark-nav-label">Inicio</span>
+        <NavLink to="/" end className="stark-nav-link" title={t("nav.home")}>
+          <FiHome /> <span className="stark-nav-label">{t("nav.home")}</span>
         </NavLink>
         {items.map((item) => (
-          <NavLink key={item.to} to={item.to} end={item.to === "/management"} className="stark-nav-link">
-            <item.icon /> <span className="stark-nav-label">{item.label}</span>
+          <NavLink key={item.to} to={item.to} end={item.to === "/management"} className="stark-nav-link" title={t(item.labelKey)}>
+            <item.icon /> <span className="stark-nav-label">{t(item.labelKey)}</span>
           </NavLink>
         ))}
         <hr className="mx-3" />
-        <NavLink to="/settings" className="stark-nav-link">
-          <FiSettings /> <span className="stark-nav-label">Configuracoes</span>
+        <NavLink to="/settings" className="stark-nav-link" title={t("nav.settings")}>
+          <FiSettings /> <span className="stark-nav-label">{t("nav.settings")}</span>
         </NavLink>
         {isEnabled("showThemeToggle") && (
-          <button type="button" className="stark-nav-link stark-nav-button" onClick={toggleTheme}>
-            <ThemeIcon /> <span className="stark-nav-label">Tema</span>
+          <button type="button" className="stark-nav-link stark-nav-button" onClick={toggleTheme} title={t("nav.theme")}>
+            <ThemeIcon /> <span className="stark-nav-label">{t("nav.theme")}</span>
           </button>
         )}
-        <NavLink to="/faq" className="stark-nav-link">
-          <FiHelpCircle /> <span className="stark-nav-label">FAQ</span>
+        <NavLink to="/faq" className="stark-nav-link" title={t("nav.faq")}>
+          <FiHelpCircle /> <span className="stark-nav-label">{t("nav.faq")}</span>
         </NavLink>
-        <NavLink to="/about" className="stark-nav-link">
-          <FiInfo /> <span className="stark-nav-label">Sobre</span>
+        <NavLink to="/about" className="stark-nav-link" title={t("nav.about")}>
+          <FiInfo /> <span className="stark-nav-label">{t("nav.about")}</span>
         </NavLink>
       </nav>
 
@@ -99,7 +101,7 @@ export default function Sidebar({ collapsed, onToggle }) {
         type="button"
         className="stark-sidebar-toggle"
         onClick={onToggle}
-        title={collapsed ? "Expandir menu" : "Recolher menu"}
+        title={collapsed ? t("nav.expandMenu") : t("nav.collapseMenu")}
       >
         {collapsed ? <FiChevronsRight /> : <FiChevronsLeft />}
       </button>

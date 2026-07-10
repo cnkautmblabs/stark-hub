@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { FiDownload, FiUpload } from "react-icons/fi";
 import { useAuth } from "../../../contexts/AuthContext.jsx";
 import { useAppSettings } from "../../../hooks/useAppSettings.js";
@@ -328,6 +329,7 @@ function ManualItemForm({ items, onAdd }) {
 }
 
 export function ImportWorkbench() {
+  const { t } = useTranslation();
   const { profile, demoMode } = useAuth();
   const { getSetting } = useAppSettings();
   const { runImport, importing, result } = useHierarchyImport();
@@ -595,8 +597,8 @@ export function ImportWorkbench() {
     <section className="mbw-page mbwi-page">
       <WorkbenchHeader
         kicker="Modulo 5"
-        title="Import Work Items"
-        subtitle="Monte a hierarquia manualmente ou cole um CSV, revise a previa e importe."
+        title={t("pages.import.title")}
+        subtitle={t("pages.import.subtitle")}
         demoMode={demoMode}
         actions={<Button tone="primary" onClick={() => setShowWizard(true)}><i className="bi bi-magic" /> Criar Work Item</Button>}
       />

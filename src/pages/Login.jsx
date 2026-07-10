@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import ReactorLogo from "../components/layout/ReactorLogo.jsx";
 import BrandFooter from "../components/layout/BrandFooter.jsx";
@@ -21,6 +22,7 @@ const particles = [
 ];
 
 export default function Login() {
+  const { t } = useTranslation();
   const { signInWithGoogle, enterDemoMode, demoMode, user, oauthError } = useAuth();
   const navigate = useNavigate();
 
@@ -54,8 +56,8 @@ export default function Login() {
       <div className="stark-login-content d-flex flex-column align-items-center justify-content-center min-vh-100 gap-4 px-3 text-center">
         <ReactorLogo size={72} />
         <div>
-          <h1 className="fw-bold mb-1 text-white">Stark Hub</h1>
-          <p className="stark-text-cyan mb-0">Plataforma de governança, QA e produtividade da equipe</p>
+          <h1 className="fw-bold mb-1 text-white">{t("login.title")}</h1>
+          <p className="stark-text-cyan mb-0">{t("login.subtitle")}</p>
         </div>
 
         {!isSupabaseConfigured && (
@@ -71,7 +73,7 @@ export default function Login() {
         )}
 
         <button className="btn btn-dark btn-lg d-flex align-items-center gap-2" onClick={signInWithGoogle} disabled={!isSupabaseConfigured}>
-          <i className="bi bi-google" /> Entrar com Google
+          <i className="bi bi-google" /> {t("login.signInGoogle")}
         </button>
         <p className="text-white-50 small mb-0" style={{ maxWidth: 420 }}>
           {allowedEmailDomains.length ? `Somente contas dos domínios ${allowedEmailDomains.join(" e ")} podem acessar.` : "Configure os dominios permitidos em VITE_ALLOWED_EMAIL_DOMAINS para restringir o acesso."}
@@ -83,15 +85,15 @@ export default function Login() {
             className="form-select"
             defaultValue=""
             onChange={handleDemoSelect}
-            aria-label="Modo demonstração"
+            aria-label={t("login.demoModeLabel")}
           >
-            <option value="" disabled>Modo demonstração</option>
+            <option value="" disabled>{t("login.demoModePlaceholder")}</option>
             {demoRoles.map((role) => (
               <option key={role} value={role}>{accessLevelLabels[role]}</option>
             ))}
           </select>
           <p className="stark-text-cyan small mt-2 mb-0">
-            Explore com dados de exemplo, sem precisar de conta — só consulta, nada é salvo.
+            {t("login.demoModeHint")}
           </p>
         </div>
 

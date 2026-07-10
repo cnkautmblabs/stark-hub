@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Link, Outlet } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { FiLogOut, FiUser } from "react-icons/fi";
 import Sidebar from "./Sidebar.jsx";
 import { useAuth } from "../../contexts/AuthContext.jsx";
@@ -8,6 +9,7 @@ import { accessLevelLabels, accessLevels } from "../../utils/constants.js";
 import { normalize } from "../../utils/workbench/formatters.js";
 import { IdentityAvatar } from "../workbench/ui/WorkbenchPrimitives.jsx";
 import { BrowserNotificationWatcher } from "../common/BrowserNotificationWatcher.jsx";
+import { LanguageSwitcher } from "../common/LanguageSwitcher.jsx";
 
 function MBLabsMark() {
   const base = import.meta.env.BASE_URL;
@@ -20,6 +22,7 @@ function MBLabsMark() {
 }
 
 export default function Layout() {
+  const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("starkHubSidebarCollapsed") === "1");
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const { profile, user, demoMode, signOut, isRealAdmin, viewAsRole, setViewAsRole } = useAuth();
@@ -34,7 +37,7 @@ export default function Layout() {
   const isAdmin = Boolean(profile?.isAdmin || profile?.accessLevel === accessLevels.admin);
   const accessLabel = isAdmin && profile?.accessLevel && profile?.accessLevel !== accessLevels.admin
     ? `${accessLevelLabels[profile.accessLevel] || profile.accessLevel} (Admin)`
-    : accessLevelLabels[profile?.accessLevel] || "Acesso";
+    : accessLevelLabels[profile?.accessLevel] || t("topbar.accessFallback");
 
   function handleToggle() {
     setCollapsed((current) => {
@@ -60,14 +63,14 @@ export default function Layout() {
             <small>{accessLabel}</small>
           </div>
           {isRealAdmin && (
-            <label className="stark-admin-sandbox" title="Sandbox de Admin: ver o app como outro nivel de acesso, sem trocar de conta. Vale em todas as telas.">
+            <label className="stark-admin-sandbox" title={t("topbar.sandboxTitle")}>
               <i className="bi bi-eye" />
               <select value={viewAsRole || ""} onChange={(event) => setViewAsRole(event.target.value || null)}>
-                <option value="">Ver como: Admin (real)</option>
-                <option value={accessLevels.dev}>Ver como: Dev</option>
-                <option value={accessLevels.qa}>Ver como: QA</option>
-                <option value={accessLevels.gestao}>Ver como: Gestão</option>
-                <option value={accessLevels.gerente}>Ver como: Gerente</option>
+                <option value="">{t("topbar.viewAsAdmin")}</option>
+                <option value={accessLevels.dev}>{t("topbar.viewAsDev")}</option>
+                <option value={accessLevels.qa}>{t("topbar.viewAsQa")}</option>
+                <option value={accessLevels.gestao}>{t("topbar.viewAsGestao")}</option>
+                <option value={accessLevels.gerente}>{t("topbar.viewAsGerente")}</option>
               </select>
             </label>
           )}
@@ -81,9 +84,10 @@ export default function Layout() {
             </button>
             {userMenuOpen && (
               <div className="stark-user-menu">
-                <div className="stark-user-menu-level">Nível de acesso: <b>{accessLabel}</b></div>
-                <Link to="/management/collaborators" onClick={() => setUserMenuOpen(false)}><FiUser /> Perfil</Link>
-                <button type="button" onClick={handleSignOut}><FiLogOut /> {demoMode ? "Sair do demo" : "Sair"}</button>
+                <div className="stark-user-menu-level">{t("topbar.accessLevelPrefix")}: <b>{accessLabel}</b></div>
+                <Link to="/management/collaborators" onClick={() => setUserMenuOpen(false)}><FiUser /> {t("nav.profile")}</Link>
+                <LanguageSwitcher />
+                <button type="button" onClick={handleSignOut}><FiLogOut /> {demoMode ? t("topbar.signOutDemo") : t("topbar.signOut")}</button>
               </div>
             )}
           </div>

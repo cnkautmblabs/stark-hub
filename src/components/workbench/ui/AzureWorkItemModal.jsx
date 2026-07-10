@@ -531,7 +531,7 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
                   ) : <p><IdentityAvatar name={assigneeDisplayName} imageUrl={item.assigneeImageUrl} size={28} /> <strong>{assigneeDisplayName}</strong></p>}
                 </div>
                 <div>
-                  <span>QA responsavel</span>
+                  <span>Tested by</span>
                   {onUpdateItem ? <QaPicker value={item.qaCollaboratorId || ""} onChange={(qaCollaboratorId) => onUpdateItem({ qaCollaboratorId: qaCollaboratorId || null })} people={qaPeople} /> : <p><IdentityAvatar name={qaDisplayName} imageUrl={qaResponsible?.imageUrl || qaResponsible?.avatarUrl} color={qaResponsible?.color} size={28} /> <strong>{qaDisplayName}</strong></p>}
                 </div>
                 <div>

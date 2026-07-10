@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { FiCheckCircle, FiClock, FiCopy, FiDownload, FiPlus, FiPrinter, FiShield, FiUser } from "react-icons/fi";
 import { supabase } from "../../../lib/supabaseClient.js";
 import { useAuth } from "../../../contexts/AuthContext.jsx";
@@ -309,7 +310,7 @@ function DevPanel({ loading, myItems, completedHours, goalHours, hoursPercent })
       <div className="mb-home-kpis">
         {loading ? <KpiSkeleton count={4} /> : (
           <>
-            <Kpi icon="bi-kanban" label="Cards atribuidos" value={myItems.length} />
+            <Kpi icon="bi-kanban" label="Assigned" value={myItems.length} />
             <Kpi icon="bi-hammer" label="Tasks" value={tasks} tone="gold" />
             <Kpi icon="bi-bug-fill" label="Bugs" value={bugs} tone="red" />
             <Kpi icon="bi-clock" label="Horas" value={`${formatHours(completedHours)} / ${formatHours(goalHours)}`} color="#2563eb" />
@@ -427,6 +428,7 @@ function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, preview
 }
 
 export function WorkbenchHome() {
+  const { t } = useTranslation();
   const { profile, user, demoMode } = useAuth();
   const { items, loading } = useWorkItems();
   const { evidence } = useTestEvidence();
@@ -757,7 +759,7 @@ export function WorkbenchHome() {
       body: <WidgetsGrid widgets={widgets} onRemove={removeWidget} onReorder={reorderWidgets} onEdit={setEditingWidget} />
     },
     devPanel: {
-      subtitle: "Cards atribuidos e horas do periodo.",
+      subtitle: "Cards Assigned e horas do periodo.",
       summary: `${myItems.length} card(s) · ${formatHours(completedHours)} / ${formatHours(goalHours)}`,
       body: <DevPanel loading={loading} myItems={myItems} completedHours={completedHours} goalHours={goalHours} hoursPercent={hoursPercent} />
     },
@@ -831,7 +833,7 @@ export function WorkbenchHome() {
     <section className="mbw-page mb-home-page">
       <WorkbenchHeader
         kicker="Stark Hub"
-        title={`Ola, ${displayName.split(" ")[0] || "time"}`}
+        title={t("pages.home.greeting", { name: displayName.split(" ")[0] || "time" })}
         subtitle={`${accessLabel} · ${now.toLocaleDateString("pt-BR")} · ${now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`}
         demoMode={demoMode}
         actions={<Button onClick={exportHomeCsv}><FiDownload /> CSV</Button>}
