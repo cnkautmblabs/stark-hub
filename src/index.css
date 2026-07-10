@@ -1092,7 +1092,7 @@ body {
 }
 .mb-home-quick {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
   gap: 8px;
 }
 .mb-home-quick a {
@@ -1320,7 +1320,7 @@ body {
 }
 .mb-home-widgets {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
   gap: 10px;
 }
 .mb-home-widget {
@@ -2211,7 +2211,7 @@ body {
 }
 .mbw-form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
   gap: 10px;
 }
 .mbw-kpi-row {
@@ -2325,7 +2325,7 @@ body {
 }
 .mbw-home-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(160px, 1fr));
+  grid-template-columns: repeat(2, minmax(min(160px, 100%), 1fr));
   gap: 10px;
   width: min(520px, 100%);
   margin-top: 18px;
@@ -2542,7 +2542,7 @@ body {
 
 .mbaz-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
   gap: 12px;
 }
 .mbaz-card {
@@ -2664,7 +2664,7 @@ body {
 
 .mbdhc-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
   gap: 12px;
 }
 .mbdhc-person {
@@ -2763,7 +2763,7 @@ body {
   border-top: 1px solid var(--mbdhc-border);
   padding: 12px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
   gap: 10px;
   align-items: end;
 }
@@ -3057,7 +3057,7 @@ body {
   gap: 10px;
 }
 .mbdhc-governance .mbdhc-dev-grid.mode-grid {
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
 }
 .mbdhc-governance .mbdhc-dev-grid.mode-list,
 .mbdhc-governance .mbdhc-dev-grid.mode-compact {
@@ -3318,7 +3318,7 @@ body {
 }
 .mbdhc-governance .mbdhc-dev-metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(64px, 100%), 1fr));
   gap: 4px;
 }
 
@@ -4165,7 +4165,7 @@ body {
 }
 .mbw-about-modules {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
   gap: 10px;
 }
 .mbw-about-module {
@@ -5000,7 +5000,7 @@ body {
   top: 0;
   z-index: 3;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
   gap: 6px;
   background: rgba(246,248,251,.96);
   border-bottom: 1px solid #d7dde8;
@@ -7301,7 +7301,7 @@ body {
 .mb-my-summary-card-kpis,
 .mb-my-summary-hour-kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(88px, 100%), 1fr));
   gap: 5px;
   min-width: 0;
 }
@@ -7843,14 +7843,14 @@ body {
   border-top: 1px solid #d7dde8;
 }
 .mb-my-items-sidebar.mode-grid .mb-my-group-body {
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
   align-items: start;
 }
 .mb-my-items-sidebar.mode-grid .mb-my-items-list.is-grouped {
   grid-template-columns: 1fr;
 }
 .mb-my-items-sidebar.mode-grid .mb-my-items-list {
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
   align-items: start;
 }
 .mb-my-items-sidebar.mode-grid .mb-my-items-list.is-grouped {
@@ -7865,7 +7865,7 @@ body {
   width: 100%;
 }
 .mbw-card-skeleton-list.mode-grid {
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
   align-items: start;
 }
 .mbw-card-skeleton-list.mode-compact .mbw-card-skeleton-card {
@@ -9068,7 +9068,7 @@ body {
   gap: 10px;
 }
 .mbaz-tests-page .mbaz-evidence-cards.grid {
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
   align-items: start;
 }
 .mbaz-tests-page .mbaz-evidence-cards.compact .mbaz-evidence-card {
@@ -9314,6 +9314,17 @@ body {
   .mbaz-tests-page .mbaz-evidence-cards.grid {
     grid-template-columns: 1fr;
   }
+  /* Card de evidencia (modo lista) tinha 2 colunas com minimo fixo
+     (260px+300px) que nao cabiam numa tela estreita — o item de status
+     (grid-column:3) so precisa da 3a coluna quando ha espaco de sobra. */
+  .mbaz-tests-page .mbaz-evidence-card {
+    grid-template-columns: 1fr;
+  }
+  .mbaz-tests-page .mbaz-evidence-card .mbaz-evidence-last-status {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+  }
 }
 /* ---------- Meus itens refreshed command panel ---------- */
 .mb-my-page.mb-my-items-sidebar {
@@ -9346,7 +9357,7 @@ body {
   background: #fff;
 }
 .mb-my-summary-card-kpis {
-  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(112px, 100%), 1fr));
 }
 .mb-my-summary-card-kpis span,
 .mb-my-summary-hour-kpis span {
