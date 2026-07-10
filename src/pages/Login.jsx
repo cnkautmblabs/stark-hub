@@ -62,13 +62,13 @@ export default function Login() {
 
         {!isSupabaseConfigured && (
           <div className="alert alert-warning d-flex align-items-center gap-2" style={{ maxWidth: 480 }}>
-            <FiAlertTriangle /> Supabase não configurado (.env.local).
+            <FiAlertTriangle /> {t("login.supabaseNotConfigured")}
           </div>
         )}
 
         {oauthError && (
           <div className="alert alert-danger d-flex align-items-center gap-2" style={{ maxWidth: 480 }}>
-            <FiAlertTriangle /> Falha no login: {oauthError}
+            <FiAlertTriangle /> {t("login.loginFailed", { message: oauthError })}
           </div>
         )}
 
@@ -76,8 +76,8 @@ export default function Login() {
           <i className="bi bi-google" /> {t("login.signInGoogle")}
         </button>
         <p className="text-white-50 small mb-0" style={{ maxWidth: 420 }}>
-          {allowedEmailDomains.length ? `Somente contas dos domínios ${allowedEmailDomains.join(" e ")} podem acessar.` : "Configure os dominios permitidos em VITE_ALLOWED_EMAIL_DOMAINS para restringir o acesso."}
-          Após o login, aguarde a liberação do administrador.
+          {allowedEmailDomains.length ? t("login.domainRestriction", { domains: allowedEmailDomains.join(" e ") }) : t("login.domainRestrictionMissing")}
+          {" "}{t("login.waitForApproval")}
         </p>
 
         <div style={{ width: "100%", maxWidth: 300 }}>
@@ -89,7 +89,7 @@ export default function Login() {
           >
             <option value="" disabled>{t("login.demoModePlaceholder")}</option>
             {demoRoles.map((role) => (
-              <option key={role} value={role}>{accessLevelLabels[role]}</option>
+              <option key={role} value={role}>{role === "gestao" ? t("collaborators.roleGestao") : role === "gerente" ? t("collaborators.roleGerente") : accessLevelLabels[role]}</option>
             ))}
           </select>
           <p className="stark-text-cyan small mt-2 mb-0">

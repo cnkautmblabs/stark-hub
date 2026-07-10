@@ -28,14 +28,6 @@ import { Button, Kpi, KpiSkeleton, WorkbenchCardSkeleton, WorkbenchHeader } from
 const SHORTCUT_TITLE_MAX = 10;
 
 const HOME_SECTION_DEFAULT_ORDER = ["widgets", "devPanel", "qaPanel", "activity", "governance", "summary"];
-const HOME_SECTION_TITLES = {
-  widgets: "Painel",
-  devPanel: "Painel Dev",
-  qaPanel: "Painel QA",
-  activity: "Atualizacoes recentes",
-  governance: "Gestao da equipe"
-};
-const widgetTitles = { note: "Nota", link: "Link", shortcut: "Atalho" };
 
 function escapeHtml(text) {
   return String(text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -114,16 +106,17 @@ function useOutsideClick(open, onClose) {
 }
 
 function AddWidgetMenu({ onPick }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const rootRef = useOutsideClick(open, () => setOpen(false));
   return (
     <div ref={rootRef} className="mb-home-add-menu">
-      <Button tone="primary" onClick={() => setOpen((value) => !value)}><FiPlus /> Adicionar</Button>
+      <Button tone="primary" onClick={() => setOpen((value) => !value)}><FiPlus /> {t("home.addButton")}</Button>
       {open && (
         <div className="mb-home-add-options">
-          <button type="button" onClick={() => { onPick("note"); setOpen(false); }}><i className="bi bi-sticky" /> Nota</button>
-          <button type="button" onClick={() => { onPick("link"); setOpen(false); }}><i className="bi bi-link-45deg" /> Link</button>
-          <button type="button" onClick={() => { onPick("shortcut"); setOpen(false); }}><i className="bi bi-rocket-takeoff" /> Atalho</button>
+          <button type="button" onClick={() => { onPick("note"); setOpen(false); }}><i className="bi bi-sticky" /> {t("home.addNote")}</button>
+          <button type="button" onClick={() => { onPick("link"); setOpen(false); }}><i className="bi bi-link-45deg" /> {t("home.addLink")}</button>
+          <button type="button" onClick={() => { onPick("shortcut"); setOpen(false); }}><i className="bi bi-rocket-takeoff" /> {t("home.addShortcut")}</button>
         </div>
       )}
     </div>
@@ -133,11 +126,11 @@ function AddWidgetMenu({ onPick }) {
 // Um atalho importado invalido nao pode virar um card quebrado (sem link,
 // sem titulo, titulo estourando o layout do botao) — valida campo a campo
 // antes de aceitar, e reporta exatamente quais entradas foram rejeitadas.
-function validateShortcutEntry(entry) {
-  if (!entry || typeof entry !== "object") return "não é um objeto valido";
-  if (!entry.title || !String(entry.title).trim()) return "sem titulo";
-  if (String(entry.title).trim().length > SHORTCUT_TITLE_MAX) return `titulo com mais de ${SHORTCUT_TITLE_MAX} caracteres`;
-  if (!entry.url || !isValidHttpUrl(entry.url)) return "URL invalida";
+function validateShortcutEntry(entry, t) {
+  if (!entry || typeof entry !== "object") return t("home.shortcutInvalidEntry");
+  if (!entry.title || !String(entry.title).trim()) return t("home.shortcutMissingTitle");
+  if (String(entry.title).trim().length > SHORTCUT_TITLE_MAX) return t("home.shortcutTitleTooLong", { max: SHORTCUT_TITLE_MAX });
+  if (!entry.url || !isValidHttpUrl(entry.url)) return t("home.shortcutInvalidUrl");
   return null;
 }
 
@@ -153,6 +146,7 @@ function exportShortcutsTemplate(widgets) {
 }
 
 function ShortcutTemplateActions({ widgets, onImport }) {
+  const { t } = useTranslation();
   const fileRef = useRef(null);
 
   async function handleFile(event) {
@@ -163,14 +157,14 @@ function ShortcutTemplateActions({ widgets, onImport }) {
     try {
       parsed = JSON.parse(await file.text());
     } catch {
-      onImport({ accepted: [], rejected: [{ title: file.name, reason: "JSON invalido" }] });
+      onImport({ accepted: [], rejected: [{ title: file.name, reason: t("home.invalidJson") }] });
       return;
     }
     const list = Array.isArray(parsed) ? parsed : [parsed];
     const accepted = [];
     const rejected = [];
     list.forEach((entry, index) => {
-      const reason = validateShortcutEntry(entry);
+      const reason = validateShortcutEntry(entry, t);
       if (reason) rejected.push({ title: entry?.title || `item ${index + 1}`, reason });
       else accepted.push({ id: Date.now() + index, type: "shortcut", title: String(entry.title).trim(), url: entry.url.trim(), text: "", imageUrl: entry.imageUrl || "", createdAt: new Date().toISOString() });
     });
@@ -180,8 +174,8 @@ function ShortcutTemplateActions({ widgets, onImport }) {
   return (
     <div className="mb-home-template-actions">
       <input ref={fileRef} type="file" accept="application/json" hidden onChange={handleFile} />
-      <Button onClick={() => fileRef.current?.click()}><i className="bi bi-upload" /> Importar atalhos</Button>
-      <Button onClick={() => exportShortcutsTemplate(widgets)}><i className="bi bi-download" /> Exportar atalhos</Button>
+      <Button onClick={() => fileRef.current?.click()}><i className="bi bi-upload" /> {t("home.importShortcuts")}</Button>
+      <Button onClick={() => exportShortcutsTemplate(widgets)}><i className="bi bi-download" /> {t("home.exportShortcuts")}</Button>
     </div>
   );
 }
@@ -193,6 +187,7 @@ const notePresetColors = ["#fde68a", "#fdba74", "#fbcfe8", "#bbf7d0", "#bfdbfe",
 // document.execCommand (suportado em todos os navegadores evergreen pra
 // esse tipo de edicao simples) em vez de trazer uma lib de editor inteira.
 function RichNoteEditor({ initialValue, onChange, highlightColor = "#fff59d" }) {
+  const { t } = useTranslation();
   const contentRef = useRef(null);
   const [textColor, setTextColor] = useState("#111111");
 
@@ -210,11 +205,11 @@ function RichNoteEditor({ initialValue, onChange, highlightColor = "#fff59d" }) 
   return (
     <div className="mb-home-note-editor">
       <div className="mb-home-note-toolbar">
-        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => exec("bold")} title="Negrito"><i className="bi bi-type-bold" /></button>
-        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => exec("italic")} title="Italico"><i className="bi bi-type-italic" /></button>
-        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => exec("underline")} title="Sublinhado"><i className="bi bi-type-underline" /></button>
-        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => exec("hiliteColor", highlightColor)} title="Marca-texto"><i className="bi bi-vector-pen" /></button>
-        <label className="mb-home-note-color" title="Cor do texto" onMouseDown={(event) => event.preventDefault()}>
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => exec("bold")} title={t("home.boldTitle")}><i className="bi bi-type-bold" /></button>
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => exec("italic")} title={t("home.italicTitle")}><i className="bi bi-type-italic" /></button>
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => exec("underline")} title={t("home.underlineTitle")}><i className="bi bi-type-underline" /></button>
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => exec("hiliteColor", highlightColor)} title={t("home.highlightTitle")}><i className="bi bi-vector-pen" /></button>
+        <label className="mb-home-note-color" title={t("home.textColorTitle")} onMouseDown={(event) => event.preventDefault()}>
           <i className="bi bi-palette-fill" />
           <input type="color" value={textColor} onChange={(event) => { setTextColor(event.target.value); exec("foreColor", event.target.value); }} />
         </label>
@@ -225,13 +220,15 @@ function RichNoteEditor({ initialValue, onChange, highlightColor = "#fff59d" }) 
         contentEditable
         suppressContentEditableWarning
         onInput={() => onChange(contentRef.current?.innerHTML || "")}
-        data-placeholder="Escreva sua nota..."
+        data-placeholder={t("home.notePlaceholder")}
       />
     </div>
   );
 }
 
 function WidgetModal({ type, initial, onClose, onSave, onDelete }) {
+  const { t } = useTranslation();
+  const widgetTypeLabels = { note: t("home.widgetTypeNote"), link: t("home.widgetTypeLink"), shortcut: t("home.widgetTypeShortcut") };
   const isEdit = Boolean(initial);
   const [title, setTitle] = useState(initial?.title || "");
   const [url, setUrl] = useState(initial?.url || "");
@@ -245,9 +242,9 @@ function WidgetModal({ type, initial, onClose, onSave, onDelete }) {
 
   function submit(event) {
     event.preventDefault();
-    if (!title.trim()) { setError("Titulo e obrigatorio."); return; }
-    if (isShortcut && title.trim().length > SHORTCUT_TITLE_MAX) { setError(`Titulo do atalho deve ter ate ${SHORTCUT_TITLE_MAX} caracteres.`); return; }
-    if (!isNote && !isValidHttpUrl(url.trim())) { setError("Informe uma URL valida (http:// ou https://)."); return; }
+    if (!title.trim()) { setError(t("home.titleRequired")); return; }
+    if (isShortcut && title.trim().length > SHORTCUT_TITLE_MAX) { setError(t("home.shortcutTitleTooLongError", { max: SHORTCUT_TITLE_MAX })); return; }
+    if (!isNote && !isValidHttpUrl(url.trim())) { setError(t("home.invalidUrlError")); return; }
     onSave({
       id: initial?.id ?? Date.now(),
       type,
@@ -270,33 +267,33 @@ function WidgetModal({ type, initial, onClose, onSave, onDelete }) {
       >
         {isNote && <span className="mb-home-modal-note-fold" aria-hidden="true" />}
         <header>
-          <strong>{isEdit ? `Editar ${widgetTitles[type].toLowerCase()}` : `Nova ${widgetTitles[type].toLowerCase()}`}</strong>
+          <strong>{isEdit ? t("home.editWidgetTitle", { type: widgetTypeLabels[type].toLowerCase() }) : t("home.newWidgetTitle", { type: widgetTypeLabels[type].toLowerCase() })}</strong>
           <button type="button" onClick={onClose}><i className="bi bi-x-lg" /></button>
         </header>
         <div className="mb-home-modal-body">
           <label>
-            <span>Titulo * {titleMax && <em className="mb-home-modal-counter">{title.length}/{titleMax}</em>}</span>
-            <input value={title} maxLength={titleMax} onChange={(event) => setTitle(event.target.value)} placeholder={isShortcut ? "Ex.: Board" : "Ex.: Board do time"} autoFocus />
+            <span>{t("home.titleLabel")} {titleMax && <em className="mb-home-modal-counter">{title.length}/{titleMax}</em>}</span>
+            <input value={title} maxLength={titleMax} onChange={(event) => setTitle(event.target.value)} placeholder={isShortcut ? t("home.shortcutTitlePlaceholder") : t("home.genericTitlePlaceholder")} autoFocus />
           </label>
-          {!isNote && <label><span>URL *</span><input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://..." /></label>}
+          {!isNote && <label><span>{t("home.urlLabel")}</span><input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://..." /></label>}
           {isNote && (
             <label>
-              <span>Nota</span>
+              <span>{t("home.noteLabel")}</span>
               <RichNoteEditor initialValue={text} onChange={setText} />
             </label>
           )}
           {!isNote && (
             <label>
-              <span>Icone {isShortcut ? "(centralizado no botao)" : "(opcional)"}</span>
-              <input value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://... (deixe vazio pra usar o favicon do site)" />
+              <span>{isShortcut ? t("home.iconLabelCentered") : t("home.iconLabelOptional")}</span>
+              <input value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder={t("home.iconPlaceholder")} />
               {!imageUrl && isValidHttpUrl(url) && (
-                <span className="mb-home-modal-favicon-preview"><img src={faviconUrl(url)} alt="" /> favicon detectado automaticamente</span>
+                <span className="mb-home-modal-favicon-preview"><img src={faviconUrl(url)} alt="" /> {t("home.faviconDetected")}</span>
               )}
             </label>
           )}
           {isNote && (
             <label>
-              <span>Cor do post-it</span>
+              <span>{t("home.noteColorLabel")}</span>
               <div className="mb-home-modal-note-colors">
                 {notePresetColors.map((preset) => (
                   <button key={preset} type="button" className={`mb-home-modal-note-swatch ${color === preset ? "active" : ""}`} style={{ background: preset }} onClick={() => setColor(preset)} title={preset} />
@@ -306,16 +303,16 @@ function WidgetModal({ type, initial, onClose, onSave, onDelete }) {
           )}
           {!isNote && !isShortcut && (
             <label className="mb-home-modal-color-row">
-              <span>Cor do card</span>
+              <span>{t("home.cardColorLabel")}</span>
               <input type="color" value={color || "#64748b"} onChange={(event) => setColor(event.target.value)} />
             </label>
           )}
           {error && <div className="mb-home-modal-error">{error}</div>}
         </div>
         <footer>
-          {isEdit && <button type="button" className="danger" onClick={() => onDelete(initial.id)}><i className="bi bi-trash" /> Excluir</button>}
-          <button type="button" className="secondary" onClick={onClose}>Cancelar</button>
-          <button type="submit" className="primary">Salvar</button>
+          {isEdit && <button type="button" className="danger" onClick={() => onDelete(initial.id)}><i className="bi bi-trash" /> {t("home.deleteButton")}</button>}
+          <button type="button" className="secondary" onClick={onClose}>{t("home.cancelButton")}</button>
+          <button type="submit" className="primary">{t("home.saveButton")}</button>
         </footer>
       </form>
     </div>
@@ -341,16 +338,18 @@ function WidgetImage({ src, alt = "" }) {
 }
 
 function WidgetToolbar({ onEdit, onRemove, widget }) {
+  const { t } = useTranslation();
   return (
     <div className="mb-home-widget-toolbar">
-      <span className="mb-home-widget-drag" title="Arraste para reordenar"><i className="bi bi-grip-vertical" /></span>
-      <button type="button" className="mb-home-widget-edit" onClick={() => onEdit(widget)} title="Editar"><i className="bi bi-pencil" /></button>
-      <button type="button" className="mb-home-widget-remove" onClick={() => onRemove(widget.id)} title="Remover"><i className="bi bi-x" /></button>
+      <span className="mb-home-widget-drag" title={t("home.dragReorder")}><i className="bi bi-grip-vertical" /></span>
+      <button type="button" className="mb-home-widget-edit" onClick={() => onEdit(widget)} title={t("home.editTitle")}><i className="bi bi-pencil" /></button>
+      <button type="button" className="mb-home-widget-remove" onClick={() => onRemove(widget.id)} title={t("home.removeTitle")}><i className="bi bi-x" /></button>
     </div>
   );
 }
 
 function WidgetCard({ widget, onRemove, onEdit, onDragStart, onDragOver, onDrop, onDragEnd, dragging }) {
+  const { t } = useTranslation();
   const dragProps = { draggable: true, onDragStart, onDragOver, onDrop, onDragEnd };
 
   if (widget.type === "shortcut" || widget.type === "link") {
@@ -371,7 +370,7 @@ function WidgetCard({ widget, onRemove, onEdit, onDragStart, onDragOver, onDrop,
       <article className={`mb-home-widget note ${dragging ? "dragging" : ""}`} style={{ background: widget.color || "#fde68a" }} {...dragProps}>
         <span className="mb-home-widget-note-fold" aria-hidden="true" />
         <WidgetToolbar widget={widget} onEdit={onEdit} onRemove={onRemove} />
-        <button type="button" className="mb-home-widget-note-body" onClick={() => onEdit(widget)} title="Clique para ver/editar a nota inteira">
+        <button type="button" className="mb-home-widget-note-body" onClick={() => onEdit(widget)} title={t("home.clickToEditNote")}>
           <strong>{widget.title}</strong>
           {widget.text && <p dangerouslySetInnerHTML={{ __html: renderNoteHtml(widget.text) }} />}
         </button>
@@ -383,6 +382,7 @@ function WidgetCard({ widget, onRemove, onEdit, onDragStart, onDragOver, onDrop,
 }
 
 function WidgetsGrid({ widgets, onRemove, onReorder, onEdit }) {
+  const { t } = useTranslation();
   const [dragId, setDragId] = useState(null);
 
   function handleDrop(targetId) {
@@ -412,12 +412,13 @@ function WidgetsGrid({ widgets, onRemove, onReorder, onEdit }) {
           onDragEnd={() => setDragId(null)}
         />
       ))}
-      {!widgets.length && <span className="mb-home-empty">Nada fixado ainda. Use "Adicionar" para criar uma nota, link ou atalho.</span>}
+      {!widgets.length && <span className="mb-home-empty">{t("home.noWidgetsYet")}</span>}
     </div>
   );
 }
 
 function DevPanel({ loading, myItems, completedHours, goalHours, hoursPercent }) {
+  const { t } = useTranslation();
   const tasks = myItems.filter((item) => item.type === "Task").length;
   const bugs = myItems.filter((item) => item.type === "Bug").length;
   return (
@@ -425,10 +426,10 @@ function DevPanel({ loading, myItems, completedHours, goalHours, hoursPercent })
       <div className="mb-home-kpis">
         {loading ? <KpiSkeleton count={4} /> : (
           <>
-            <Kpi icon="bi-kanban" label="Assigned" value={myItems.length} />
-            <Kpi icon="bi-hammer" label="Tasks" value={tasks} tone="gold" />
-            <Kpi icon="bi-bug-fill" label="Bugs" value={bugs} tone="red" />
-            <Kpi icon="bi-clock" label="Horas" value={`${formatHours(completedHours)} / ${formatHours(goalHours)}`} color="#2563eb" />
+            <Kpi icon="bi-kanban" label={t("home.kpiAssigned")} value={myItems.length} />
+            <Kpi icon="bi-hammer" label={t("home.kpiTasks")} value={tasks} tone="gold" />
+            <Kpi icon="bi-bug-fill" label={t("home.kpiBugs")} value={bugs} tone="red" />
+            <Kpi icon="bi-clock" label={t("home.kpiHours")} value={`${formatHours(completedHours)} / ${formatHours(goalHours)}`} color="#2563eb" />
           </>
         )}
       </div>
@@ -438,13 +439,14 @@ function DevPanel({ loading, myItems, completedHours, goalHours, hoursPercent })
 }
 
 function QaPanel({ loading, availableForTesting, evidenceToday }) {
+  const { t } = useTranslation();
   return (
     <div className="mb-home-kpis">
       {loading ? <KpiSkeleton count={3} /> : (
         <>
-          <Kpi icon="bi-check2-circle" label="Para testar na sprint" value={availableForTesting} color="#7c3aed" />
-          <Kpi icon="bi-calendar-check" label="Testados hoje" value={evidenceToday} color="#2563eb" />
-          <Kpi icon="bi-clipboard2-pulse" label="Foco do dia" value={availableForTesting ? "QA" : "Livre"} color="#16a34a" />
+          <Kpi icon="bi-check2-circle" label={t("home.kpiToTestSprint")} value={availableForTesting} color="#7c3aed" />
+          <Kpi icon="bi-calendar-check" label={t("home.kpiTestedToday")} value={evidenceToday} color="#2563eb" />
+          <Kpi icon="bi-clipboard2-pulse" label={t("home.kpiFocusToday")} value={availableForTesting ? t("home.focusQa") : t("home.focusFree")} color="#16a34a" />
         </>
       )}
     </div>
@@ -456,12 +458,13 @@ function QaPanel({ loading, availableForTesting, evidenceToday }) {
 // painelzinhos da Home, com um resumo minimalista quando fechado (em vez
 // de simplesmente sumir o conteudo sem indicar o que tem la dentro).
 function HomeSection({ title, subtitle, summary, collapsed, onToggleCollapse, dragging, onDragStart, onDragOver, onDrop, onDragEnd, actions, children }) {
+  const { t } = useTranslation();
   return (
     <section className={`mb-home-panel mb-home-section ${dragging ? "dragging" : ""} ${collapsed ? "collapsed" : ""}`} onDragOver={onDragOver} onDrop={onDrop}>
       <header>
         <div className="mb-home-section-heading">
-          <span className="mb-home-section-drag" draggable onDragStart={onDragStart} onDragEnd={onDragEnd} title="Arraste para reordenar" aria-label="Arraste para reordenar"><i className="bi bi-grip-vertical" /></span>
-          <button type="button" className="mb-home-section-toggle" onClick={onToggleCollapse} aria-expanded={!collapsed} title={collapsed ? "Expandir" : "Recolher"}>
+          <span className="mb-home-section-drag" draggable onDragStart={onDragStart} onDragEnd={onDragEnd} title={t("home.dragReorder")} aria-label={t("home.dragReorder")}><i className="bi bi-grip-vertical" /></span>
+          <button type="button" className="mb-home-section-toggle" onClick={onToggleCollapse} aria-expanded={!collapsed} title={collapsed ? t("home.expand") : t("home.collapse")}>
             <i className={`bi ${collapsed ? "bi-chevron-right" : "bi-chevron-down"}`} />
           </button>
           <div><strong>{title}</strong><small>{collapsed ? summary : subtitle}</small></div>
@@ -474,6 +477,7 @@ function HomeSection({ title, subtitle, summary, collapsed, onToggleCollapse, dr
 }
 
 function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, dateFrom, dateTo, onDateFromChange, onDateToChange, previewText, onAdd, onRemove, onCopy, onPdf, onPrint, onSlack, collapsed, onToggleCollapse, summary, dragging, onDragStart, onDragOver, onDrop, onDragEnd }) {
+  const { t } = useTranslation();
   const [title, setTitle] = useState("");
   const [type, setType] = useState("temporaria");
   const [showPreview, setShowPreview] = useState(true);
@@ -489,17 +493,17 @@ function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, dateFro
     <section className={`mb-home-panel mb-home-section ${dragging ? "dragging" : ""} ${collapsed ? "collapsed" : ""}`} onDragOver={onDragOver} onDrop={onDrop}>
       <header>
         <div className="mb-home-section-heading">
-          <span className="mb-home-section-drag" draggable onDragStart={onDragStart} onDragEnd={onDragEnd} title="Arraste para reordenar" aria-label="Arraste para reordenar"><i className="bi bi-grip-vertical" /></span>
-          <button type="button" className="mb-home-section-toggle" onClick={onToggleCollapse} aria-expanded={!collapsed} title={collapsed ? "Expandir" : "Recolher"}>
+          <span className="mb-home-section-drag" draggable onDragStart={onDragStart} onDragEnd={onDragEnd} title={t("home.dragReorder")} aria-label={t("home.dragReorder")}><i className="bi bi-grip-vertical" /></span>
+          <button type="button" className="mb-home-section-toggle" onClick={onToggleCollapse} aria-expanded={!collapsed} title={collapsed ? t("home.expand") : t("home.collapse")}>
             <i className={`bi ${collapsed ? "bi-chevron-right" : "bi-chevron-down"}`} />
           </button>
-          <div><strong>Resumo executivo</strong><small>{collapsed ? summary : "Itens recorrentes, do dia e atualizacoes automaticas, prontos para copiar, imprimir ou exportar."}</small></div>
+          <div><strong>{t("home.executiveSummaryTitle")}</strong><small>{collapsed ? summary : t("home.executiveSummarySubtitle")}</small></div>
         </div>
         {!collapsed && (
           <div className="mb-home-summary-actions">
-            <Button onClick={onCopy}><FiCopy /> Copiar</Button>
+            <Button onClick={onCopy}><FiCopy /> {t("home.copyButton")}</Button>
             <Button onClick={onSlack}><i className="bi bi-slack" /> Slack</Button>
-            <Button onClick={onPrint}><FiPrinter /> Imprimir</Button>
+            <Button onClick={onPrint}><FiPrinter /> {t("home.printButton")}</Button>
             <Button onClick={onPdf}><FiDownload /> PDF</Button>
           </div>
         )}
@@ -507,24 +511,24 @@ function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, dateFro
       {!collapsed && (
         <>
           <form data-allow-submit="true" className="mb-home-summary-form" onSubmit={submit}>
-            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: 1:1 com Nat" />
+            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={t("home.summaryTitlePlaceholder")} />
             <div className="mb-home-summary-type">
-              <button type="button" className={type === "temporaria" ? "active" : ""} onClick={() => setType("temporaria")}>Hoje</button>
-              <button type="button" className={type === "recorrente" ? "active" : ""} onClick={() => setType("recorrente")}>Recorrente</button>
+              <button type="button" className={type === "temporaria" ? "active" : ""} onClick={() => setType("temporaria")}>{t("home.todayButton")}</button>
+              <button type="button" className={type === "recorrente" ? "active" : ""} onClick={() => setType("recorrente")}>{t("home.recurringButton")}</button>
             </div>
-            <button type="submit" className="mb-home-summary-submit"><FiPlus /> Adicionar</button>
+            <button type="submit" className="mb-home-summary-submit"><FiPlus /> {t("home.addButton")}</button>
           </form>
           <div className="mb-home-summary-range">
-            <span>Periodo dos itens automaticos ({autoLabel})</span>
-            <label>De<input type="date" value={dateFrom} max={dateTo} onChange={(event) => onDateFromChange(event.target.value)} /></label>
-            <label>Ate<input type="date" value={dateTo} min={dateFrom} onChange={(event) => onDateToChange(event.target.value)} /></label>
+            <span>{t("home.periodLabel", { label: autoLabel })}</span>
+            <label>{t("home.fromLabel")}<input type="date" value={dateFrom} max={dateTo} onChange={(event) => onDateFromChange(event.target.value)} /></label>
+            <label>{t("home.toLabel")}<input type="date" value={dateTo} min={dateFrom} onChange={(event) => onDateToChange(event.target.value)} /></label>
           </div>
           <div className="mb-home-summary-list">
             {entries.map((entry) => (
               <div key={entry.id} className={`mb-home-summary-item ${entry.type}`}>
-                <span className="mb-home-summary-tag">{entry.type === "recorrente" ? "Recorrente" : "Hoje"}</span>
+                <span className="mb-home-summary-tag">{entry.type === "recorrente" ? t("home.recurringTag") : t("home.todayTag")}</span>
                 <span className="mb-home-summary-title">{entry.title}</span>
-                <button type="button" onClick={() => onRemove(entry.id)} title="Remover"><i className="bi bi-x" /></button>
+                <button type="button" onClick={() => onRemove(entry.id)} title={t("home.removeButton")}><i className="bi bi-x" /></button>
               </div>
             ))}
             {autoEntries.map((entry, index) => (
@@ -533,11 +537,11 @@ function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, dateFro
                 <span className="mb-home-summary-title">{entry.title}</span>
               </div>
             ))}
-            {!entries.length && !autoEntries.length && <span className="mb-home-empty">Nenhum item no resumo. Adicione acima.</span>}
+            {!entries.length && !autoEntries.length && <span className="mb-home-empty">{t("home.emptySummary")}</span>}
           </div>
           <div className="mb-home-summary-preview">
             <button type="button" className="mb-home-summary-preview-toggle" onClick={() => setShowPreview((value) => !value)}>
-              <span>Previa do resumo</span><i className={`bi ${showPreview ? "bi-chevron-up" : "bi-chevron-down"}`} />
+              <span>{t("home.previewToggle")}</span><i className={`bi ${showPreview ? "bi-chevron-up" : "bi-chevron-down"}`} />
             </button>
             {showPreview && <pre>{previewText}</pre>}
           </div>
@@ -632,11 +636,11 @@ export function WorkbenchHome() {
   // (ex.: nivel "pending") ficava sem NENHUM atalho na Home mesmo podendo
   // acessar todas as telas pela Sidebar.
   const quickLinks = [
-    { to: "/dev", label: "Meus itens", icon: FiUser, show: isAdmin || [accessLevels.dev, accessLevels.qa, accessLevels.gestao, accessLevels.gerente].includes(access) },
-    { to: "/qa", label: "Quality Board", icon: FiCheckCircle, show: isAdmin || [accessLevels.qa, accessLevels.gestao, accessLevels.gerente].includes(access) },
-    { to: "/management", label: "Gestao da equipe", icon: FiShield, show: isGestao },
-    { to: "/management/dashboard", label: "Gerenciamento", icon: FiShield, show: isGerente || isAdmin },
-    { to: "/settings", label: "Conexoes", icon: FiPlus, show: true }
+    { to: "/dev", label: t("nav.myItems"), icon: FiUser, show: isAdmin || [accessLevels.dev, accessLevels.qa, accessLevels.gestao, accessLevels.gerente].includes(access) },
+    { to: "/qa", label: t("nav.qualityBoard"), icon: FiCheckCircle, show: isAdmin || [accessLevels.qa, accessLevels.gestao, accessLevels.gerente].includes(access) },
+    { to: "/management", label: t("nav.teamManagement"), icon: FiShield, show: isGestao },
+    { to: "/management/dashboard", label: t("nav.projectManagement"), icon: FiShield, show: isGerente || isAdmin },
+    { to: "/settings", label: t("nav.settings"), icon: FiPlus, show: true }
   ].filter((item) => item.show);
 
   // Indice alias-aware (mesmo padrao usado em Gestao do projeto/Slack) — o
@@ -690,7 +694,7 @@ export function WorkbenchHome() {
         id: `item-${item.id}`,
         icon: "bi-check2-circle",
         text: `#${item.id} ${item.title}`,
-        meta: `${qaStatusInfo(item.state).label || item.state || "Sem status"} · disponivel para teste`,
+        meta: `${qaStatusInfo(item.state).label || item.state || t("home.statusNoStatus")} · ${t("home.availableForTest")}`,
         date: item.updatedAt,
         to: "/qa",
         workItemId: item.id
@@ -698,8 +702,8 @@ export function WorkbenchHome() {
       myRecentEvidence.slice(0, 4).forEach((entry) => entries.push({
         id: `evidence-${entry.id}`,
         icon: "bi-clipboard2-check",
-        text: `Novo resultado no #${entry.workItemId}`,
-        meta: `${entry.result || "resultado"} · registrado por voce`,
+        text: t("home.newResultOn", { id: entry.workItemId }),
+        meta: `${entry.result || t("home.resultLabel")} · ${t("home.registeredByYou")}`,
         date: entry.createdAt,
         to: "/qa",
         workItemId: entry.workItemId
@@ -709,7 +713,7 @@ export function WorkbenchHome() {
         id: `item-${item.id}`,
         icon: "bi-kanban",
         text: `#${item.id} ${item.title}`,
-        meta: `${item.state || "Sem status"} · ${item.sprint || "Sem sprint"}`,
+        meta: `${item.state || t("home.statusNoStatus")} · ${item.sprint || t("home.noSprint")}`,
         date: item.updatedAt,
         to: "/dev",
         workItemId: item.id
@@ -720,7 +724,7 @@ export function WorkbenchHome() {
           id: `qa-pickup-${item.id}`,
           icon: "bi-person-check",
           text: `#${item.id} ${item.title}`,
-          meta: `Pego para teste por ${qaPerson?.azureName || "QA"}`,
+          meta: t("home.pickedUpForTest", { name: qaPerson?.azureName || "QA" }),
           date: item.updatedAt,
           to: "/dev",
           workItemId: item.id
@@ -731,7 +735,7 @@ export function WorkbenchHome() {
         id: `item-${item.id}`,
         icon: "bi-check2-circle",
         text: `#${item.id} ${item.title}`,
-        meta: `${qaStatusInfo(item.state).label || item.state || "Sem status"} · disponivel para teste`,
+        meta: `${qaStatusInfo(item.state).label || item.state || t("home.statusNoStatus")} · ${t("home.availableForTest")}`,
         date: item.updatedAt,
         to: "/qa",
         workItemId: item.id
@@ -739,15 +743,15 @@ export function WorkbenchHome() {
       recentEvidenceTeamWide.slice(0, 4).forEach((entry) => entries.push({
         id: `evidence-${entry.id}`,
         icon: "bi-clipboard2-check",
-        text: `Novo resultado no #${entry.workItemId}`,
-        meta: `${entry.result || "resultado"} · ${entry.authorName || "QA"}`,
+        text: t("home.newResultOn", { id: entry.workItemId }),
+        meta: `${entry.result || t("home.resultLabel")} · ${entry.authorName || "QA"}`,
         date: entry.createdAt,
         to: "/qa",
         workItemId: entry.workItemId
       }));
     }
     return entries.sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 8);
-  }, [availableForTesting, isDev, isQa, myItems, myItemsPickedUpForTesting, myRecentEvidence, recentEvidenceTeamWide, collaborators]);
+  }, [availableForTesting, isDev, isQa, myItems, myItemsPickedUpForTesting, myRecentEvidence, recentEvidenceTeamWide, collaborators, t]);
   const goalHours = Number(myCollaborator?.goalHours || goalDefault);
   const completedHours = myItems.reduce((sum, item) => sum + Number(item.completedHours || 0), 0);
   const hoursPercent = goalHours ? Math.min(100, Math.round((completedHours / goalHours) * 100)) : 0;
@@ -764,15 +768,15 @@ export function WorkbenchHome() {
     items.forEach((item) => {
       const person = collaborators.find((entry) => entry.id === item.assigneeId) || findCollaboratorByName(collaboratorNameIndex, item.assigneeName);
       const key = person?.id || item.assigneeName || "unassigned";
-      if (!map.has(key)) map.set(key, { name: item.assigneeName || "Nao atribuido", hours: 0, goal: goalDefault });
+      if (!map.has(key)) map.set(key, { name: item.assigneeName || t("home.unassigned"), hours: 0, goal: goalDefault });
       map.get(key).hours += Number(item.completedHours || 0);
     });
     return Array.from(map.values()).map((row) => ({
       ...row,
-      label: row.hours < row.goal ? "Abaixo" : row.hours > row.goal ? "Acima" : "Cumprida",
+      label: row.hours < row.goal ? t("home.below") : row.hours > row.goal ? t("home.above") : t("home.met"),
       tone: row.hours < row.goal ? "danger" : row.hours > row.goal ? "warning" : "primary"
     }));
-  }, [collaboratorNameIndex, collaborators, goalDefault, isGestao, items]);
+  }, [collaboratorNameIndex, collaborators, goalDefault, isGestao, items, t]);
 
   const governanceTotals = useMemo(() => ({
     developers: developerRows.length,
@@ -791,8 +795,8 @@ export function WorkbenchHome() {
   const summaryRangeTo = summaryDateTo || today;
   const isSingleDayRange = summaryRangeFrom === summaryRangeTo;
   const autoLabel = isSingleDayRange
-    ? { dev: summaryRangeFrom === today ? "PRs de hoje" : "PRs no periodo", qa: summaryRangeFrom === today ? "Testes de hoje" : "Testes no periodo", gestao: "Gestao (snapshot)" }[reportType]
-    : { dev: "PRs no periodo", qa: "Testes no periodo", gestao: "Gestao (snapshot)" }[reportType];
+    ? { dev: summaryRangeFrom === today ? t("home.prsToday") : t("home.prsInPeriod"), qa: summaryRangeFrom === today ? t("home.testsToday") : t("home.testsInPeriod"), gestao: t("home.governanceSnapshot") }[reportType]
+    : { dev: t("home.prsInPeriod"), qa: t("home.testsInPeriod"), gestao: t("home.governanceSnapshot") }[reportType];
   const autoEntries = useMemo(() => {
     const inRange = (value) => {
       const day = String(value || "").slice(0, 10);
@@ -801,7 +805,7 @@ export function WorkbenchHome() {
     if (reportType === "qa") {
       return evidence
         .filter((entry) => inRange(entry.createdAt))
-        .map((entry) => ({ title: `#${entry.workItemId} — ${entry.result || "resultado"} (${entry.authorName || "QA"})` }));
+        .map((entry) => ({ title: `#${entry.workItemId} — ${entry.result || t("home.resultLabel")} (${entry.authorName || "QA"})` }));
     }
     if (reportType === "gestao") {
       if (!governanceTotals.developers) return [];
@@ -809,8 +813,8 @@ export function WorkbenchHome() {
     }
     return myItems
       .filter((item) => inRange(item.updatedAt))
-      .map((item) => ({ title: `#${item.id} ${item.title} — ${item.state || "sem status"}` }));
-  }, [evidence, governanceTotals, myItems, reportType, summaryRangeFrom, summaryRangeTo]);
+      .map((item) => ({ title: `#${item.id} ${item.title} — ${item.state || t("home.withoutStatus")}` }));
+  }, [evidence, governanceTotals, myItems, reportType, summaryRangeFrom, summaryRangeTo, t]);
 
   function saveWidget(widget) {
     setWidgets((current) => (
@@ -834,9 +838,9 @@ export function WorkbenchHome() {
   }
   function handleShortcutImport({ accepted, rejected }) {
     if (accepted.length) setWidgets((current) => [...accepted, ...current]);
-    if (accepted.length && !rejected.length) pushToast({ title: "Atalhos importados", body: `${accepted.length} atalho(s) adicionado(s).`, tone: "success" });
-    else if (accepted.length && rejected.length) pushToast({ title: "Importado com ressalvas", body: `${accepted.length} adicionado(s), ${rejected.length} rejeitado(s): ${rejected.map((entry) => `${entry.title} (${entry.reason})`).join("; ")}`, tone: "warning" });
-    else pushToast({ title: "Nenhum atalho importado", body: rejected.map((entry) => `${entry.title} (${entry.reason})`).join("; ") || "Arquivo vazio ou invalido.", tone: "danger" });
+    if (accepted.length && !rejected.length) pushToast({ title: t("home.shortcutsImportedTitle"), body: t("home.shortcutsImportedBody", { count: accepted.length }), tone: "success" });
+    else if (accepted.length && rejected.length) pushToast({ title: t("home.shortcutsPartialTitle"), body: t("home.shortcutsPartialBody", { accepted: accepted.length, rejected: rejected.length, details: rejected.map((entry) => `${entry.title} (${entry.reason})`).join("; ") }), tone: "warning" });
+    else pushToast({ title: t("home.shortcutsNoneTitle"), body: rejected.map((entry) => `${entry.title} (${entry.reason})`).join("; ") || t("home.shortcutsEmptyFile"), tone: "danger" });
   }
   function addSummaryEntry(entry) {
     setSummaryEntries((current) => [entry, ...current]);
@@ -869,16 +873,16 @@ export function WorkbenchHome() {
     printWindow.print();
   }
   function copyGovernance() {
-    copyExecutiveReportText({ title: "Gestao da equipe - Resumo rapido", period: "Atual", totals: governanceTotals, rows: developerRows });
+    copyExecutiveReportText({ title: t("home.reportTitle"), period: t("home.currentPeriod"), totals: governanceTotals, rows: developerRows });
   }
   function pdfGovernance() {
-    downloadExecutiveReportPdf({ title: "Stark Hub - Gestao da equipe (resumo rapido)", period: "Atual", totals: governanceTotals, rows: developerRows, filename: `stark-hub-Gestao-resumo-${new Date().toISOString().slice(0, 10)}.pdf` });
+    downloadExecutiveReportPdf({ title: t("home.pdfTitle"), period: t("home.currentPeriod"), totals: governanceTotals, rows: developerRows, filename: `stark-hub-Gestao-resumo-${new Date().toISOString().slice(0, 10)}.pdf` });
   }
   async function sendSlack(text) {
     const webhooks = resolveSlackWebhooks(getSetting);
-    if (!webhooks.length) { alert("Nenhum webhook do Slack configurado. Configure em Configuracoes > Slack."); return; }
+    if (!webhooks.length) { alert(t("home.slackNotConfigured")); return; }
     const { data, error } = await supabase.functions.invoke("slackNotify", { body: { webhooks, text } });
-    if (error || !data?.ok) alert(`Nao foi possivel enviar ao Slack: ${error?.message || "verifique o webhook configurado."}`);
+    if (error || !data?.ok) alert(t("home.slackSendError", { message: error?.message || "verifique o webhook configurado." }));
   }
   function slackSummary() {
     sendSlack(buildPersonalSummarySlackText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel, dateFrom: summaryRangeFrom, dateTo: summaryRangeTo }));
@@ -890,36 +894,43 @@ export function WorkbenchHome() {
   const summaryPreviewText = buildPersonalSummaryText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel, dateFrom: summaryRangeFrom, dateTo: summaryRangeTo });
 
   function exportHomeCsv() {
-    downloadCsv(`home-${dateStamp()}.csv`, ["Secao", "Tipo", "Titulo", "Detalhe"], [
-      ...widgets.map((widget) => ["Painel", widget.type, widget.title, widget.url || widget.text || ""]),
-      ...activityFeed.map((entry) => ["Atualizacoes recentes", "atividade", entry.text, entry.meta]),
-      ...autoEntries.map((entry) => ["Relatorio executivo", autoLabel, entry.title, "automatico"]),
-      ...summaryEntries.map((entry) => ["Relatorio executivo", entry.type || "manual", entry.title, entry.text || ""])
+    downloadCsv(`home-${dateStamp()}.csv`, [t("home.csvSection"), t("home.csvType"), t("home.csvTitle"), t("home.csvDetail")], [
+      ...widgets.map((widget) => [t("home.csvPanel"), widget.type, widget.title, widget.url || widget.text || ""]),
+      ...activityFeed.map((entry) => [t("home.csvActivitySection"), t("home.csvActivity"), entry.text, entry.meta]),
+      ...autoEntries.map((entry) => [t("home.csvExecutiveReport"), autoLabel, entry.title, t("home.csvAutomatic")]),
+      ...summaryEntries.map((entry) => [t("home.csvExecutiveReport"), entry.type || t("home.csvManual"), entry.title, entry.text || ""])
     ]);
   }
 
   const sectionVisibility = { widgets: true, devPanel: isDev, qaPanel: isQa, activity: true, governance: isGestao, summary: true };
   const visibleSectionIds = sectionOrder.filter((id) => sectionVisibility[id]);
+  const sectionTitles = {
+    widgets: t("home.sectionTitleWidgets"),
+    devPanel: t("home.sectionTitleDevPanel"),
+    qaPanel: t("home.sectionTitleQaPanel"),
+    activity: t("home.sectionTitleActivity"),
+    governance: t("home.sectionTitleGovernance")
+  };
   const sectionContent = {
     widgets: {
-      subtitle: "Notas, links e atalhos que voce fixar aqui ficam salvos neste navegador.",
-      summary: `${widgets.length} item${widgets.length === 1 ? "" : "s"} fixado${widgets.length === 1 ? "" : "s"}`,
+      subtitle: t("home.widgetsSubtitle"),
+      summary: t("home.widgetsSummary", { count: widgets.length }),
       actions: <div className="mb-home-panel-actions"><ShortcutTemplateActions widgets={widgets} onImport={handleShortcutImport} /><AddWidgetMenu onPick={setWidgetModalType} /></div>,
       body: <WidgetsGrid widgets={widgets} onRemove={removeWidget} onReorder={reorderWidgets} onEdit={setEditingWidget} />
     },
     devPanel: {
-      subtitle: "Cards Assigned e horas do periodo.",
-      summary: `${myItems.length} card(s) · ${formatHours(completedHours)} / ${formatHours(goalHours)}`,
+      subtitle: t("home.devPanelSubtitle"),
+      summary: t("home.devPanelSummary", { count: myItems.length, completed: formatHours(completedHours), goal: formatHours(goalHours) }),
       body: <DevPanel loading={loading} myItems={myItems} completedHours={completedHours} goalHours={goalHours} hoursPercent={hoursPercent} />
     },
     qaPanel: {
-      subtitle: `Dados da sprint atual${currentSprintLabel ? ` (${currentSprintLabel})` : ""} e resultados de hoje.`,
-      summary: `${availableForTesting.length} para testar · ${evidenceToday} hoje`,
+      subtitle: t("home.qaPanelSubtitle", { sprint: currentSprintLabel ? t("home.qaPanelSprintSuffix", { sprint: currentSprintLabel }) : "" }),
+      summary: t("home.qaPanelSummary", { count: availableForTesting.length, today: evidenceToday }),
       body: <QaPanel loading={loading} availableForTesting={availableForTesting.length} evidenceToday={evidenceToday} />
     },
     activity: {
-      subtitle: isQa ? "Cards novos disponiveis para teste e seus resultados recentes." : isDev ? "O que mudou nos seus itens e quando um QA pega algo seu para testar." : "Pulso do board: itens novos em teste e resultados recentes do time.",
-      summary: `${activityFeed.length} atualizacao${activityFeed.length === 1 ? "" : "es"} recente${activityFeed.length === 1 ? "" : "s"}`,
+      subtitle: isQa ? t("home.activitySubtitleQa") : isDev ? t("home.activitySubtitleDev") : t("home.activitySubtitleOther"),
+      summary: t("home.activitySummary", { count: activityFeed.length }),
       body: loading ? <WorkbenchCardSkeleton rows={4} mode="compact" /> : (
         <div className="mb-home-activity">
           {activityFeed.map((entry) => (
@@ -928,19 +939,19 @@ export function WorkbenchHome() {
               <span><strong>{entry.text}</strong><small>{entry.meta}</small></span>
             </Link>
           ))}
-          {!activityFeed.length && <span className="mb-home-empty">Nenhuma atualizacao recente.</span>}
+          {!activityFeed.length && <span className="mb-home-empty">{t("home.emptyActivity")}</span>}
         </div>
       )
     },
     governance: {
-      subtitle: "Resumo rapido da sprint atual. Use Ver mais para abrir todos os dados.",
-      summary: `${governanceTotals.developers} colaborador(es) · ${formatHours(governanceTotals.hours)} registradas`,
+      subtitle: t("home.governanceSubtitle"),
+      summary: t("home.governanceSummary", { count: governanceTotals.developers, hours: formatHours(governanceTotals.hours) }),
       actions: (
         <div className="mb-home-summary-actions">
-          <Button onClick={copyGovernance}><FiCopy /> Copiar</Button>
+          <Button onClick={copyGovernance}><FiCopy /> {t("home.copyButton")}</Button>
           <Button onClick={slackGovernance}><i className="bi bi-slack" /> Slack</Button>
           <Button onClick={pdfGovernance}><FiDownload /> PDF</Button>
-          <Link to="/management" className="mbw-btn default"><FiShield /> Ver mais</Link>
+          <Link to="/management" className="mbw-btn default"><FiShield /> {t("home.viewMore")}</Link>
         </div>
       ),
       body: (
@@ -948,28 +959,28 @@ export function WorkbenchHome() {
           <div className="mb-home-kpis">
             {loading ? <KpiSkeleton count={4} /> : (
               <>
-                <Kpi icon="bi-people" label="Colaboradores" value={governanceTotals.developers} />
-                <Kpi icon="bi-kanban" label="Cards" value={governanceTotals.cards} />
-                <Kpi icon="bi-clock" label="Horas registradas" value={formatHours(governanceTotals.hours)} color="#2563eb" />
-                <Kpi icon="bi-dash-lg" label="Horas pendentes" value={formatHours(governanceTotals.missing)} color="#dc2626" />
+                <Kpi icon="bi-people" label={t("home.kpiCollaborators")} value={governanceTotals.developers} />
+                <Kpi icon="bi-kanban" label={t("home.kpiCards")} value={governanceTotals.cards} />
+                <Kpi icon="bi-clock" label={t("home.kpiHoursRegistered")} value={formatHours(governanceTotals.hours)} color="#2563eb" />
+                <Kpi icon="bi-dash-lg" label={t("home.kpiHoursPending")} value={formatHours(governanceTotals.missing)} color="#dc2626" />
               </>
             )}
           </div>
           {!loading && (
             <div className="mb-home-governance-mini">
               <div>
-                <span>Horas</span>
+                <span>{t("home.miniHours")}</span>
                 <div className="mb-home-mini-track"><b style={{ width: `${governanceTotals.goal ? Math.min(100, (governanceTotals.hours / governanceTotals.goal) * 100) : 0}%` }} /></div>
-                <small>{formatHours(governanceTotals.hours)} de {formatHours(governanceTotals.goal)}</small>
+                <small>{t("home.miniOfGoal", { hours: formatHours(governanceTotals.hours), goal: formatHours(governanceTotals.goal) })}</small>
               </div>
               <div>
-                <span>Saude da meta</span>
+                <span>{t("home.miniGoalHealth")}</span>
                 <div className="mb-home-mini-bars">
                   <b className="ok" style={{ width: `${governanceTotals.developers ? (governanceTotals.goalMet / governanceTotals.developers) * 100 : 0}%` }} />
                   <b className="warn" style={{ width: `${governanceTotals.developers ? (governanceTotals.goalAbove / governanceTotals.developers) * 100 : 0}%` }} />
                   <b className="danger" style={{ width: `${governanceTotals.developers ? (governanceTotals.goalBelow / governanceTotals.developers) * 100 : 0}%` }} />
                 </div>
-                <small>{governanceTotals.goalBelow} abaixo, {governanceTotals.goalMet} na meta, {governanceTotals.goalAbove} acima</small>
+                <small>{t("home.miniGoalBreakdown", { below: governanceTotals.goalBelow, met: governanceTotals.goalMet, above: governanceTotals.goalAbove })}</small>
               </div>
             </div>
           )}
@@ -1013,7 +1024,7 @@ export function WorkbenchHome() {
               onSlack={slackSummary}
               collapsed={Boolean(collapsedSections[id])}
               onToggleCollapse={() => toggleSectionCollapsed(id)}
-              summary={`${summaryEntries.length} manual · ${autoEntries.length} automatico${autoEntries.length === 1 ? "" : "s"}`}
+              summary={t("home.manualAutomaticSummary", { manual: summaryEntries.length, auto: autoEntries.length })}
               {...sectionDragProps(id)}
             />
           );
@@ -1023,7 +1034,7 @@ export function WorkbenchHome() {
         return (
           <HomeSection
             key={id}
-            title={HOME_SECTION_TITLES[id]}
+            title={sectionTitles[id]}
             subtitle={content.subtitle}
             summary={content.summary}
             actions={content.actions}

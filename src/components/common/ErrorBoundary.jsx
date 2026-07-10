@@ -1,4 +1,5 @@
 import React from "react";
+import i18n from "../../i18n/index.js";
 
 // Sem isso, qualquer excecao de render em QUALQUER componente derruba a
 // arvore React inteira (tela em branco, sem log visivel para o usuario) —
@@ -24,9 +25,9 @@ export class ErrorBoundary extends React.Component {
     if (this.props.fallback) return this.props.fallback(this.state.error, () => this.setState({ error: null }));
     return (
       <div className="stark-error-boundary">
-        <strong>Algo deu errado ao exibir esta tela.</strong>
-        <p>{this.state.error?.message || "Erro desconhecido."}</p>
-        <button type="button" onClick={() => window.location.reload()}>Recarregar pagina</button>
+        <strong>{i18n.t("errorBoundary.somethingWrong")}</strong>
+        <p>{this.state.error?.message || i18n.t("errorBoundary.unknownError")}</p>
+        <button type="button" onClick={() => window.location.reload()}>{i18n.t("errorBoundary.reloadPage")}</button>
       </div>
     );
   }

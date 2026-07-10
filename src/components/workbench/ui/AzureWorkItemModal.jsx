@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { supabase, isSupabaseConfigured } from "../../../lib/supabaseClient.js";
 import { azureWorkItemUrl } from "../../../utils/azure.js";
 import { countries, formatWorkItemCode } from "../../../utils/constants.js";
@@ -117,6 +118,7 @@ function SlackPreview({ text }) {
 // Enhanced Slack preview that supports clickable Slack links, attachments and
 // a raw-toggle to show the underlying Slack text (tokens like :us-tag:).
 function EnhancedSlackPreview({ text, item, attachments = [], collaborators = [] }) {
+  const { t } = useTranslation();
   const tokenMap = {
     ":us-tag:": <img src={typeIconSrc("User Story")} alt="US" />,
     ":bug-tag:": <img src={typeIconSrc("Bug")} alt="Bug" />,
@@ -183,11 +185,11 @@ function EnhancedSlackPreview({ text, item, attachments = [], collaborators = []
   return (
     <div className="mbaz-slack-preview-split">
       <div className="mbaz-slack-preview-block">
-        <small>Visualizacao do codigo</small>
+        <small>{t("workItemModal.codePreview")}</small>
         <pre className="mbaz-slack-raw">{String(text || "")}</pre>
       </div>
       <div className="mbaz-slack-preview-block">
-        <small>Visualizacao previa</small>
+        <small>{t("workItemModal.livePreview")}</small>
         <div className="mbaz-slack-preview enhanced">
           {String(text || "").split("\n").map((line, idx) => (
             <p key={idx}>
@@ -210,6 +212,7 @@ function EnhancedSlackPreview({ text, item, attachments = [], collaborators = []
 }
 
 export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpdateItem, evidence = [] }) {
+  const { t } = useTranslation();
   const { collaborators = [] } = useCollaborators();
   const fileInputRef = useRef(null);
   const [result, setResult] = useState("");
@@ -281,9 +284,9 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
     || findCollaboratorByName(collaboratorNameIndex, item.assignedTo)
     || { azureName: item.assigneeName || item.assignedTo };
   const creatorPerson = findCollaboratorByName(collaboratorNameIndex, item.createdBy) || { azureName: item.createdBy };
-  const assigneeDisplayName = assigneePerson?.azureName || assigneePerson?.name || item.assigneeName || item.assignedTo || "Nao atribuido";
-  const qaDisplayName = qaResponsible?.azureName || qaResponsible?.name || item.qaName || item.qaResponsible || "Sem QA";
-  const creatorDisplayName = creatorPerson?.azureName || creatorPerson?.name || item.createdBy || "Nao informado";
+  const assigneeDisplayName = assigneePerson?.azureName || assigneePerson?.name || item.assigneeName || item.assignedTo || t("workItemModal.notAssigned");
+  const qaDisplayName = qaResponsible?.azureName || qaResponsible?.name || item.qaName || item.qaResponsible || t("common.noQa");
+  const creatorDisplayName = creatorPerson?.azureName || creatorPerson?.name || item.createdBy || t("workItemModal.notInformed");
   const creatorAvatarUrl = item.createdByImageUrl || item.createdByAvatarUrl || creatorPerson?.imageUrl || creatorPerson?.avatarUrl || "";
   const devPeople = collaborators.filter((person) => person.isDev || person.dev);
   const qaPeople = collaborators.filter((person) => person.isQa || person.qa);
@@ -334,16 +337,16 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
     fyi: fixedFyi
   }) : "";
   const workFields = [
-    ["Criado em", item.createdAt ? new Date(item.createdAt).toLocaleString("pt-BR") : "Sem data"],
-    ["Alterado por", item.changedBy || "Nao informado"],
-    ["Horas concluidas", typeof item.completedHours === "number" ? `${item.completedHours}h` : "Sem horas"],
-    ["Horas restantes", typeof item.remainingHours === "number" ? `${item.remainingHours}h` : "Nao informado"],
-    ["Estimativa", typeof item.originalEstimate === "number" ? `${item.originalEstimate}h` : "Nao informado"],
-    ["Prioridade", item.priority || "Nao informado"],
-    ["Severidade", item.severity || "Nao informado"],
-    ["Value Area", item.valueArea || "Nao informado"],
-    ["Alterado em", item.updatedAt ? new Date(item.updatedAt).toLocaleString("pt-BR") : "Sem data"],
-    ["PR/Pipeline", item.prUrl || item.pullRequestUrl || item.pipelineUrl || "Nao localizado"]
+    [t("workItemModal.fieldCreatedAt"), item.createdAt ? new Date(item.createdAt).toLocaleString("pt-BR") : t("workItemModal.noDate")],
+    [t("workItemModal.fieldChangedBy"), item.changedBy || t("workItemModal.notInformed")],
+    [t("workItemModal.fieldCompletedHours"), typeof item.completedHours === "number" ? `${item.completedHours}h` : t("workItemModal.noHours")],
+    [t("workItemModal.fieldRemainingHours"), typeof item.remainingHours === "number" ? `${item.remainingHours}h` : t("workItemModal.notInformed")],
+    [t("workItemModal.fieldEstimate"), typeof item.originalEstimate === "number" ? `${item.originalEstimate}h` : t("workItemModal.notInformed")],
+    [t("workItemModal.fieldPriority"), item.priority || t("workItemModal.notInformed")],
+    [t("workItemModal.fieldSeverity"), item.severity || t("workItemModal.notInformed")],
+    [t("workItemModal.fieldValueArea"), item.valueArea || t("workItemModal.notInformed")],
+    [t("workItemModal.fieldChangedAt"), item.updatedAt ? new Date(item.updatedAt).toLocaleString("pt-BR") : t("workItemModal.noDate")],
+    [t("workItemModal.fieldPrPipeline"), item.prUrl || item.pullRequestUrl || item.pipelineUrl || t("workItemModal.notFound")]
   ];
 
   function toggleValue(value, setter) {
@@ -480,7 +483,7 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
         <header className="mbaz-new-modal-header">
           <div className="mbaz-new-modal-title"><TypeBadge type={item.type} /> <span>{itemCode}</span></div>
           <div className="mbaz-new-modal-actions">
-            {url && <a className="mbaz-new-modal-open" href={url} target="_blank" rel="noopener noreferrer"><i className="bi bi-box-arrow-up-right" /> Abrir no Azure</a>}
+            {url && <a className="mbaz-new-modal-open" href={url} target="_blank" rel="noopener noreferrer"><i className="bi bi-box-arrow-up-right" /> {t("workItemModal.openInAzure")}</a>}
             <button type="button" className="mbaz-new-modal-close" onClick={onClose}><i className="bi bi-x-lg" /></button>
           </div>
         </header>
@@ -492,13 +495,13 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
                 {item.state && <EnvBadge env={item.env || "qa"} />}
                 {item.prUrl || item.pullRequestUrl || item.pipelineUrl ? <a href={item.prUrl || item.pullRequestUrl || item.pipelineUrl} target="_blank" rel="noreferrer">PR/Pipeline</a> : null}
               </div>
-              <h2>{item.title || "Work Item sem titulo"}</h2>
+              <h2>{item.title || t("workItemModal.noTitle")}</h2>
               <div className="mbaz-new-modal-meta-strip">
-                <div><span>Motivo</span><strong>{item.reason || "Sem motivo"}</strong></div>
-                <div><span>Area Path</span><strong>{item.areaPath || "Sem area"}</strong></div>
-                <div><span>Sprint</span><strong>{compactSprintLabel(item.sprint || item.iteration) || "Sem sprint"}</strong></div>
+                <div><span>{t("workItemModal.reasonLabel")}</span><strong>{item.reason || t("workItemModal.noReason")}</strong></div>
+                <div><span>{t("workItemModal.areaPathLabel")}</span><strong>{item.areaPath || t("workItemModal.noArea")}</strong></div>
+                <div><span>{t("workItemModal.sprintLabel")}</span><strong>{compactSprintLabel(item.sprint || item.iteration) || t("workItemModal.noSprint")}</strong></div>
                 <div className="mbaz-meta-created-by">
-                  <span>Criado por</span>
+                  <span>{t("workItemModal.createdByLabel")}</span>
                   <div className="mbaz-meta-created-author">
                     <IdentityAvatar name={creatorDisplayName} imageUrl={creatorAvatarUrl} size={22} />
                     <strong>{creatorDisplayName}</strong>
@@ -507,19 +510,19 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
               </div>
               <div className="mbaz-new-modal-essential">
                 <div>
-                  <span>Status</span>
+                  <span>{t("workItemModal.statusLabel")}</span>
                   {onUpdateItem ? (
                     <select value={item.state || ""} onChange={(event) => onUpdateItem({ state: event.target.value })}>
                       {["New", "Active", "In QA", "HMG CNK", "Ready to Beta", "In BETA", "Ready to Prod", "Closed"].map((value) => <option key={value} value={value}>{value}</option>)}
                     </select>
-                  ) : <strong>{item.state || "Sem status"}</strong>}
+                  ) : <strong>{item.state || t("workItemModal.noStatus")}</strong>}
                 </div>
                 <div>
-                  <span>Assigned To</span>
+                  <span>{t("workItemModal.assignedToLabel")}</span>
                   {onUpdateItem ? (
                     <QaPicker
                       value={item.assigneeId || ""}
-                      emptyLabel={item.assigneeName || item.assignedTo || "Nao atribuido"}
+                      emptyLabel={item.assigneeName || item.assignedTo || t("workItemModal.notAssigned")}
                       showEmptyAvatar={Boolean(item.assigneeName || item.assignedTo)}
                       emptyImageUrl={item.assigneeImageUrl}
                       people={devPeople}
@@ -531,18 +534,18 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
                   ) : <p><IdentityAvatar name={assigneeDisplayName} imageUrl={item.assigneeImageUrl} size={28} /> <strong>{assigneeDisplayName}</strong></p>}
                 </div>
                 <div>
-                  <span>Tested by</span>
+                  <span>{t("workItemModal.testedByLabel")}</span>
                   {onUpdateItem ? <QaPicker value={item.qaCollaboratorId || ""} onChange={(qaCollaboratorId) => onUpdateItem({ qaCollaboratorId: qaCollaboratorId || null })} people={qaPeople} /> : <p><IdentityAvatar name={qaDisplayName} imageUrl={qaResponsible?.imageUrl || qaResponsible?.avatarUrl} color={qaResponsible?.color} size={28} /> <strong>{qaDisplayName}</strong></p>}
                 </div>
                 <div>
-                  <span>Tags</span>
-                  <p className="mbaz-new-modal-inline-tags">{tagList.length ? tagList.map(renderTag) : <em>Sem tags</em>}</p>
+                  <span>{t("workItemModal.tagsLabel")}</span>
+                  <p className="mbaz-new-modal-inline-tags">{tagList.length ? tagList.map(renderTag) : <em>{t("workItemModal.noTags")}</em>}</p>
                 </div>
               </div>
             </div>
           </section>
           <details className="mbaz-new-modal-collapse" open>
-            <summary><span>Descricao</span><small>Descricao e criterios em HTML do Azure</small></summary>
+            <summary><span>{t("workItemModal.descriptionTitle")}</span><small>{t("workItemModal.descriptionSubtitle")}</small></summary>
             <div className="mbaz-new-modal-description-body">
               {item.description ? <RichAzureHtml html={item.description} /> : null}
               {item.acceptanceCriteria ? (
@@ -557,14 +560,14 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
                   <RichAzureHtml html={item.reproSteps} />
                 </div>
               ) : null}
-              {!item.description && !item.acceptanceCriteria && !item.reproSteps ? <p className="mbaz-new-modal-muted">Sem conteudo preenchido neste Work Item.</p> : null}
+              {!item.description && !item.acceptanceCriteria && !item.reproSteps ? <p className="mbaz-new-modal-muted">{t("workItemModal.noContent")}</p> : null}
             </div>
           </details>
           <details className="mbaz-new-modal-result-history" open>
             <summary>
               <div className="mbaz-new-modal-section-title">
-                <strong>Resultado dos testes</strong>
-                <span>Historico de evidencias ja registradas para este work item.</span>
+                <strong>{t("workItemModal.testResultsTitle")}</strong>
+                <span>{t("workItemModal.testResultsSubtitle")}</span>
               </div>
               <div className="mbaz-new-modal-result-summary">
                 {evidenceByEnv.length ? evidenceByEnv.map(({ env, records }) => {
@@ -576,7 +579,7 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
                   );
                 }) : item.lastTestResult ? (
                   <span className={`mbaz-new-modal-result-chip ${evidenceResultInfo(item.lastTestResult).className}`}><i className={`bi ${evidenceResultInfo(item.lastTestResult).icon}`} /> {evidenceResultInfo(item.lastTestResult).label}</span>
-                ) : <span className="mbaz-new-modal-muted">Sem resultados</span>}
+                ) : <span className="mbaz-new-modal-muted">{t("workItemModal.noResults")}</span>}
               </div>
             </summary>
             {dedupedEvidenceHistory.length ? (
@@ -586,20 +589,20 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
                     <ResultBadge result={entry.result || entry.status} />
                     {evidenceEnvironments(entry).map((env) => <EnvBadge key={env} env={String(env).toLowerCase()} />)}
                     <IdentityAvatar name={entry.authorName || "QA"} imageUrl={entry.avatarUrl} size={22} />
-                    <span className="mbaz-new-modal-result-author">{entry.authorName || "QA nao identificado"}</span>
+                    <span className="mbaz-new-modal-result-author">{entry.authorName || t("workItemModal.qaUnidentified")}</span>
                     <span className="mbaz-new-modal-result-date">{entry.createdAt ? new Date(entry.createdAt).toLocaleString("pt-BR") : ""}</span>
                     {(entry.html || entry.note || entry.text) && <RichAzureHtml html={renderAzureCommentHtml(entry.html || entry.note || entry.text)} />}
                   </li>
                 ))}
               </ul>
             ) : item.lastTestResult ? (
-              <div className="mbaz-new-modal-result-list single"><ResultBadge result={item.lastTestResult} /><span>Ultimo resultado conhecido, sem detalhes adicionais.</span></div>
+              <div className="mbaz-new-modal-result-list single"><ResultBadge result={item.lastTestResult} /><span>{t("workItemModal.lastKnownResult")}</span></div>
             ) : (
-              <p className="mbaz-new-modal-muted">Nenhum resultado de teste registrado ainda para este work item.</p>
+              <p className="mbaz-new-modal-muted">{t("workItemModal.noTestResultsYet")}</p>
             )}
           </details>
           <details className="mbaz-new-modal-collapse">
-            <summary><span>Campos do Azure</span><small>Area, sprint, datas, horas, prioridade e links</small></summary>
+            <summary><span>{t("workItemModal.azureFieldsTitle")}</span><small>{t("workItemModal.azureFieldsSubtitle")}</small></summary>
             <div className="mbaz-new-modal-workitem-grid">
               {workFields.map(([label, value]) => (
                 <div key={label}>
@@ -610,25 +613,25 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
             </div>
           </details>
           <details className="mbaz-new-modal-collapse" open>
-            <summary><span>Discussions</span><small>{discussionsLoading ? "Carregando..." : `${discussions.length} comentario(s), incluindo evidencias`}</small></summary>
+            <summary><span>{t("workItemModal.discussionsTitle")}</span><small>{discussionsLoading ? t("workItemModal.loading") : t("workItemModal.commentsCount", { count: discussions.length })}</small></summary>
             <div className="mbaz-new-modal-discussions">
-              {discussionsLoading ? <p className="mbaz-new-modal-muted">Carregando discussions do Azure...</p> : discussions.length ? discussions.map((comment) => (
+              {discussionsLoading ? <p className="mbaz-new-modal-muted">{t("workItemModal.loadingDiscussions")}</p> : discussions.length ? discussions.map((comment) => (
                 <article key={comment.id}>
                   <header>
                     <IdentityAvatar name={comment.authorName} imageUrl={comment.avatarUrl} size={28} />
                     <strong>{comment.authorName}</strong>
-                    <span className="mbaz-new-modal-disc-date">{comment.createdAt ? new Date(comment.createdAt).toLocaleString("pt-BR") : "Sem data"}</span>
+                    <span className="mbaz-new-modal-disc-date">{comment.createdAt ? new Date(comment.createdAt).toLocaleString("pt-BR") : t("workItemModal.noDate")}</span>
                   </header>
                   <RichAzureHtml html={renderAzureCommentHtml(comment.html || comment.text)} />
                 </article>
-              )) : <p className="mbaz-new-modal-muted">Nenhuma discussion carregada para este Work Item.</p>}
+              )) : <p className="mbaz-new-modal-muted">{t("workItemModal.noDiscussions")}</p>}
             </div>
           </details>
         {onTestResult && (
           <div className="mbaz-new-modal-testbar mbaz-new-modal-testbar-rich">
             <div className="mbaz-new-modal-section-title">
-              <strong>Registrar novo resultado de teste</strong>
-              <span>Escolha um resultado para exibir os detalhes que serao gravados no Azure e enviados ao Slack.</span>
+              <strong>{t("workItemModal.registerResultTitle")}</strong>
+              <span>{t("workItemModal.registerResultSubtitle")}</span>
             </div>
             <div className="mbaz-new-modal-test-options">
               <button type="button" className={result === "pass" ? "active approved" : "approved"} onClick={() => setResultAndState("pass")}><i className="bi bi-check-lg" /> Approved</button>
@@ -637,19 +640,19 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
             </div>
             {result ? (
             <div className="mbaz-new-modal-form-grid">
-              <label><span>Proximo status</span><select value={state} onChange={(event) => setState(event.target.value)} title="Status alvo">
-                <option value="">Nao alterar status</option>
+              <label><span>{t("workItemModal.nextStatusLabel")}</span><select value={state} onChange={(event) => setState(event.target.value)} title={t("workItemModal.nextStatusLabel")}>
+                <option value="">{t("workItemModal.doNotChangeStatus")}</option>
                 <option value="In QA">In QA</option>
                 <option value="Ready to Beta">Ready to Beta</option>
                 <option value="In BETA">In BETA</option>
                 <option value="Ready to Prod">Ready to Prod</option>
               </select></label>
-              <fieldset><legend>Ambiente testado</legend><div className="mbaz-new-modal-checks">{environmentOptions.map((env) => <button key={env} type="button" className={`mbaz-new-modal-toggle-pill ${selectedEnvironments.includes(env) ? "active" : ""}`} onClick={() => toggleValue(env, setSelectedEnvironments)}><img src={envIconSrc(env)} alt="" />{env}</button>)}</div></fieldset>
-              <fieldset><legend>Pais testado</legend><div className="mbaz-new-modal-checks countries">{countryOptions.filter((country) => country !== "BR").map((country) => <button key={country} type="button" className={`mbaz-new-modal-toggle-pill country ${selectedCountries.includes(country) ? "active" : ""}`} onClick={() => toggleValue(country, setSelectedCountries)}><CountryVisual code={country} compact /></button>)}</div></fieldset>
-              <fieldset><legend>Breakpoint</legend><div className="mbaz-new-modal-checks">{breakpointOptions.map((bp) => <button key={bp.value} type="button" className={`mbaz-new-modal-toggle-pill ${selectedBreakpoints.includes(bp.value) ? "active" : ""}`} onClick={() => toggleValue(bp.value, setSelectedBreakpoints)}><i className={`bi ${bp.icon}`} />{bp.label}<small>{bp.detail}</small></button>)}</div></fieldset>
-              <label className="wide"><span>Contexto opcional</span><textarea value={context} onChange={(event) => setContext(event.target.value)} placeholder="Ex.: Validado checkout em 1280px, evidencias abaixo." /></label>
+              <fieldset><legend>{t("workItemModal.environmentTestedLegend")}</legend><div className="mbaz-new-modal-checks">{environmentOptions.map((env) => <button key={env} type="button" className={`mbaz-new-modal-toggle-pill ${selectedEnvironments.includes(env) ? "active" : ""}`} onClick={() => toggleValue(env, setSelectedEnvironments)}><img src={envIconSrc(env)} alt="" />{env}</button>)}</div></fieldset>
+              <fieldset><legend>{t("workItemModal.countryTestedLegend")}</legend><div className="mbaz-new-modal-checks countries">{countryOptions.filter((country) => country !== "BR").map((country) => <button key={country} type="button" className={`mbaz-new-modal-toggle-pill country ${selectedCountries.includes(country) ? "active" : ""}`} onClick={() => toggleValue(country, setSelectedCountries)}><CountryVisual code={country} compact /></button>)}</div></fieldset>
+              <fieldset><legend>{t("workItemModal.breakpointLegend")}</legend><div className="mbaz-new-modal-checks">{breakpointOptions.map((bp) => <button key={bp.value} type="button" className={`mbaz-new-modal-toggle-pill ${selectedBreakpoints.includes(bp.value) ? "active" : ""}`} onClick={() => toggleValue(bp.value, setSelectedBreakpoints)}><i className={`bi ${bp.icon}`} />{bp.label}<small>{bp.detail}</small></button>)}</div></fieldset>
+              <label className="wide"><span>{t("workItemModal.optionalContextLabel")}</span><textarea value={context} onChange={(event) => setContext(event.target.value)} placeholder={t("workItemModal.optionalContextPlaceholder")} /></label>
               <div className="wide mbaz-new-modal-attachments">
-                <span>Evidencias</span>
+                <span>{t("workItemModal.evidenceLabel")}</span>
                 <div
                   className={`mbaz-new-modal-dropzone ${dragActive ? "active" : ""}`}
                   onDragOver={(event) => { event.preventDefault(); setDragActive(true); }}
@@ -657,9 +660,9 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
                   onDrop={onDrop}
                 >
                   <i className="bi bi-images" />
-                  <strong>Arraste imagens ou GIFs aqui</strong>
-                  <span>ou importe arquivos do computador</span>
-                  <button type="button" onClick={() => fileInputRef.current?.click()}>Importar evidencias</button>
+                  <strong>{t("workItemModal.dropzoneTitle")}</strong>
+                  <span>{t("workItemModal.dropzoneSubtitle")}</span>
+                  <button type="button" onClick={() => fileInputRef.current?.click()}>{t("workItemModal.importEvidenceButton")}</button>
                   <input ref={fileInputRef} type="file" accept="image/*,.gif" multiple hidden onChange={(event) => readEvidenceFiles(event.target.files)} />
                 </div>
                 {attachments.length > 0 && <div className="mbaz-new-modal-evidence-grid">{attachments.map((attachment) => {
@@ -670,11 +673,11 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
               </div>
               <div className="wide mbaz-new-modal-preview">
                 <div className="mbaz-new-modal-preview-column">
-                  <strong>Previa da discussion no Azure</strong>
+                  <strong>{t("workItemModal.azurePreviewTitle")}</strong>
                   <RichAzureHtml html={discussionPreviewHtml} />
                 </div>
                 <div className="mbaz-new-modal-preview-column">
-                  <strong>Previa Slack</strong>
+                  <strong>{t("workItemModal.slackPreviewTitle")}</strong>
                   <EnhancedSlackPreview
                     text={slackPreviewText}
                     item={item}
@@ -684,10 +687,10 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
                 </div>
               </div>
             </div>
-            ) : <div className="mbaz-new-modal-result-empty"><i className="bi bi-arrow-up" /> Selecione Approved, Fail ou Limitation para registrar evidencias.</div>}
+            ) : <div className="mbaz-new-modal-result-empty"><i className="bi bi-arrow-up" /> {t("workItemModal.selectResultPrompt")}</div>}
             <div className="mbaz-new-modal-testbar-footer">
-              {result && <button type="button" className="mbaz-new-modal-cancel-result" onClick={cancelResult} disabled={saving}>Cancelar</button>}
-              <button type="button" className="mbaz-new-modal-save-result" onClick={saveResult} disabled={saving || !result || !selectedEnvironments.length}>{saving ? "Salvando..." : "Registrar resultado"}</button>
+              {result && <button type="button" className="mbaz-new-modal-cancel-result" onClick={cancelResult} disabled={saving}>{t("workItemModal.cancelButton")}</button>}
+              <button type="button" className="mbaz-new-modal-save-result" onClick={saveResult} disabled={saving || !result || !selectedEnvironments.length}>{saving ? t("workItemModal.savingButton") : t("workItemModal.registerResultButton")}</button>
             </div>
           </div>
         )}

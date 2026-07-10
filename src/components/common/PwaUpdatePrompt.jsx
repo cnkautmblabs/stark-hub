@@ -1,4 +1,5 @@
 import { useRegisterSW } from "virtual:pwa-register/react";
+import { useTranslation } from "react-i18next";
 
 // Sem isso, um deploy novo fica "invisivel" pra quem ja tem o app aberto: o
 // service worker (registerType: autoUpdate) baixa a versao nova em segundo
@@ -7,6 +8,7 @@ import { useRegisterSW } from "virtual:pwa-register/react";
 // Este banner aparece assim que a nova versao termina de baixar, com um
 // botao que forca a troca + reload na hora.
 export function PwaUpdatePrompt() {
+  const { t } = useTranslation();
   const {
     needRefresh: [needRefresh],
     updateServiceWorker
@@ -24,8 +26,8 @@ export function PwaUpdatePrompt() {
 
   return (
     <div className="mb-pwa-update-banner" role="status">
-      <span><i className="bi bi-arrow-repeat" /> Nova versao do Stark Hub disponivel.</span>
-      <button type="button" onClick={() => updateServiceWorker(true)}>Atualizar agora</button>
+      <span><i className="bi bi-arrow-repeat" /> {t("pwa.newVersion")}</span>
+      <button type="button" onClick={() => updateServiceWorker(true)}>{t("pwa.updateNow")}</button>
     </div>
   );
 }

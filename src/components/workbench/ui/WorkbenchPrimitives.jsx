@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { FiAlertCircle, FiSearch } from "react-icons/fi";
 import { countries, environments, flagUrl, formatWorkItemCode, testResultTypes, workItemTypes } from "../../../utils/constants.js";
 import { compactSprintLabel } from "../../../utils/sprints.js";
@@ -126,13 +127,16 @@ export function FilterCombobox({
   values = [],
   onChange,
   multiple = true,
-  placeholder = "Buscar",
-  allLabel = "Todos",
+  placeholder,
+  allLabel,
   className = "",
   renderOption,
   getOptionLabel = (option) => option?.label ?? String(option?.value ?? option),
   getOptionValue = (option) => option?.value ?? option
 }) {
+  const { t } = useTranslation();
+  const resolvedPlaceholder = placeholder ?? t("common.searchPlaceholder");
+  const resolvedAllLabel = allLabel ?? t("common.all");
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const rootRef = useRef(null);
@@ -169,7 +173,7 @@ export function FilterCombobox({
     setQuery("");
   }
 
-  const summary = selectedValues.length ? `${selectedValues.length} selecionado(s)` : allLabel;
+  const summary = selectedValues.length ? t("common.selectedCount", { count: selectedValues.length }) : resolvedAllLabel;
 
   return (
     <div ref={rootRef} className={`mbw-combobox ${className}`}>
@@ -180,7 +184,7 @@ export function FilterCombobox({
       </button>
       {open && (
         <div className="mbw-combobox-menu">
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} autoFocus />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={resolvedPlaceholder} autoFocus />
           <div className="mbw-combobox-options">
             {filteredOptions.map((option) => {
               const value = getOptionValue(option);
@@ -192,11 +196,11 @@ export function FilterCombobox({
                 </button>
               );
             })}
-            {!filteredOptions.length && <span className="mbw-combobox-empty">Nenhuma opcao</span>}
+            {!filteredOptions.length && <span className="mbw-combobox-empty">{t("common.noOptions")}</span>}
           </div>
           <div className="mbw-combobox-actions">
-            {multiple && <button type="button" onClick={() => onChange(options.map(getOptionValue))}>Selecionar todos</button>}
-            <button type="button" onClick={clear}>Limpar filtros</button>
+            {multiple && <button type="button" onClick={() => onChange(options.map(getOptionValue))}>{t("common.selectAll")}</button>}
+            <button type="button" onClick={clear}>{t("common.clearFilters")}</button>
           </div>
         </div>
       )}
@@ -205,6 +209,7 @@ export function FilterCombobox({
 }
 
 export function ProfileCombobox({ label, people = [], values = [], onChange, multiple = true }) {
+  const { t } = useTranslation();
   return (
     <FilterCombobox
       label={label}
@@ -212,7 +217,7 @@ export function ProfileCombobox({ label, people = [], values = [], onChange, mul
       values={values}
       onChange={onChange}
       multiple={multiple}
-      placeholder="Buscar pessoa"
+      placeholder={t("common.searchPerson")}
       renderOption={(option) => <AvatarDot person={option.person} name={option.label} />}
     />
   );
@@ -297,7 +302,8 @@ export function ChartSkeleton({ rows = 4, variant = "bars", className = "" }) {
 }
 
 export function AvatarDot({ person, name, compact = false }) {
-  const displayName = person?.azureName || person?.full_name || person?.name || name || "Sem responsavel";
+  const { t } = useTranslation();
+  const displayName = person?.azureName || person?.full_name || person?.name || name || t("common.noResponsible");
   const imageUrl = person?.imageUrl || person?.avatarUrl || person?.avatar_url || person?.photoUrl || person?.photo_url || "";
   const color = person?.color || "#0b74de";
   const [failed, setFailed] = useState(false);
@@ -315,14 +321,16 @@ function fullDisplayName(person, fallback = "") {
   return String(value).trim() || "QA";
 }
 
-export function QaPicker({ value, onChange, people = [], emptyLabel = "Sem QA", showEmptyAvatar = false, emptyImageUrl = "" }) {
+export function QaPicker({ value, onChange, people = [], emptyLabel, showEmptyAvatar = false, emptyImageUrl = "" }) {
+  const { t } = useTranslation();
+  const resolvedEmptyLabel = emptyLabel ?? t("common.noQa");
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
   const current = people.find((person) => person.id === value);
   // Quando a pessoa atribuida no Azure nao esta cadastrada como colaborador
   // no Stark Hub, `current` fica vazio — mas o nome real (emptyLabel) ainda
   // deve aparecer com um avatar (iniciais), nao so texto puro sem foto.
-  const fallbackPerson = !current && showEmptyAvatar ? { azureName: emptyLabel, imageUrl: emptyImageUrl } : null;
+  const fallbackPerson = !current && showEmptyAvatar ? { azureName: resolvedEmptyLabel, imageUrl: emptyImageUrl } : null;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -339,7 +347,7 @@ export function QaPicker({ value, onChange, people = [], emptyLabel = "Sem QA", 
   }
 
   const selectedPerson = current || fallbackPerson;
-  const selectedLabel = fullDisplayName(selectedPerson, emptyLabel);
+  const selectedLabel = fullDisplayName(selectedPerson, resolvedEmptyLabel);
 
   return (
     <div ref={rootRef} className="mbw-qa-picker">
@@ -349,7 +357,7 @@ export function QaPicker({ value, onChange, people = [], emptyLabel = "Sem QA", 
             <AvatarDot person={selectedPerson} compact />
             <span className="mbw-qa-picker-name">{selectedLabel}</span>
           </>
-        ) : <span className="mbw-qa-picker-empty">{emptyLabel}</span>}
+        ) : <span className="mbw-qa-picker-empty">{resolvedEmptyLabel}</span>}
         <i className={`bi ${open ? "bi-chevron-up" : "bi-chevron-down"}`} />
       </button>
       {open && (
@@ -357,7 +365,7 @@ export function QaPicker({ value, onChange, people = [], emptyLabel = "Sem QA", 
           <div className="mbw-combobox-options">
             <button type="button" className={`mbw-combobox-option ${!value ? "active" : ""}`} onClick={() => select("")}>
               <span className="mbw-combobox-check">{!value && <i className="bi bi-check-lg" />}</span>
-              <span className="mbw-combobox-label">{emptyLabel}</span>
+              <span className="mbw-combobox-label">{resolvedEmptyLabel}</span>
             </button>
             {people.map((person) => (
               <button key={person.id} type="button" className={`mbw-combobox-option ${value === person.id ? "active" : ""}`} onClick={() => select(person.id)}>

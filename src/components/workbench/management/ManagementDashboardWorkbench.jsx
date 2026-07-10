@@ -102,9 +102,9 @@ export function ManagementDashboardWorkbench() {
     return devs.map((dev) => {
       const own = filteredItems.filter((item) => item.assigneeId === dev.id || findCollaboratorByName(devNameIndex, item.assigneeName)?.id === dev.id);
       const counts = Object.fromEntries(workItemTypeCounters.map(({ key, match }) => [key, own.filter((item) => String(item.type || "").toLowerCase() === match).length]));
-      return { id: dev.id, name: dev.azureName || "Sem nome", color: dev.color, imageUrl: dev.imageUrl || dev.avatarUrl || "", ...counts, total: own.length };
+      return { id: dev.id, name: dev.azureName || t("management.noName"), color: dev.color, imageUrl: dev.imageUrl || dev.avatarUrl || "", ...counts, total: own.length };
     }).filter((row) => row.total > 0).sort((a, b) => b.total - a.total);
-  }, [filteredItems, collaborators, devNameIndex]);
+  }, [filteredItems, collaborators, devNameIndex, t]);
 
   const testMetrics = useMemo(() => {
     const localByItem = new Map();
@@ -134,12 +134,12 @@ export function ManagementDashboardWorkbench() {
     const qaPeople = collaborators.filter((person) => person.isQa);
     return qaPeople.map((qa) => ({
       id: qa.id,
-      name: qa.azureName || "Sem nome",
+      name: qa.azureName || t("management.noName"),
       color: qa.color,
       imageUrl: qa.imageUrl || qa.avatarUrl || "",
       count: filteredItems.filter((item) => item.qaCollaboratorId === qa.id && ["Bug", "User Story"].includes(item.type)).length
     })).filter((row) => row.count > 0).sort((a, b) => b.count - a.count);
-  }, [filteredItems, collaborators]);
+  }, [filteredItems, collaborators, t]);
 
   const maxFeatureValue = Math.max(1, ...featuresPerSprint.map((row) => row.total));
   const maxBugValue = Math.max(1, ...bugsPerSprint.map((row) => row.total));
@@ -147,90 +147,90 @@ export function ManagementDashboardWorkbench() {
 
   function exportManagementCsv() {
     const rows = [
-      ["KPI", "Delivery rate", `${deliveryStats.rate}%`],
-      ["KPI", "Features entregues", featuresPerSprint.reduce((sum, row) => sum + row.delivered, 0)],
-      ["KPI", "Bugs no periodo", bugsPerSprint.reduce((sum, row) => sum + row.total, 0)],
-      ["KPI", "Pass rate testes", `${testMetrics.passRate}%`],
-      ["KPI", "Itens no periodo", deliveryStats.total],
-      ...featuresPerSprint.map((row) => ["Feature por sprint", row.sprint, `${row.delivered}/${row.total}`]),
-      ...bugsPerSprint.map((row) => ["Bugs por sprint", row.sprint, row.total]),
-      ...devDeliveries.map((row) => ["Entrega por Dev", row.name, `Epic ${row.epics}; Feature ${row.features}; US ${row.userStories}; Task ${row.tasks}; Bug ${row.bugs}; Test Case ${row.testCases}; Total ${row.total}`]),
-      ...qaWorkload.map((row) => ["Carga por QA", row.name, row.count]),
-      ["Testes", "Approved", testMetrics.pass],
-      ["Testes", "Fail", testMetrics.fail],
-      ["Testes", "Limitation", testMetrics.limitation]
+      ["KPI", t("management.kpiDeliveryRate"), `${deliveryStats.rate}%`],
+      ["KPI", t("management.kpiFeaturesDelivered"), featuresPerSprint.reduce((sum, row) => sum + row.delivered, 0)],
+      ["KPI", t("management.kpiBugsInPeriod"), bugsPerSprint.reduce((sum, row) => sum + row.total, 0)],
+      ["KPI", t("management.kpiPassRate"), `${testMetrics.passRate}%`],
+      ["KPI", t("management.kpiItemsInPeriod"), deliveryStats.total],
+      ...featuresPerSprint.map((row) => [t("management.csvFeaturePerSprint"), row.sprint, `${row.delivered}/${row.total}`]),
+      ...bugsPerSprint.map((row) => [t("management.csvBugsPerSprint"), row.sprint, row.total]),
+      ...devDeliveries.map((row) => [t("management.csvDevDelivery"), row.name, `Epic ${row.epics}; Feature ${row.features}; US ${row.userStories}; Task ${row.tasks}; Bug ${row.bugs}; Test Case ${row.testCases}; Total ${row.total}`]),
+      ...qaWorkload.map((row) => [t("management.csvQaLoad"), row.name, row.count]),
+      [t("management.csvTests"), "Approved", testMetrics.pass],
+      [t("management.csvTests"), "Fail", testMetrics.fail],
+      [t("management.csvTests"), "Limitation", testMetrics.limitation]
     ];
-    downloadCsv(`gestao-projeto-${dateStamp()}.csv`, ["Secao", "Item", "Valor"], rows);
+    downloadCsv(`gestao-projeto-${dateStamp()}.csv`, [t("management.csvSection"), t("management.csvItem"), t("management.csvValue")], rows);
   }
 
   return (
     <section className="mbw-page mb-mgmt-dashboard">
       <WorkbenchHeader
-        kicker="Gerenciamento"
+        kicker={t("management.kicker")}
         title={t("pages.managementDashboard.title")}
         subtitle={t("pages.managementDashboard.subtitle")}
         demoMode={demoMode}
-        actions={<><button type="button" className="mb-mgmt-refresh" onClick={exportManagementCsv}><i className="bi bi-download" /> CSV</button><button type="button" className="mb-mgmt-refresh" onClick={reloadEvidence}><i className="bi bi-arrow-clockwise" /> Atualizar</button></>}
+        actions={<><button type="button" className="mb-mgmt-refresh" onClick={exportManagementCsv}><i className="bi bi-download" /> {t("management.csvButton")}</button><button type="button" className="mb-mgmt-refresh" onClick={reloadEvidence}><i className="bi bi-arrow-clockwise" /> {t("management.refreshButton")}</button></>}
       />
 
       <div className="mb-mgmt-filters">
-        <FilterCombobox label="Sprint inicial" options={sprintOptions.map((value) => ({ value, label: value }))} values={fromValue ? [fromValue] : []} multiple={false} onChange={(value) => setSprintFrom(value || "")} />
-        <FilterCombobox label="Sprint final" options={sprintOptions.map((value) => ({ value, label: value }))} values={toValue ? [toValue] : []} multiple={false} onChange={(value) => setSprintTo(value || "")} />
-        <span className="mb-mgmt-range-hint">{selectedSprints.length} sprint(s) no periodo: {selectedSprints.join(", ") || "-"}</span>
+        <FilterCombobox label={t("management.sprintFromLabel")} options={sprintOptions.map((value) => ({ value, label: value }))} values={fromValue ? [fromValue] : []} multiple={false} onChange={(value) => setSprintFrom(value || "")} />
+        <FilterCombobox label={t("management.sprintToLabel")} options={sprintOptions.map((value) => ({ value, label: value }))} values={toValue ? [toValue] : []} multiple={false} onChange={(value) => setSprintTo(value || "")} />
+        <span className="mb-mgmt-range-hint">{t("management.rangeHint", { count: selectedSprints.length, sprints: selectedSprints.join(", ") || "-" })}</span>
       </div>
 
       <div className="mb-mgmt-kpis">
         {loading ? <KpiSkeleton count={5} /> : (
           <>
-            <Kpi icon="bi-rocket-takeoff" label="Delivery rate" value={`${deliveryStats.rate}%`} color="#16a34a" />
-            <Kpi icon="bi-flag-fill" label="Features entregues" value={featuresPerSprint.reduce((sum, row) => sum + row.delivered, 0)} color="#2563eb" />
-            <Kpi icon="bi-bug-fill" label="Bugs no periodo" value={bugsPerSprint.reduce((sum, row) => sum + row.total, 0)} color="#dc2626" />
-            <Kpi icon="bi-check2-circle" label="Pass rate (testes)" value={`${testMetrics.passRate}%`} color="#7c3aed" />
-            <Kpi icon="bi-clipboard2-data" label="Itens no periodo" value={deliveryStats.total} color="#0ea5e9" />
+            <Kpi icon="bi-rocket-takeoff" label={t("management.kpiDeliveryRate")} value={`${deliveryStats.rate}%`} color="#16a34a" />
+            <Kpi icon="bi-flag-fill" label={t("management.kpiFeaturesDelivered")} value={featuresPerSprint.reduce((sum, row) => sum + row.delivered, 0)} color="#2563eb" />
+            <Kpi icon="bi-bug-fill" label={t("management.kpiBugsInPeriod")} value={bugsPerSprint.reduce((sum, row) => sum + row.total, 0)} color="#dc2626" />
+            <Kpi icon="bi-check2-circle" label={t("management.kpiPassRate")} value={`${testMetrics.passRate}%`} color="#7c3aed" />
+            <Kpi icon="bi-clipboard2-data" label={t("management.kpiItemsInPeriod")} value={deliveryStats.total} color="#0ea5e9" />
           </>
         )}
       </div>
 
       <div className="mb-mgmt-grid">
         <section className="mb-mgmt-card">
-          <header><strong>Entregas de Feature por sprint</strong><small>Total x entregue (env prod)</small></header>
+          <header><strong>{t("management.featuresChartTitle")}</strong><small>{t("management.featuresChartSubtitle")}</small></header>
           {loading ? <ChartSkeleton rows={6} /> : featuresPerSprint.length ? (
             <ResponsiveContainer width="100%" height={Math.max(160, featuresPerSprint.length * 34)}>
               <BarChart data={featuresPerSprint} layout="vertical" margin={{ top: 4, right: 30, bottom: 4, left: 4 }}>
                 <XAxis type="number" hide domain={[0, maxFeatureValue]} />
                 <YAxis type="category" dataKey="sprint" width={78} tick={<CompactAxisTick width={72} formatter={compactSprintLabel} />} axisLine={false} tickLine={false} />
                 <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
-                <Bar dataKey="total" name="Total" fill="#cbd5e1" radius={[0, 6, 6, 0]} barSize={10} />
-                <Bar dataKey="delivered" name="Entregue" fill="#16a34a" radius={[0, 6, 6, 0]} barSize={10}>
+                <Bar dataKey="total" name={t("management.totalLabel")} fill="#cbd5e1" radius={[0, 6, 6, 0]} barSize={10} />
+                <Bar dataKey="delivered" name={t("management.deliveredLabel")} fill="#16a34a" radius={[0, 6, 6, 0]} barSize={10}>
                   <LabelList dataKey="delivered" position="right" style={{ fill: "var(--starkMuted)", fontSize: 11 }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-          ) : <span className="mb-mgmt-empty">Sem dados no periodo.</span>}
-          {!loading && featuresPerSprint.length > 0 && <div className="mb-mgmt-chart-legend"><span><i style={{ background: "#cbd5e1" }} />Total</span><span><i style={{ background: "#16a34a" }} />Entregue</span></div>}
+          ) : <span className="mb-mgmt-empty">{t("management.noDataInPeriod")}</span>}
+          {!loading && featuresPerSprint.length > 0 && <div className="mb-mgmt-chart-legend"><span><i style={{ background: "#cbd5e1" }} />{t("management.totalLabel")}</span><span><i style={{ background: "#16a34a" }} />{t("management.deliveredLabel")}</span></div>}
         </section>
 
         <section className="mb-mgmt-card">
-          <header><strong>Bugs por sprint</strong><small>Volume total de Bug work items</small></header>
+          <header><strong>{t("management.bugsChartTitle")}</strong><small>{t("management.bugsChartSubtitle")}</small></header>
           {loading ? <ChartSkeleton rows={6} /> : bugsPerSprint.length ? (
             <ResponsiveContainer width="100%" height={Math.max(160, bugsPerSprint.length * 34)}>
               <BarChart data={bugsPerSprint} layout="vertical" margin={{ top: 4, right: 30, bottom: 4, left: 4 }}>
                 <XAxis type="number" hide domain={[0, maxBugValue]} />
                 <YAxis type="category" dataKey="sprint" width={78} tick={<CompactAxisTick width={72} formatter={compactSprintLabel} />} axisLine={false} tickLine={false} />
                 <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
-                <Bar dataKey="total" name="Bugs" fill="#dc2626" radius={[0, 6, 6, 0]}>
+                <Bar dataKey="total" name={t("management.bugsSeriesLabel")} fill="#dc2626" radius={[0, 6, 6, 0]}>
                   <LabelList dataKey="total" position="right" style={{ fill: "var(--starkMuted)", fontSize: 11 }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-          ) : <span className="mb-mgmt-empty">Sem dados no periodo.</span>}
+          ) : <span className="mb-mgmt-empty">{t("management.noDataInPeriod")}</span>}
         </section>
 
         <section className="mb-mgmt-card">
-          <header><strong>Entregas por Dev</strong><small>Epic, Feature, US, Task, Bug e Test Case no periodo</small></header>
+          <header><strong>{t("management.devDeliveriesTitle")}</strong><small>{t("management.devDeliveriesSubtitle")}</small></header>
           {loading ? <WorkbenchCardSkeleton rows={4} /> : (
             <div className="mb-mgmt-dev-table cols-wide">
-              <div className="mb-mgmt-dev-head cols-wide"><span>Dev</span>{workItemTypeCounters.map(({ key, label }) => <span key={key}>{label}</span>)}<span>Total</span></div>
+              <div className="mb-mgmt-dev-head cols-wide"><span>{t("management.devLabel")}</span>{workItemTypeCounters.map(({ key, label }) => <span key={key}>{label}</span>)}<span>{t("management.totalLabel")}</span></div>
               {devDeliveries.map((row) => (
                 <div key={row.id} className="mb-mgmt-dev-row cols-wide">
                   <span><AvatarDot person={row} compact /> {row.name}</span>
@@ -238,13 +238,13 @@ export function ManagementDashboardWorkbench() {
                   <strong>{row.total}</strong>
                 </div>
               ))}
-              {!devDeliveries.length && <span className="mb-mgmt-empty">Sem dados no periodo.</span>}
+              {!devDeliveries.length && <span className="mb-mgmt-empty">{t("management.noDataInPeriod")}</span>}
             </div>
           )}
         </section>
 
         <section className="mb-mgmt-card">
-          <header><strong>Metricas de testes</strong><small>Resultados registrados no periodo</small></header>
+          <header><strong>{t("management.testMetricsTitle")}</strong><small>{t("management.testMetricsSubtitle")}</small></header>
           {loading ? <ChartSkeleton rows={3} /> : testMetrics.total ? (
             <>
               <div className="mb-mgmt-test-summary">
@@ -265,11 +265,11 @@ export function ManagementDashboardWorkbench() {
                 </BarChart>
               </ResponsiveContainer>
             </>
-          ) : <span className="mb-mgmt-empty">Sem evidencias no periodo.</span>}
+          ) : <span className="mb-mgmt-empty">{t("management.noEvidenceInPeriod")}</span>}
         </section>
 
         <section className="mb-mgmt-card">
-          <header><strong>Carga por QA</strong><small>Cards com Tested by no periodo</small></header>
+          <header><strong>{t("management.qaWorkloadTitle")}</strong><small>{t("management.qaWorkloadSubtitle")}</small></header>
           {loading ? <WorkbenchCardSkeleton rows={3} /> : (
             <div className="mb-mgmt-dev-table">
               <div className="mb-mgmt-dev-head"><span>QA</span><span /><span /><span>Cards</span></div>
@@ -280,7 +280,7 @@ export function ManagementDashboardWorkbench() {
                   <strong>{row.count}</strong>
                 </div>
               ))}
-              {!qaWorkload.length && <span className="mb-mgmt-empty">Sem dados no periodo.</span>}
+              {!qaWorkload.length && <span className="mb-mgmt-empty">{t("management.noDataInPeriod")}</span>}
             </div>
           )}
         </section>

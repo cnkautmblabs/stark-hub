@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { useWorkItems } from "../../hooks/useWorkItems.js";
 import { useCollaborators } from "../../hooks/useCollaborators.js";
@@ -35,6 +36,7 @@ function writeSeenIds(key, ids) {
 // QA pega um item seu para teste; QA ve itens (de qualquer dev) que entram
 // em In QA/In BETA/Ready Beta/HMG CNK/Ready Prod.
 export function BrowserNotificationWatcher() {
+  const { t } = useTranslation();
   const { profile, user, demoMode } = useAuth();
   const { items } = useWorkItems();
   const { collaborators } = useCollaborators();
@@ -93,7 +95,7 @@ export function BrowserNotificationWatcher() {
       playNotificationSound("itemEnteredQaBeta", profile, user);
       fresh.slice(0, 4).forEach((item) => {
         const qaPerson = collaborators.find((person) => person.id === item.qaCollaboratorId);
-        const title = isQa ? "Novo item disponivel para teste" : "Seu item foi pego para teste";
+        const title = isQa ? t("browserNotifications.newItemForTest") : t("browserNotifications.itemPickedUpForTest");
         const body = isQa
           ? `#${item.id} ${item.title || ""} · ${qaStatusInfo(item.state).label || item.state}`
           : `#${item.id} ${item.title || ""} · ${qaPerson?.azureName || "QA"}`;
@@ -111,7 +113,7 @@ export function BrowserNotificationWatcher() {
       });
     }
     writeSeenIds(seenKey, new Set(relevant.map((item) => item.id)));
-  }, [items, collaborators, isDev, isQa, demoMode, profile, user, userKey, myCollaborator, nameIndex]);
+  }, [items, collaborators, isDev, isQa, demoMode, profile, user, userKey, myCollaborator, nameIndex, t]);
 
   // Som (e notificacao, se a permissao ja foi concedida) pro Dev quando o
   // PROPRIO item e aprovado/reprovado num teste — diferente do bloco acima
@@ -154,7 +156,7 @@ export function BrowserNotificationWatcher() {
       if (typeof Notification !== "undefined" && Notification.permission === "granted" && readPersonalSetting(profile, user, "browserNotificationsEnabled", false)) {
         const item = items.find((entry2) => Number(entry2.id) === Number(entry.workItemId));
         try {
-          const notification = new Notification(approved ? "Seu item foi aprovado" : "Seu item foi reprovado", {
+          const notification = new Notification(approved ? t("browserNotifications.itemApproved") : t("browserNotifications.itemRejected"), {
             body: `#${entry.workItemId} ${item?.title || ""}`,
             tag: `stark-hub-result-${entry.id}`
           });
@@ -169,7 +171,7 @@ export function BrowserNotificationWatcher() {
       }
     });
     writeSeenIds(resultSeenKey, new Set(myEvidence.map((entry) => entry.id)));
-  }, [evidence, items, isDev, myCollaborator, nameIndex, demoMode, profile, user, userKey]);
+  }, [evidence, items, isDev, myCollaborator, nameIndex, demoMode, profile, user, userKey, t]);
 
   return null;
 }

@@ -1,9 +1,11 @@
 import React, { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import ReactorLogo from "../components/layout/ReactorLogo.jsx";
 import { useAuth } from "../contexts/AuthContext.jsx";
 
 function AliasTagInput({ values = [], onChange }) {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState("");
 
   function commit() {
@@ -25,7 +27,7 @@ function AliasTagInput({ values = [], onChange }) {
       {values.map((alias) => (
         <span key={alias} className="stark-profile-setup-alias-pill">
           {alias}
-          <button type="button" onClick={() => onChange(values.filter((entry) => entry !== alias))} title="Remover">×</button>
+          <button type="button" onClick={() => onChange(values.filter((entry) => entry !== alias))} title={t("profileSetup.removeButton")}>×</button>
         </span>
       ))}
       <input
@@ -33,13 +35,14 @@ function AliasTagInput({ values = [], onChange }) {
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={handleKeyDown}
         onBlur={commit}
-        placeholder="Adicionar alias e Enter"
+        placeholder={t("profileSetup.addAliasPlaceholder")}
       />
     </div>
   );
 }
 
 export default function ProfileSetup() {
+  const { t } = useTranslation();
   const { profile, user, updateProfile, demoMode } = useAuth();
   const navigate = useNavigate();
   const [slackMemberId, setSlackMemberId] = useState(profile?.slackMemberId || "");
@@ -58,7 +61,7 @@ export default function ProfileSetup() {
   async function handleSubmit(event) {
     event.preventDefault();
     if (!slackMemberId.trim() || !aliasSlack.trim() || !aliasAzure.trim()) {
-      setStatus({ type: "error", message: "Member ID do Slack, nome no Slack e nome no Azure são obrigatórios." });
+      setStatus({ type: "error", message: t("profileSetup.requiredFieldsError") });
       return;
     }
     setSaving(true);
@@ -82,7 +85,7 @@ export default function ProfileSetup() {
     });
     setSaving(false);
     if (error) {
-      setStatus({ type: "error", message: `Erro ao salvar: ${error.message}` });
+      setStatus({ type: "error", message: t("profileSetup.saveErrorPrefix", { message: error.message }) });
       return;
     }
     navigate("/", { replace: true });
@@ -91,38 +94,38 @@ export default function ProfileSetup() {
   return (
     <div className="d-flex flex-column align-items-center justify-content-center min-vh-100 gap-3 text-center px-3 py-5">
       <ReactorLogo size={64} />
-      <h2 className="fw-bold mb-0">Quase lá, {(profile?.displayName || profile?.fullName || "").split(" ")[0] || "colaborador(a)"}!</h2>
+      <h2 className="fw-bold mb-0">{t("profileSetup.almostThere", { name: (profile?.displayName || profile?.fullName || "").split(" ")[0] || t("profileSetup.fallbackName") })}</h2>
       <p className="text-muted mb-2" style={{ maxWidth: 480 }}>
-        Complete seu perfil para aparecer corretamente nos relatórios, menções do Slack e no diretório de colaboradores.
+        {t("profileSetup.intro")}
       </p>
       <form data-allow-submit="true" onSubmit={handleSubmit} className="stark-card text-start d-flex flex-column gap-3" style={{ width: "100%", maxWidth: 460 }}>
         <div>
-          <label className="form-label small text-muted">Member ID do Slack *</label>
-          <input className="form-control" placeholder="Ex.: U012ABC3DE" value={slackMemberId} onChange={(e) => setSlackMemberId(e.target.value)} required />
+          <label className="form-label small text-muted">{t("profileSetup.slackMemberIdLabel")}</label>
+          <input className="form-control" placeholder={t("profileSetup.slackMemberIdPlaceholder")} value={slackMemberId} onChange={(e) => setSlackMemberId(e.target.value)} required />
           <div className="stark-onboarding-hint">
-            No Slack, clique na sua foto de perfil no canto superior &gt; "Ver perfil" &gt; menu "⋯ Mais" &gt; <strong>Copiar member ID</strong>.
+            {t("profileSetup.slackMemberIdHintPrefix")} "{t("profileSetup.slackMemberIdHintQuote1")}" {t("profileSetup.slackMemberIdHintMenu")} "⋯ {t("profileSetup.slackMemberIdHintMore")}" &gt; <strong>{t("profileSetup.slackMemberIdHintCopy")}</strong>.
           </div>
         </div>
         <div>
-          <label className="form-label small text-muted">Nome no Slack *</label>
-          <input className="form-control" placeholder="Como seu nome aparece no Slack" value={aliasSlack} onChange={(e) => setAliasSlack(e.target.value)} required />
+          <label className="form-label small text-muted">{t("profileSetup.slackNameLabel")}</label>
+          <input className="form-control" placeholder={t("profileSetup.slackNamePlaceholder")} value={aliasSlack} onChange={(e) => setAliasSlack(e.target.value)} required />
         </div>
         <div>
-          <label className="form-label small text-muted">Nome no Azure DevOps *</label>
-          <input className="form-control" placeholder="Como seu nome aparece no Azure DevOps" value={aliasAzure} onChange={(e) => setAliasAzure(e.target.value)} required />
+          <label className="form-label small text-muted">{t("profileSetup.azureNameLabel")}</label>
+          <input className="form-control" placeholder={t("profileSetup.azureNamePlaceholder")} value={aliasAzure} onChange={(e) => setAliasAzure(e.target.value)} required />
         </div>
         <div>
-          <label className="form-label small text-muted">Alias (opcional)</label>
+          <label className="form-label small text-muted">{t("profileSetup.aliasLabel")}</label>
           <AliasTagInput values={aliasVariations} onChange={setAliasVariations} />
         </div>
         <div>
-          <label className="form-label small text-muted">Foto de perfil (opcional)</label>
+          <label className="form-label small text-muted">{t("profileSetup.photoLabel")}</label>
           <div className="stark-onboarding-avatar-row">
             {avatarUrl && <img src={avatarUrl} alt="" />}
-            <input className="form-control" placeholder="URL da imagem" value={avatarUrl} onChange={(e) => setAvatarUrl(e.target.value)} />
+            <input className="form-control" placeholder={t("profileSetup.photoPlaceholder")} value={avatarUrl} onChange={(e) => setAvatarUrl(e.target.value)} />
             {gmailAvatarUrl && (
               <button type="button" className="btn btn-outline-secondary btn-sm text-nowrap" onClick={() => setAvatarUrl(gmailAvatarUrl)}>
-                Usar do Gmail
+                {t("profileSetup.useGmailPhoto")}
               </button>
             )}
           </div>
@@ -134,10 +137,10 @@ export default function ProfileSetup() {
         )}
         <div className="d-flex gap-2 justify-content-end">
           <button type="button" className="btn btn-link btn-sm text-muted" disabled={saving} onClick={handleSubmit}>
-            Pular por agora
+            {t("profileSetup.skipButton")}
           </button>
           <button type="submit" className="btn btn-primary" disabled={saving}>
-            {saving ? "Salvando..." : "Salvar e continuar"}
+            {saving ? t("profileSetup.savingButton") : t("profileSetup.saveButton")}
           </button>
         </div>
       </form>

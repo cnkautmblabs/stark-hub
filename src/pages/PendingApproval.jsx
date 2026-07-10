@@ -1,9 +1,11 @@
 import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import ReactorLogo from "../components/layout/ReactorLogo.jsx";
 
 export default function PendingApproval() {
+  const { t } = useTranslation();
   const { user, demoMode, profile, signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -24,13 +26,11 @@ export default function PendingApproval() {
   return (
     <div className="d-flex flex-column align-items-center justify-content-center vh-100 gap-3 text-center px-3">
       <ReactorLogo size={64} />
-      <h2 className="fw-bold">Bem-vindo(a), {profile?.fullName || "colaborador(a)"}!</h2>
+      <h2 className="fw-bold">{t("onboarding.welcomeTitle", { name: profile?.fullName || t("onboarding.fallbackName") })}</h2>
       <p className="text-muted" style={{ maxWidth: 420 }}>
-        Sua conta foi criada com sucesso. Um administrador com nível de acesso de
-        gestão precisa liberar seu nível de acesso (Dev, QA ou Gestão) antes que
-        você possa continuar.
+        {t("onboarding.pendingApprovalMessage")}
       </p>
-      <button className="btn btn-outline-secondary" onClick={handleSignOut}>Sair</button>
+      <button className="btn btn-outline-secondary" onClick={handleSignOut}>{t("onboarding.signOut")}</button>
     </div>
   );
 }

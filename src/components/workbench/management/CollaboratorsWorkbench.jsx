@@ -11,7 +11,7 @@ import { AvatarDot, Button, EmptyState, FilterCombobox, IdentityAvatar, RoleBadg
 const roleDefs = [
   { key: "isDev", level: "dev", label: "Dev" },
   { key: "isQa", level: "qa", label: "QA" },
-  { key: "isManagement", level: "gestao", label: "Gestao" }
+  { key: "isManagement", level: "gestao", label: "Gestao", labelKey: "collaborators.roleGestao" }
 ];
 
 const accessLevelOptions = [accessLevels.dev, accessLevels.qa, accessLevels.gestao, accessLevels.gerente, accessLevels.admin];
@@ -29,14 +29,14 @@ function isAdminPerson(person) {
 // Selos de funcao (Dev/QA/Gestao/Gerente/Admin) usados tanto no resumo
 // recolhido da lista quanto dentro do card — uma unica fonte evita as duas
 // copias divergirem de novo.
-function computeRolePills(person) {
+function computeRolePills(person, t) {
   const currentAccessLevel = getEffectiveAccessLevel(person);
-  const pills = roleDefs.filter((role) => hasRoleFlag(person, role));
+  const pills = roleDefs.filter((role) => hasRoleFlag(person, role)).map((role) => (role.labelKey ? { ...role, label: t(role.labelKey) } : role));
   if (currentAccessLevel === accessLevels.gerente && !pills.some((role) => role.level === "gerente")) {
-    pills.push({ key: "isGerente", level: "gerente", label: "Gerente" });
+    pills.push({ key: "isGerente", level: "gerente", label: t("collaborators.roleGerente") });
   }
   if (isAdminPerson(person) && !pills.some((role) => role.level === "admin")) {
-    pills.push({ key: "isAdmin", level: "admin", label: "Admin" });
+    pills.push({ key: "isAdmin", level: "admin", label: t("collaborators.roleAdmin") });
   }
   return pills;
 }
@@ -69,6 +69,7 @@ function RolePill({ level, label, active, onToggle, disabled }) {
 }
 
 function AliasTagInput({ values = [], onChange, readOnly }) {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState("");
 
   function commit() {
@@ -94,7 +95,7 @@ function AliasTagInput({ values = [], onChange, readOnly }) {
       {values.map((alias) => (
         <span key={alias} className="mb-profile-alias-pill">
           {alias}
-          {!readOnly && <button type="button" onClick={() => removeAlias(alias)} title="Remover"><i className="bi bi-x" /></button>}
+          {!readOnly && <button type="button" onClick={() => removeAlias(alias)} title={t("collaborators.removeButton")}><i className="bi bi-x" /></button>}
         </span>
       ))}
       {!readOnly && (
@@ -103,10 +104,10 @@ function AliasTagInput({ values = [], onChange, readOnly }) {
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={handleKeyDown}
           onBlur={commit}
-          placeholder="Adicionar alias e Enter"
+          placeholder={t("collaborators.addAliasPlaceholder")}
         />
       )}
-      {readOnly && !values.length && <span className="mb-profile-alias-empty">Nenhum alias</span>}
+      {readOnly && !values.length && <span className="mb-profile-alias-empty">{t("collaborators.noAlias")}</span>}
     </div>
   );
 }
@@ -116,6 +117,7 @@ function AliasTagInput({ values = [], onChange, readOnly }) {
 // (mesma tecnica ja usada pelas evidencias de teste) gravada direto no campo
 // imageUrl, que ja aceita qualquer string de URL de imagem.
 function AvatarSourceField({ value, onChange, disabled }) {
+  const { t } = useTranslation();
   const isDataUri = /^data:image\//i.test(value || "");
   const [mode, setMode] = useState(isDataUri ? "file" : "url");
 
@@ -129,11 +131,11 @@ function AvatarSourceField({ value, onChange, disabled }) {
 
   return (
     <label className="mbw-field mb-span-2">
-      <span>Avatar</span>
+      <span>{t("collaborators.avatarLabel")}</span>
       <div className="mb-profile-avatar-field">
         <div className="mb-profile-source-toggle">
-          <button type="button" className={mode === "url" ? "active" : ""} disabled={disabled} onClick={() => setMode("url")}><i className="bi bi-link-45deg" /> URL</button>
-          <button type="button" className={mode === "file" ? "active" : ""} disabled={disabled} onClick={() => setMode("file")}><i className="bi bi-upload" /> Arquivo</button>
+          <button type="button" className={mode === "url" ? "active" : ""} disabled={disabled} onClick={() => setMode("url")}><i className="bi bi-link-45deg" /> {t("collaborators.urlButton")}</button>
+          <button type="button" className={mode === "file" ? "active" : ""} disabled={disabled} onClick={() => setMode("file")}><i className="bi bi-upload" /> {t("collaborators.fileButton")}</button>
         </div>
         {mode === "url" ? (
           <input type="text" value={isDataUri ? "" : value} onChange={(event) => onChange(event.target.value)} readOnly={disabled} placeholder="https://..." />
@@ -141,7 +143,7 @@ function AvatarSourceField({ value, onChange, disabled }) {
           <div className="mb-profile-avatar-file">
             <label className="mb-profile-avatar-file-btn">
               <input type="file" accept="image/*" disabled={disabled} onChange={handleFile} />
-              <i className="bi bi-image" /> {isDataUri ? "Trocar imagem" : "Escolher imagem"}
+              <i className="bi bi-image" /> {isDataUri ? t("collaborators.changeImage") : t("collaborators.chooseImage")}
             </label>
             {isDataUri && !disabled && <button type="button" className="mb-profile-avatar-clear" onClick={() => onChange("")}><i className="bi bi-x-lg" /></button>}
           </div>
@@ -152,6 +154,7 @@ function AvatarSourceField({ value, onChange, disabled }) {
 }
 
 function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpdate, onDelete, canEditRoles = false, canChangeAdmin = false }) {
+  const { t } = useTranslation();
   const canEdit = isGestao || isOwn;
   const editable = isEditing && canEdit;
   const currentAccessLevel = getEffectiveAccessLevel(person);
@@ -161,29 +164,29 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
       <div className="mb-profile-card-head">
         <IdentityAvatar name={person.azureName} imageUrl={person.imageUrl} color={person.color} accessLevel={currentAccessLevel} size={56} />
         <div className="mb-profile-card-heading">
-          <strong>{person.azureName || "Sem nome"}</strong>
+          <strong>{person.azureName || t("collaborators.noName")}</strong>
         </div>
         {/* actions intentionally rendered outside for consistent placement */}
       </div>
       <div className="mbw-form-grid">
-        <TextField label="Nome Azure" value={person.azureName || ""} onChange={(value) => onUpdate({ azureName: value })} readOnly={!editable} />
-        <TextField label="Email" value={person.email || ""} onChange={(value) => onUpdate({ email: value })} readOnly={!editable || Boolean(person.authUserId)} />
-        <TextField label="Nome no Slack" value={person.slackName || ""} onChange={(value) => onUpdate({ slackName: value })} readOnly={!editable} />
-        <TextField label="Slack Member ID" value={person.slackMemberId || ""} onChange={(value) => onUpdate({ slackMemberId: value })} readOnly={!editable} />
+        <TextField label={t("collaborators.azureNameLabel")} value={person.azureName || ""} onChange={(value) => onUpdate({ azureName: value })} readOnly={!editable} />
+        <TextField label={t("collaborators.emailLabel")} value={person.email || ""} onChange={(value) => onUpdate({ email: value })} readOnly={!editable || Boolean(person.authUserId)} />
+        <TextField label={t("collaborators.slackNameLabel")} value={person.slackName || ""} onChange={(value) => onUpdate({ slackName: value })} readOnly={!editable} />
+        <TextField label={t("collaborators.slackMemberIdLabel")} value={person.slackMemberId || ""} onChange={(value) => onUpdate({ slackMemberId: value })} readOnly={!editable} />
         <AvatarSourceField value={person.imageUrl || ""} onChange={(value) => onUpdate({ imageUrl: value })} disabled={!editable} />
         <label className="mbw-field">
-          <span>Cor</span>
+          <span>{t("collaborators.colorLabel")}</span>
           <div className="mb-profile-color-field">
             <input type="color" value={person.color || "#0b74de"} onChange={(event) => onUpdate({ color: event.target.value })} disabled={!editable} />
             <input type="text" value={person.color || ""} onChange={(event) => onUpdate({ color: event.target.value })} readOnly={!editable} placeholder="#0b74de" />
           </div>
         </label>
         <label className="mbw-field mb-span-2">
-          <span>Aliases</span>
+          <span>{t("collaborators.aliasesLabel")}</span>
           <AliasTagInput values={person.aliases || []} onChange={(next) => onUpdate({ aliases: next })} readOnly={!editable} />
         </label>
         <label className="mbw-field mb-span-2">
-          <span>Funções</span>
+          <span>{t("collaborators.rolesLabel")}</span>
           <div className="mb-profile-role-row">
             {/* Quem nao e Gestao/Gerente/Admin so pode OLHAR a propria
                 funcao — mostrar as demais opcoes (que nunca vai poder
@@ -193,7 +196,7 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
               <RolePill
                 key={role.key}
                 level={role.level}
-                label={role.label}
+                label={role.labelKey ? t(role.labelKey) : role.label}
                 active={hasRoleFlag(person, role)}
                 disabled={!editable || !canEditRoles || isRoleDerivedFromAccessLevel(person, role)}
                 onToggle={() => {
@@ -214,7 +217,7 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
               <RolePill
                 key="role-gerente"
                 level="gerente"
-                label="Gerente"
+                label={t("collaborators.roleGerente")}
                 active={currentAccessLevel === accessLevels.gerente}
                 disabled={!editable || !canEditRoles}
                 onToggle={() => onUpdate({ accessLevel: currentAccessLevel === accessLevels.gerente ? accessLevels.gestao : accessLevels.gerente, isManagement: true })}
@@ -224,7 +227,7 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
               <RolePill
                 key="role-admin"
                 level="admin"
-                label="Admin"
+                label={t("collaborators.roleAdmin")}
                 active={isAdminPerson(person)}
                 disabled={!editable || !canChangeAdmin}
                 onToggle={() => {
@@ -239,7 +242,7 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
           </div>
         </label>
         <label className="mbw-field mb-span-2">
-          <span>FYI no Slack</span>
+          <span>{t("collaborators.slackFyiLabel")}</span>
           <div className="mb-profile-role-row">
             <button
               type="button"
@@ -247,7 +250,7 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
               disabled={!isGestao || !editable}
               onClick={() => onUpdate({ fixedMention: !Boolean(person.fixedMention) })}
             >
-              <i className="bi bi-megaphone-fill" /> Todos os resultados
+              <i className="bi bi-megaphone-fill" /> {t("collaborators.allResults")}
             </button>
             <button
               type="button"
@@ -255,7 +258,7 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
               disabled={!isGestao || !editable}
               onClick={() => onUpdate({ fixedMentionOnFailure: !Boolean(person.fixedMentionOnFailure) })}
             >
-              <i className="bi bi-exclamation-triangle-fill" /> Fail / Limitation
+              <i className="bi bi-exclamation-triangle-fill" /> {t("collaborators.failLimitation")}
             </button>
           </div>
         </label>
@@ -265,6 +268,7 @@ function ProfileCard({ person, isGestao, isOwn, isEditing, onEdit, onDone, onUpd
 }
 
 function PendingApprovalRow({ person, onApprove }) {
+  const { t } = useTranslation();
   const [level, setLevel] = useState(accessLevels.dev);
   const [approving, setApproving] = useState(false);
 
@@ -285,7 +289,7 @@ function PendingApprovalRow({ person, onApprove }) {
         {accessLevelOptions.map((value) => <option key={value} value={value}>{accessLevelLabels[value]}</option>)}
       </select>
       <Button tone="primary" onClick={handleApprove} disabled={approving}>
-        {approving ? "Aprovando..." : "Aprovar"}
+        {approving ? t("collaborators.approvingButton") : t("collaborators.approveButton")}
       </Button>
     </div>
   );
@@ -358,30 +362,30 @@ export function CollaboratorsWorkbench() {
 
   function exportCollaboratorsCsv() {
     downloadCsv(`colaboradores-${dateStamp()}.csv`, [
-      "Nome Azure",
-      "Email",
-      "Nome Slack",
-      "Slack Member ID",
-      "Nivel",
-      "Dev",
-      "QA",
-      "Gestao",
-      "Meta horas",
-      "FYI todos",
-      "FYI Fail/Limitation",
-      "Aliases"
+      t("collaborators.csvAzureName"),
+      t("collaborators.csvEmail"),
+      t("collaborators.csvSlackName"),
+      t("collaborators.csvSlackMemberId"),
+      t("collaborators.csvLevel"),
+      t("collaborators.csvDev"),
+      t("collaborators.csvQa"),
+      t("collaborators.csvGestao"),
+      t("collaborators.csvGoalHours"),
+      t("collaborators.csvFyiAll"),
+      t("collaborators.csvFyiFailLimitation"),
+      t("collaborators.csvAliases")
     ], visibleCollaborators.map((person) => [
       person.azureName || "",
       person.email || "",
       person.slackName || "",
       person.slackMemberId || "",
       accessLevelLabels[getEffectiveAccessLevel(person)] || getEffectiveAccessLevel(person) || "",
-      hasRoleFlag(person, roleDefs[0]) ? "sim" : "nao",
-      hasRoleFlag(person, roleDefs[1]) ? "sim" : "nao",
-      hasRoleFlag(person, roleDefs[2]) ? "sim" : "nao",
+      hasRoleFlag(person, roleDefs[0]) ? t("collaborators.csvYes") : t("collaborators.csvNo"),
+      hasRoleFlag(person, roleDefs[1]) ? t("collaborators.csvYes") : t("collaborators.csvNo"),
+      hasRoleFlag(person, roleDefs[2]) ? t("collaborators.csvYes") : t("collaborators.csvNo"),
       person.goalHours || "",
-      person.fixedMention ? "sim" : "nao",
-      person.fixedMentionOnFailure ? "sim" : "nao",
+      person.fixedMention ? t("collaborators.csvYes") : t("collaborators.csvNo"),
+      person.fixedMentionOnFailure ? t("collaborators.csvYes") : t("collaborators.csvNo"),
       (person.aliases || []).join("|")
     ]));
   }
@@ -389,22 +393,22 @@ export function CollaboratorsWorkbench() {
   return (
     <section className="mbw-page mb-settings-page">
       <WorkbenchHeader
-        kicker="Perfil"
+        kicker={t("collaborators.kicker")}
         title={t("pages.collaborators.title")}
         subtitle={isGestao ? t("pages.collaborators.subtitleGestao") : t("pages.collaborators.subtitleSelf")}
         demoMode={demoMode}
         actions={<>
-          {isGestao && <Button onClick={addPerson}>+ Adicionar</Button>}
+          {isGestao && <Button onClick={addPerson}>{t("collaborators.addButton")}</Button>}
           {!isGestao && ownCollaborator && (editingId === ownCollaborator.id
-            ? <Button tone="primary" onClick={() => setEditingId(null)}><i className="bi bi-check-lg" /> Concluir</Button>
-            : <Button onClick={() => setEditingId(ownCollaborator.id)}><i className="bi bi-pencil" /> Editar</Button>)}
-          <Button onClick={exportCollaboratorsCsv}><i className="bi bi-download" /> CSV</Button>
+            ? <Button tone="primary" onClick={() => setEditingId(null)}><i className="bi bi-check-lg" /> {t("collaborators.doneButton")}</Button>
+            : <Button onClick={() => setEditingId(ownCollaborator.id)}><i className="bi bi-pencil" /> {t("collaborators.editButton")}</Button>)}
+          <Button onClick={exportCollaboratorsCsv}><i className="bi bi-download" /> {t("collaborators.csvButton")}</Button>
         </>}
       />
       <div className="mb-collaborators-list-react">
         {isGestao && (loading ? <WorkbenchCardSkeleton rows={1} mode="list" /> : pendingAccounts.length > 0 && (
           <section className="mb-profile-pending-section">
-            <header><strong>Pendentes de aprovacao</strong><small>{pendingAccounts.length} conta(s) logada(s) sem nivel de acesso ou identidade vinculada.</small></header>
+            <header><strong>{t("collaborators.pendingApprovalTitle")}</strong><small>{t("collaborators.pendingApprovalSubtitle", { count: pendingAccounts.length })}</small></header>
             {pendingAccounts.map((pendingAccount) => (
               <PendingApprovalRow key={pendingAccount.id} person={pendingAccount} onApprove={approveAccount} />
             ))}
@@ -413,15 +417,15 @@ export function CollaboratorsWorkbench() {
         {isGestao && (
           <section className="mb-collaborators-toolbar">
             <div className="mb-collaborators-metrics">
-              <span><small>Total</small><b>{metrics.total}</b></span>
+              <span><small>{t("collaborators.totalLabel")}</small><b>{metrics.total}</b></span>
               <span><small>Dev</small><b>{metrics.dev}</b></span>
               <span><small>QA</small><b>{metrics.qa}</b></span>
-              <span><small>Gestao</small><b>{metrics.gestao}</b></span>
-              <span><small>Vinculados</small><b>{metrics.linked}</b></span>
+              <span><small>{t("collaborators.roleGestao")}</small><b>{metrics.gestao}</b></span>
+              <span><small>{t("collaborators.linkedLabel")}</small><b>{metrics.linked}</b></span>
             </div>
             <div className="mb-collaborators-filters">
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome, email, Slack ou alias" />
-              <FilterCombobox label="Papel" options={[{ value: "dev", label: "Dev" }, { value: "qa", label: "QA" }, { value: "gestao", label: "Gestao" }, { value: "gerente", label: "Gerente" }]} values={roleFilter === "all" ? [] : [roleFilter]} multiple={false} onChange={(value) => setRoleFilter(value || "all")} />
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("collaborators.searchPlaceholder")} />
+              <FilterCombobox label={t("collaborators.roleLabel")} options={[{ value: "dev", label: "Dev" }, { value: "qa", label: "QA" }, { value: "gestao", label: t("collaborators.roleGestao") }, { value: "gerente", label: t("collaborators.roleGerente") }]} values={roleFilter === "all" ? [] : [roleFilter]} multiple={false} onChange={(value) => setRoleFilter(value || "all")} />
             </div>
           </section>
         )}
@@ -447,7 +451,7 @@ export function CollaboratorsWorkbench() {
         })}
         {isGestao && visibleCollaborators.map((person) => {
           const currentAccessLevel = getEffectiveAccessLevel(person);
-          const rolePills = computeRolePills(person);
+          const rolePills = computeRolePills(person, t);
           const showAccessLevelPill = !(rolePills && rolePills.length > 0) && Boolean(currentAccessLevel);
           const editing = editingId === person.id;
           return (
@@ -460,9 +464,9 @@ export function CollaboratorsWorkbench() {
                 </div>
                 <div className="mb-profile-card-actions">
                   {editing
-                    ? <Button tone="primary" onClick={() => setEditingId(null)}><i className="bi bi-check-lg" /> Concluir</Button>
-                    : <Button onClick={() => setEditingId(person.id)}><i className="bi bi-pencil" /> Editar</Button>}
-                  <Button tone="danger" onClick={() => removePerson(person.id)}><i className="bi bi-trash" /> Excluir</Button>
+                    ? <Button tone="primary" onClick={() => setEditingId(null)}><i className="bi bi-check-lg" /> {t("collaborators.doneButton")}</Button>
+                    : <Button onClick={() => setEditingId(person.id)}><i className="bi bi-pencil" /> {t("collaborators.editButton")}</Button>}
+                  <Button tone="danger" onClick={() => removePerson(person.id)}><i className="bi bi-trash" /> {t("collaborators.deleteButton")}</Button>
                 </div>
               </summary>
               <ProfileCard
@@ -480,7 +484,7 @@ export function CollaboratorsWorkbench() {
             </details>
           );
         })}
-        {!visibleCollaborators.length && !pendingAccounts.length && <EmptyState title={isGestao ? "Nenhum colaborador cadastrado" : "Sua conta ainda nao foi vinculada a um colaborador"} />}
+        {!visibleCollaborators.length && !pendingAccounts.length && <EmptyState title={isGestao ? t("collaborators.noCollaborators") : t("collaborators.accountNotLinked")} />}
       </div>
     </section>
   );

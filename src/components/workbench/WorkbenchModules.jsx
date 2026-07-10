@@ -289,6 +289,7 @@ function PipelineEnvPill({ item, pipeline }) {
 }
 
 export function QaBoardWorkbench() {
+  const { t } = useTranslation();
   const { profile, demoMode } = useAuth();
   const { items, updateItem, reload, loading, refreshing, needsAzureIntegration, error } = useWorkItems();
   const { collaborators } = useCollaborators();
@@ -345,7 +346,7 @@ export function QaBoardWorkbench() {
   const filteredSprintOptions = sprintOptions.filter((sprint) => normalize(sprint).includes(normalize(sprintSearch)));
   const personOptions = devPeople.map((person) => ({ value: person.id, label: person.azureName, person }));
   const countryOptions = Object.keys(countries).map((code) => ({ value: code, label: `${code} - ${countries[code].label}` }));
-  const qaOptions = [{ value: "", label: "Nao definido" }, ...qaPeople.map((person) => ({ value: person.id, label: person.azureName, person }))];
+  const qaOptions = [{ value: "", label: t("qaBoard.notDefined") }, ...qaPeople.map((person) => ({ value: person.id, label: person.azureName, person }))];
   const statusOptions = qaStatusOrder.map((key) => ({ value: key, label: qaStatusConfig[key].label }));
   const resultOptions = [
     { value: "pending", label: "Pending" },
@@ -393,7 +394,7 @@ export function QaBoardWorkbench() {
   const qaMetrics = ["", ...qaPeople.map((person) => person.id)].map((id, index) => {
     const person = byId.get(id);
     const count = filtered.filter((item) => (item.qaCollaboratorId || "") === id).length;
-    return { id, label: person?.azureName || "Nao definido", count, color: person?.color || ["#64748b", "#2563eb", "#16a34a", "#d97706", "#7c3aed"][index % 5], person };
+    return { id, label: person?.azureName || t("qaBoard.notDefined"), count, color: person?.color || ["#64748b", "#2563eb", "#16a34a", "#d97706", "#7c3aed"][index % 5], person };
   });
   const qaBarData = [{ name: "carga", ...Object.fromEntries(qaMetrics.map((row) => [String(row.id || "none"), row.count])) }];
   // O dominio do eixo TEM que ser a soma real dos buckets (nao filtered.length)
@@ -439,20 +440,20 @@ export function QaBoardWorkbench() {
     if (groupBy === "qa") {
       return ["", ...qaPeople.map((person) => person.id)].map((id) => {
         const person = byId.get(id);
-        return { key: id || "none", label: person?.azureName || "Nao definido", items: list.filter((item) => (item.qaCollaboratorId || "") === id) };
+        return { key: id || "none", label: person?.azureName || t("qaBoard.notDefined"), items: list.filter((item) => (item.qaCollaboratorId || "") === id) };
       });
     }
     if (groupBy === "assignee") {
       const ids = Array.from(new Set(list.map((item) => item.assigneeId).filter(Boolean)));
-      const groups = ids.map((id) => ({ key: id, label: byId.get(id)?.azureName || "Sem responsavel", items: list.filter((item) => item.assigneeId === id) }))
+      const groups = ids.map((id) => ({ key: id, label: byId.get(id)?.azureName || t("qaBoard.noResponsible"), items: list.filter((item) => item.assigneeId === id) }))
         .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
       const unassigned = list.filter((item) => !item.assigneeId);
-      return unassigned.length ? [...groups, { key: "none", label: "Sem responsavel", items: unassigned }] : groups;
+      return unassigned.length ? [...groups, { key: "none", label: t("qaBoard.noResponsible"), items: unassigned }] : groups;
     }
     if (groupBy === "country") {
       return countriesInBoard.map((country) => ({ key: country, label: country, items: list.filter((item) => (item.countries || []).includes(country)) }));
     }
-    return [{ key: "all", label: "Todos", items: list }];
+    return [{ key: "all", label: t("qaBoard.allGroupLabel"), items: list }];
   }
 
   useEffect(() => {
@@ -549,7 +550,7 @@ export function QaBoardWorkbench() {
             <span className="mbaz-sprint-pill" title={item.sprint || item.iteration || ""}>{compactSprintLabel(item.sprint || item.iteration)}</span>
           </div>
           <div className="mbaz-card-right mbaz-meta">
-            {age > 0 && <span className={`mbaz-pill ${age >= 7 ? "hot" : ""}`} title="Ultima alteracao">{age}d</span>}
+            {age > 0 && <span className={`mbaz-pill ${age >= 7 ? "hot" : ""}`} title={t("qaBoard.lastChangeTitle")}>{age}d</span>}
             {visibleTags.slice(0, 2).map((tag) => <span key={tag} className={`mbaz-pill ${/block|imped|critical|hotfix/i.test(tag) ? "hot" : ""}`}>{tag}</span>)}
           </div>
         </div>
@@ -571,13 +572,13 @@ export function QaBoardWorkbench() {
                   <div className="mbaz-evidence-env-label">
                     <span className="mbaz-evidence-env-count">{envRecords.length}</span>
                     <span className="mbaz-evidence-env-name">{environment}</span>
-                    <span className="mbaz-evidence-help" title="Cada icone representa a sequencia dos resultados registrados.">?</span>
+                    <span className="mbaz-evidence-help" title={t("qaBoard.evidenceHelp")}>?</span>
                   </div>
                   {renderEvidenceJourney(item, environment)}
                 </div>
               );
             })}
-            {!environmentsWithEvidence(records).length && <div className="mbaz-evidence-pending"><i className="bi bi-dash-lg mbaz-evidence-pending-icon" /> Sem testes registrados</div>}
+            {!environmentsWithEvidence(records).length && <div className="mbaz-evidence-pending"><i className="bi bi-dash-lg mbaz-evidence-pending-icon" /> {t("qaBoard.noTestsRegistered")}</div>}
           </div>
         </div>
       </article>
@@ -589,57 +590,57 @@ export function QaBoardWorkbench() {
       <aside id="mbaz-sidebar" className="open fullscreen">
         <div className="mbaz-header">
           <div className="mbaz-title">
-            <strong>Stark Hub</strong><small>Quality Board</small>
-            <span id="mbaz-context">{profile?.azureOrgUrl || "Azure DevOps"} / {profile?.azureProject || "Projeto"} / {profile?.azureTeam || "Time"}</span>
+            <strong>Stark Hub</strong><small>{t("qaBoard.tag")}</small>
+            <span id="mbaz-context">{profile?.azureOrgUrl || "Azure DevOps"} / {profile?.azureProject || t("qaBoard.projectFallback")} / {profile?.azureTeam || t("qaBoard.teamFallback")}</span>
           </div>
           <div className="mbaz-actions">
             {demoMode && <span className="stark-badge-demo">demo</span>}
           </div>
         </div>
         <div className="mbaz-tabs">
-          <div className="mbaz-search"><FiSearch /><input id="mbaz-search" className="mbaz-input" placeholder="Buscar por id, titulo, pessoa, pais..." value={search} onChange={(event) => setSearch(event.target.value)} /></div>
-          <button id="mbaz-toggle-create" className="mbaz-btn" type="button" onClick={() => setShowCreate(true)}><i className="bi bi-magic" /> Criar Work Item</button>
-          <button id="mbaz-view-toggle" className={`mbaz-icon-btn ${viewMode === "list" ? "active" : ""}`} type="button" title="Lista" onClick={() => setViewMode("list")}><i className="bi bi-view-list" /></button>
-          <button className={`mbaz-icon-btn ${viewMode === "grid" ? "active" : ""}`} type="button" title="Grid" onClick={() => setViewMode("grid")}><i className="bi bi-grid-3x3-gap" /></button>
-          <button className={`mbaz-icon-btn ${viewMode === "compact" ? "active" : ""}`} type="button" title="Compacto" onClick={() => setViewMode("compact")}><i className="bi bi-list" /></button>
-          <button id="mbaz-refresh" className="mbaz-btn mbaz-primary" type="button" onClick={reload}><i className={`bi bi-arrow-clockwise ${refreshing ? "mbw-spin" : ""}`} /> Atualizar</button>
-          <button id="mbaz-export" className="mbaz-icon-btn" type="button" title="Exportar CSV" onClick={() => exportQaCsv(filtered)}><i className="bi bi-download" /></button>
+          <div className="mbaz-search"><FiSearch /><input id="mbaz-search" className="mbaz-input" placeholder={t("qaBoard.searchPlaceholder")} value={search} onChange={(event) => setSearch(event.target.value)} /></div>
+          <button id="mbaz-toggle-create" className="mbaz-btn" type="button" onClick={() => setShowCreate(true)}><i className="bi bi-magic" /> {t("qaBoard.createButton")}</button>
+          <button id="mbaz-view-toggle" className={`mbaz-icon-btn ${viewMode === "list" ? "active" : ""}`} type="button" title={t("qaBoard.viewList")} onClick={() => setViewMode("list")}><i className="bi bi-view-list" /></button>
+          <button className={`mbaz-icon-btn ${viewMode === "grid" ? "active" : ""}`} type="button" title={t("qaBoard.viewGrid")} onClick={() => setViewMode("grid")}><i className="bi bi-grid-3x3-gap" /></button>
+          <button className={`mbaz-icon-btn ${viewMode === "compact" ? "active" : ""}`} type="button" title={t("qaBoard.viewCompact")} onClick={() => setViewMode("compact")}><i className="bi bi-list" /></button>
+          <button id="mbaz-refresh" className="mbaz-btn mbaz-primary" type="button" onClick={reload}><i className={`bi bi-arrow-clockwise ${refreshing ? "mbw-spin" : ""}`} /> {t("qaBoard.refresh")}</button>
+          <button id="mbaz-export" className="mbaz-icon-btn" type="button" title={t("qaBoard.exportCsv")} onClick={() => exportQaCsv(filtered)}><i className="bi bi-download" /></button>
         </div>
         <div className="mbaz-content">
           <ConnectionGate needsAzureIntegration={needsAzureIntegration} error={error}>
             <details id="mbaz-filter-acc" className="mbaz-filter-acc" open={filtersOpen} onToggle={(event) => setFiltersOpen(event.currentTarget.open)}>
-              <summary><span>Filtros <small id="mbaz-filter-summary">{filterCount ? `${filterCount} aplicado(s)` : ""}</small></span><span id="mbaz-filter-count">{filterCount} ativos</span></summary>
+              <summary><span>{t("qaBoard.filters")} <small id="mbaz-filter-summary">{filterCount ? t("qaBoard.filtersApplied", { count: filterCount }) : ""}</small></span><span id="mbaz-filter-count">{t("qaBoard.filtersActive", { count: filterCount })}</span></summary>
               <div className="mbaz-filter-body">
                 <div id="mbaz-normal-filters" className="mbaz-filters">
-                  <FilterCombobox label="Pessoa" options={personOptions} values={personFilter} onChange={setPersonFilter} placeholder="Buscar pessoa" renderOption={(option) => option.person ? <AvatarDot person={option.person} name={option.label} /> : option.label} />
-                  <FilterCombobox label="Pais" options={countryOptions} values={countryFilter} onChange={setCountryFilter} placeholder="Buscar pais" renderOption={(option) => <span className="mbw-combobox-country"><CountryVisual code={option.value} compact /> {option.label}</span>} />
-                  <FilterCombobox label="QA" options={qaOptions} values={qaFilter} onChange={setQaFilter} placeholder="Buscar QA" renderOption={(option) => option.person ? <AvatarDot person={option.person} name={option.label} /> : option.label} />
-                  <FilterCombobox label="Status" options={statusOptions} values={statusFilter} onChange={setStatusFilter} placeholder="Buscar status" />
-                  <FilterCombobox label="Resultado" options={resultOptions} values={resultFilter} onChange={setResultFilter} placeholder="Buscar resultado" />
-                  <FilterCombobox label="Agrupar" options={[{ value: "none", label: "Sem agrupamento" }, { value: "ambiente", label: "Por ambiente" }, { value: "qa", label: "Por Tested by" }, { value: "assignee", label: "Por Assigned" }, { value: "country", label: "Por pais" }]} values={[groupBy]} multiple={false} onChange={(value) => setGroupBy(value || "none")} />
-                  <div className="mbaz-sort-wrap"><label>Detalhes dos testes</label><button id="mbaz-toggle-all-tests" className="mbaz-btn" type="button" aria-pressed={expandedIds.size > 0} onClick={toggleAllTests}>{expandedIds.size === filtered.length && filtered.length ? "Recolher todos" : "Expandir todos"}</button></div>
-                  <div className="mbaz-sort-wrap"><label>Ordenar</label><select id="mbaz-sort" className="mbaz-select" value={sort} onChange={(event) => setSort(event.target.value)}><option value="changed_desc">Mais recentes</option><option value="title_asc">A-Z</option><option value="title_desc">Z-A</option><option value="bug_first">Bug primeiro</option><option value="story_first">User Story primeiro</option></select></div>
+                  <FilterCombobox label={t("qaBoard.personLabel")} options={personOptions} values={personFilter} onChange={setPersonFilter} placeholder={t("qaBoard.personPlaceholder")} renderOption={(option) => option.person ? <AvatarDot person={option.person} name={option.label} /> : option.label} />
+                  <FilterCombobox label={t("qaBoard.countryLabel")} options={countryOptions} values={countryFilter} onChange={setCountryFilter} placeholder={t("qaBoard.countryPlaceholder")} renderOption={(option) => <span className="mbw-combobox-country"><CountryVisual code={option.value} compact /> {option.label}</span>} />
+                  <FilterCombobox label={t("qaBoard.qaLabel")} options={qaOptions} values={qaFilter} onChange={setQaFilter} placeholder={t("qaBoard.qaPlaceholder")} renderOption={(option) => option.person ? <AvatarDot person={option.person} name={option.label} /> : option.label} />
+                  <FilterCombobox label={t("qaBoard.statusLabel")} options={statusOptions} values={statusFilter} onChange={setStatusFilter} placeholder={t("qaBoard.statusPlaceholder")} />
+                  <FilterCombobox label={t("qaBoard.resultLabel")} options={resultOptions} values={resultFilter} onChange={setResultFilter} placeholder={t("qaBoard.resultPlaceholder")} />
+                  <FilterCombobox label={t("qaBoard.groupLabel")} options={[{ value: "none", label: t("qaBoard.groupNone") }, { value: "ambiente", label: t("qaBoard.groupEnvironment") }, { value: "qa", label: t("qaBoard.groupQa") }, { value: "assignee", label: t("qaBoard.groupAssignee") }, { value: "country", label: t("qaBoard.groupCountry") }]} values={[groupBy]} multiple={false} onChange={(value) => setGroupBy(value || "none")} />
+                  <div className="mbaz-sort-wrap"><label>{t("qaBoard.testDetailsLabel")}</label><button id="mbaz-toggle-all-tests" className="mbaz-btn" type="button" aria-pressed={expandedIds.size > 0} onClick={toggleAllTests}>{expandedIds.size === filtered.length && filtered.length ? t("qaBoard.collapseAll") : t("qaBoard.expandAll")}</button></div>
+                  <div className="mbaz-sort-wrap"><label>{t("qaBoard.sortLabel")}</label><select id="mbaz-sort" className="mbaz-select" value={sort} onChange={(event) => setSort(event.target.value)}><option value="changed_desc">{t("qaBoard.sortRecent")}</option><option value="title_asc">{t("qaBoard.sortTitleAsc")}</option><option value="title_desc">{t("qaBoard.sortTitleDesc")}</option><option value="bug_first">{t("qaBoard.sortBugFirst")}</option><option value="story_first">{t("qaBoard.sortStoryFirst")}</option></select></div>
                   <div id="mbaz-sprint-filter" ref={sprintFilterRef} className={`mbw-combobox ${sprintOpen ? "open" : ""}`} data-kind="sprint">
                     <button type="button" className="mbw-combobox-trigger" onClick={() => setSprintOpen((value) => !value)}>
-                      <span>Board</span>
-                      <b>{effectiveSprintFilter.length ? `${effectiveSprintFilter.length} sprint(s)` : "selecione"}</b>
+                      <span>{t("qaBoard.boardLabel")}</span>
+                      <b>{effectiveSprintFilter.length ? t("qaBoard.sprintCount", { count: effectiveSprintFilter.length }) : t("qaBoard.selectPlaceholder")}</b>
                       <i className={`bi ${sprintOpen ? "bi-chevron-up" : "bi-chevron-down"}`} />
                     </button>
                     {sprintOpen && (
                       <div className="mbw-combobox-menu">
-                        <input id="mbaz-sprint-search" value={sprintSearch} onChange={(event) => setSprintSearch(event.target.value)} placeholder="Buscar sprint" autoFocus />
+                        <input id="mbaz-sprint-search" value={sprintSearch} onChange={(event) => setSprintSearch(event.target.value)} placeholder={t("qaBoard.sprintSearchPlaceholder")} autoFocus />
                         <div className="mbaz-dd-grid">
                           <div>
-                            <label htmlFor="mbaz-iteration-from">DE</label>
+                            <label htmlFor="mbaz-iteration-from">{t("qaBoard.fromLabel")}</label>
                             <select id="mbaz-iteration-from" className="mbaz-select" value={iterationFrom} onChange={(event) => { setIterationFrom(event.target.value); setSprintFilter([]); }}>
-                              <option value="">Primeira</option>
+                              <option value="">{t("qaBoard.firstOption")}</option>
                               {sprintOptions.map((sprint) => <option key={sprint} value={sprint}>{compactSprintLabel(sprint)}</option>)}
                             </select>
                           </div>
                           <div>
-                            <label htmlFor="mbaz-iteration-to">ATE</label>
+                            <label htmlFor="mbaz-iteration-to">{t("qaBoard.toLabel")}</label>
                             <select id="mbaz-iteration-to" className="mbaz-select" value={iterationTo} onChange={(event) => { setIterationTo(event.target.value); setSprintFilter([]); }}>
-                              <option value="">Ultima</option>
+                              <option value="">{t("qaBoard.lastOption")}</option>
                               {sprintOptions.map((sprint) => <option key={sprint} value={sprint}>{compactSprintLabel(sprint)}</option>)}
                             </select>
                           </div>
@@ -654,42 +655,42 @@ export function QaBoardWorkbench() {
                               </button>
                             );
                           })}
-                          {!filteredSprintOptions.length && <span className="mbw-combobox-empty">Nenhuma sprint</span>}
+                          {!filteredSprintOptions.length && <span className="mbw-combobox-empty">{t("qaBoard.noSprints")}</span>}
                         </div>
                         <div className="mbw-combobox-actions">
-                          <button id="mbaz-sprint-all" type="button" onClick={() => { setSprintFilter(sprintOptions); setIterationFrom(""); setIterationTo(""); }}>Todas as sprints</button>
-                          <button id="mbaz-sprint-clear" type="button" onClick={() => { setSprintFilter([]); setIterationFrom(""); setIterationTo(""); }}>Limpar</button>
+                          <button id="mbaz-sprint-all" type="button" onClick={() => { setSprintFilter(sprintOptions); setIterationFrom(""); setIterationTo(""); }}>{t("qaBoard.allSprints")}</button>
+                          <button id="mbaz-sprint-clear" type="button" onClick={() => { setSprintFilter([]); setIterationFrom(""); setIterationTo(""); }}>{t("qaBoard.clear")}</button>
                         </div>
                       </div>
                     )}
                   </div>
                 </div>
                 <div className="mbaz-filter-actions">
-                  <label className="mbaz-filter-checkbox"><input type="checkbox" checked={showExcluded} onChange={(event) => setShowExcluded(event.target.checked)} /><span>Mostrar itens nao testaveis / divida tecnica</span></label>
-                  <button id="mbaz-clear-filters" className="mbaz-btn" type="button" onClick={clearFilters}>Limpar filtros</button>
+                  <label className="mbaz-filter-checkbox"><input type="checkbox" checked={showExcluded} onChange={(event) => setShowExcluded(event.target.checked)} /><span>{t("qaBoard.showUntestable")}</span></label>
+                  <button id="mbaz-clear-filters" className="mbaz-btn" type="button" onClick={clearFilters}>{t("qaBoard.clearFilters")}</button>
                 </div>
               </div>
             </details>
             <div id="mbaz-dashboard" className={`mbaz-dashboard ${chartsCollapsed ? "collapsed" : ""}`}>
               {!loading && !chartsCollapsed && (
                 <div className="mbaz-insight-strip">
-                  <button type="button" className="mbaz-insight-card" onClick={() => setStatusFilter([])}><span>Itens</span><strong>{filtered.length}</strong><small>{boardItems.length} no board</small><i style={{ width: "100%" }} /></button>
-                  <button type="button" className="mbaz-insight-card good" onClick={() => setResultFilter(["pass"])}><span>Result rate</span><strong>{resultRate}%</strong><small>{testedCount} testado(s)</small><i style={{ width: `${resultRate}%` }} /></button>
-                  <button type="button" className="mbaz-insight-card pass" onClick={() => setResultFilter(["pass"])}><span>Pass rate</span><strong>{passRate}%</strong><small>{testResultCounts.pass} approved</small><i style={{ width: `${passRate}%` }} /></button>
-                  <button type="button" className="mbaz-insight-card warn" onClick={() => setResultFilter(["pending"])}><span>Pendentes</span><strong>{testResultCounts.pending}</strong><small>{filtered.length ? Math.round((testResultCounts.pending / filtered.length) * 100) : 0}% do filtro</small><i style={{ width: `${filtered.length ? (testResultCounts.pending / filtered.length) * 100 : 0}%` }} /></button>
-                  <button type="button" className="mbaz-insight-card danger"><span>Risco</span><strong>{blockedCount + staleCount}</strong><small>{blockedCount} tags, {staleCount} antigos</small><i style={{ width: `${filtered.length ? Math.min(100, ((blockedCount + staleCount) / filtered.length) * 100) : 0}%` }} /></button>
-                  <button type="button" className="mbaz-insight-card info"><span>Cobertura</span><strong>{topCountry?.country || "-"}</strong><small>{qaActiveCount} QA, {countriesInBoard.length} paises</small><i style={{ width: `${countriesInBoard.length ? Math.min(100, (topCountry?.count || 0) / Math.max(1, filtered.length) * 100) : 0}%` }} /></button>
+                  <button type="button" className="mbaz-insight-card" onClick={() => setStatusFilter([])}><span>{t("qaBoard.insightItems")}</span><strong>{filtered.length}</strong><small>{t("qaBoard.insightInBoard", { count: boardItems.length })}</small><i style={{ width: "100%" }} /></button>
+                  <button type="button" className="mbaz-insight-card good" onClick={() => setResultFilter(["pass"])}><span>{t("qaBoard.insightResultRate")}</span><strong>{resultRate}%</strong><small>{t("qaBoard.insightTested", { count: testedCount })}</small><i style={{ width: `${resultRate}%` }} /></button>
+                  <button type="button" className="mbaz-insight-card pass" onClick={() => setResultFilter(["pass"])}><span>{t("qaBoard.insightPassRate")}</span><strong>{passRate}%</strong><small>{t("qaBoard.insightApproved", { count: testResultCounts.pass })}</small><i style={{ width: `${passRate}%` }} /></button>
+                  <button type="button" className="mbaz-insight-card warn" onClick={() => setResultFilter(["pending"])}><span>{t("qaBoard.insightPending")}</span><strong>{testResultCounts.pending}</strong><small>{t("qaBoard.insightOfFilter", { percent: filtered.length ? Math.round((testResultCounts.pending / filtered.length) * 100) : 0 })}</small><i style={{ width: `${filtered.length ? (testResultCounts.pending / filtered.length) * 100 : 0}%` }} /></button>
+                  <button type="button" className="mbaz-insight-card danger"><span>{t("qaBoard.insightRisk")}</span><strong>{blockedCount + staleCount}</strong><small>{t("qaBoard.insightRiskDetail", { blocked: blockedCount, stale: staleCount })}</small><i style={{ width: `${filtered.length ? Math.min(100, ((blockedCount + staleCount) / filtered.length) * 100) : 0}%` }} /></button>
+                  <button type="button" className="mbaz-insight-card info"><span>{t("qaBoard.insightCoverage")}</span><strong>{topCountry?.country || "-"}</strong><small>{t("qaBoard.insightCoverageDetail", { qa: qaActiveCount, countries: countriesInBoard.length })}</small><i style={{ width: `${countriesInBoard.length ? Math.min(100, (topCountry?.count || 0) / Math.max(1, filtered.length) * 100) : 0}%` }} /></button>
                 </div>
               )}
               {loading ? (
                 <div className="mbaz-chart"><ChartSkeleton rows={3} /></div>
               ) : (
                 <div id="mbaz-chart" className="mbaz-chart">
-                  <div className="mbaz-chart-head"><h3>Distribuicao por status</h3><span>{filtered.length} item(s)</span></div>
+                  <div className="mbaz-chart-head"><h3>{t("qaBoard.statusChartTitle")}</h3><span>{t("qaBoard.itemsCount", { count: filtered.length })}</span></div>
                   <div className="mbaz-status-layout">
                     <div className="mbaz-mini-stats">
                       <button type="button" className={`mbaz-mini-stat ${!statusFilter.length ? "active" : ""}`} onClick={() => setStatusFilter([])}>
-                        <i style={{ background: "var(--starkMuted)" }} /><span>Total</span><b>{filtered.length}</b>
+                        <i style={{ background: "var(--starkMuted)" }} /><span>{t("qaBoard.totalLabel")}</span><b>{filtered.length}</b>
                       </button>
                       {qaStatusOrder.map((key) => (
                         <button key={key} type="button" className={`mbaz-mini-stat ${statusFilter.includes(key) ? "active" : ""}`} onClick={() => setStatusFilter((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key])}>
@@ -716,7 +717,7 @@ export function QaBoardWorkbench() {
                           <Tooltip content={<RechartsTooltip />} />
                         </PieChart>
                       </ResponsiveContainer>
-                      <div className="mbaz-donut-center"><strong>{filtered.length}</strong><small>{filtered.length === 1 ? "item" : "itens"}</small></div>
+                      <div className="mbaz-donut-center"><strong>{filtered.length}</strong><small>{filtered.length === 1 ? t("qaBoard.itemSingular") : t("qaBoard.itemPlural")}</small></div>
                     </div>
                   </div>
                 </div>
@@ -725,7 +726,7 @@ export function QaBoardWorkbench() {
                 <div className="mbaz-qa-metrics"><ChartSkeleton rows={3} /></div>
               ) : (
                 <div id="mbaz-qa-metrics" className="mbaz-qa-metrics">
-                  <div className="mbaz-chart-head"><h3>Carga por QA</h3><span>{qaBarTotal} item(s)</span></div>
+                  <div className="mbaz-chart-head"><h3>{t("qaBoard.qaChartTitle")}</h3><span>{t("qaBoard.itemsCount", { count: qaBarTotal })}</span></div>
                   <div className="mbaz-qa-stack-wrap">
                     <ResponsiveContainer width="100%" height={30}>
                       <BarChart data={qaBarData} layout="vertical" margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
@@ -754,7 +755,7 @@ export function QaBoardWorkbench() {
                 <div className="mbaz-chart"><ChartSkeleton rows={3} /></div>
               ) : (
                 <div id="mbaz-test-results" className="mbaz-chart">
-                  <div className="mbaz-chart-head"><h3>Resultado de teste</h3><span>{filtered.length} item(s)</span></div>
+                  <div className="mbaz-chart-head"><h3>{t("qaBoard.resultChartTitle")}</h3><span>{t("qaBoard.itemsCount", { count: filtered.length })}</span></div>
                   <ResponsiveContainer width="100%" height={118}>
                     <BarChart data={testResultOrder.map((key) => ({ key, name: testResultConfig[key].label, value: testResultCounts[key] || 0 }))} margin={{ top: 8, right: 8, bottom: 4, left: 8 }}>
                       <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--starkMuted)" }} axisLine={false} tickLine={false} />
@@ -774,10 +775,10 @@ export function QaBoardWorkbench() {
               ) : (
                 <CountryStateMatrix countriesInBoard={countriesInBoard} items={filtered} statusOrder={qaStatusOrder} statusConfig={qaStatusConfig} resolveStatus={qaStatusInfo} />
               )}
-              <div id="mbaz-refresh-history" className="mbaz-refresh-history">Ultima atualizacao: {new Date().toLocaleTimeString("pt-BR")}</div>
+              <div id="mbaz-refresh-history" className="mbaz-refresh-history">{t("qaBoard.lastUpdate")}: {new Date().toLocaleTimeString("pt-BR")}</div>
               <button id="mbaz-toggle-charts" className="mbaz-btn mbaz-chart-toggle" type="button" onClick={() => setChartsCollapsed((value) => !value)}>
                 <i className={`bi ${chartsCollapsed ? "bi-chevron-down" : "bi-chevron-up"}`} />
-                <span>{chartsCollapsed ? "Mostrar graficos" : "Ocultar graficos"}</span>
+                <span>{chartsCollapsed ? t("qaBoard.showCharts") : t("qaBoard.hideCharts")}</span>
               </button>
             </div>
             <div id="mbaz-panel-board" className="mbaz-panel">
@@ -786,9 +787,9 @@ export function QaBoardWorkbench() {
                 {loading ? <WorkbenchCardSkeleton rows={8} mode={viewMode === "grid" ? "grid" : viewMode} /> : filtered.length ? groupsForBoard(filtered).map((group) => groupBy === "none" ? group.items.map(renderCard) : (
                   <details key={group.key} className="mb-my-group" open>
                     <summary><span>{group.label}</span><b>{group.items.length}</b></summary>
-                    <div className="mb-my-group-body">{group.items.length ? group.items.map(renderCard) : <EmptyState title="Nenhum card neste grupo." />}</div>
+                    <div className="mb-my-group-body">{group.items.length ? group.items.map(renderCard) : <EmptyState title={t("qaBoard.emptyGroup")} />}</div>
                   </details>
-                )) : <div className="mbaz-empty">Nenhum work item encontrado.</div>}
+                )) : <div className="mbaz-empty">{t("qaBoard.emptyBoard")}</div>}
               </div>
             </div>
           </ConnectionGate>
@@ -799,9 +800,9 @@ export function QaBoardWorkbench() {
           fallback={(error) => (
             <div className="mbaz-new-modal-overlay">
               <div className="stark-error-boundary" onClick={(event) => event.stopPropagation()}>
-                <strong>Nao foi possivel abrir este Work Item.</strong>
-                <p>{error?.message || "Erro desconhecido ao renderizar o modal."}</p>
-                <button type="button" onClick={closeActiveItem}>Fechar</button>
+                <strong>{t("qaBoard.modalErrorTitle")}</strong>
+                <p>{error?.message || t("qaBoard.modalErrorFallback")}</p>
+                <button type="button" onClick={closeActiveItem}>{t("qaBoard.close")}</button>
               </div>
             </div>
           )}
@@ -1016,7 +1017,7 @@ export function MyItemsWorkbench() {
   async function saveHours() {
     const hours = Number(workedHours);
     if (!Number.isFinite(hours) || hours <= 0) {
-      setHoursError("Informe uma quantidade de horas maior que zero.");
+      setHoursError(t("myItems.hoursErrorMessage"));
       return;
     }
     const targets = hoursTarget?.items || [];
@@ -1066,18 +1067,18 @@ export function MyItemsWorkbench() {
   function groupsForItems(list) {
     if (groupBy === "hours") {
       return [
-        { key: "with-hours", label: "Cards com horas", count: list.filter((item) => Number(item.completedHours || 0) > 0).length, items: list.filter((item) => Number(item.completedHours || 0) > 0) },
-        { key: "without-hours", label: "Cards sem horas", count: list.filter((item) => Number(item.completedHours || 0) <= 0).length, items: list.filter((item) => Number(item.completedHours || 0) <= 0) }
+        { key: "with-hours", label: t("myItems.groupWithHours"), count: list.filter((item) => Number(item.completedHours || 0) > 0).length, items: list.filter((item) => Number(item.completedHours || 0) > 0) },
+        { key: "without-hours", label: t("myItems.groupWithoutHours"), count: list.filter((item) => Number(item.completedHours || 0) <= 0).length, items: list.filter((item) => Number(item.completedHours || 0) <= 0) }
       ];
     }
     if (groupBy === "source") {
       return [
-        { key: "azure", label: "Cards do Azure", count: list.filter((item) => (item.myItemSources || []).includes("azure")).length, items: list.filter((item) => (item.myItemSources || []).includes("azure")) },
-        { key: "tested", label: "Cards testados por mim", count: list.filter((item) => (item.myItemSources || []).includes("qa-testado")).length, items: list.filter((item) => (item.myItemSources || []).includes("qa-testado")) },
-        { key: "qa-owner", label: "Cards como Tested by", count: list.filter((item) => (item.myItemSources || []).includes("qa-responsavel")).length, items: list.filter((item) => (item.myItemSources || []).includes("qa-responsavel")) }
+        { key: "azure", label: t("myItems.groupAzure"), count: list.filter((item) => (item.myItemSources || []).includes("azure")).length, items: list.filter((item) => (item.myItemSources || []).includes("azure")) },
+        { key: "tested", label: t("myItems.groupTested"), count: list.filter((item) => (item.myItemSources || []).includes("qa-testado")).length, items: list.filter((item) => (item.myItemSources || []).includes("qa-testado")) },
+        { key: "qa-owner", label: t("myItems.groupQaOwner"), count: list.filter((item) => (item.myItemSources || []).includes("qa-responsavel")).length, items: list.filter((item) => (item.myItemSources || []).includes("qa-responsavel")) }
       ];
     }
-    return [{ key: "all", label: "Meus itens", count: list.length, items: list }];
+    return [{ key: "all", label: t("myItems.clusterMyItems"), count: list.length, items: list }];
   }
 
   return (
@@ -1088,14 +1089,14 @@ export function MyItemsWorkbench() {
         subtitle={isQa ? t("pages.myItems.subtitleQa") : t("pages.myItems.subtitleDev")}
         demoMode={demoMode}
         actions={<>
-          <IconButton title={summaryCollapsed ? "Mostrar resumo" : "Ocultar resumo"} onClick={() => setSummaryCollapsed((value) => !value)}><i className={`bi ${summaryCollapsed ? "bi-layout-text-window" : "bi-layout-sidebar-inset"}`} /></IconButton>
-          <IconButton title={filtersCollapsed ? "Mostrar filtros" : "Ocultar filtros"} onClick={() => setFiltersCollapsed((value) => !value)}><i className={`bi ${filtersCollapsed ? "bi-funnel-fill" : "bi-funnel"}`} /></IconButton>
-          <IconButton title="Lista" onClick={() => setViewMode("list")}><i className="bi bi-list-ul" /></IconButton>
-          <IconButton title="Grid" onClick={() => setViewMode("grid")}><i className="bi bi-grid-3x3-gap" /></IconButton>
-          <IconButton title="Compacto" onClick={() => setViewMode("compact")}><i className="bi bi-list" /></IconButton>
-          <IconButton title="Exportar CSV" onClick={() => exportWorkItemsCsv("meus-itens", visibleItems)}><FiDownload /></IconButton>
-          {demoMode && <IconButton title="Nova tarefa" onClick={createDemoTask}><i className="bi bi-plus-lg" /></IconButton>}
-          <IconButton title="Atualizar" onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /></IconButton>
+          <IconButton title={summaryCollapsed ? t("myItems.summaryShow") : t("myItems.summaryHide")} onClick={() => setSummaryCollapsed((value) => !value)}><i className={`bi ${summaryCollapsed ? "bi-layout-text-window" : "bi-layout-sidebar-inset"}`} /></IconButton>
+          <IconButton title={filtersCollapsed ? t("myItems.filtersShow") : t("myItems.filtersHide")} onClick={() => setFiltersCollapsed((value) => !value)}><i className={`bi ${filtersCollapsed ? "bi-funnel-fill" : "bi-funnel"}`} /></IconButton>
+          <IconButton title={t("qaBoard.viewList")} onClick={() => setViewMode("list")}><i className="bi bi-list-ul" /></IconButton>
+          <IconButton title={t("qaBoard.viewGrid")} onClick={() => setViewMode("grid")}><i className="bi bi-grid-3x3-gap" /></IconButton>
+          <IconButton title={t("qaBoard.viewCompact")} onClick={() => setViewMode("compact")}><i className="bi bi-list" /></IconButton>
+          <IconButton title={t("qaBoard.exportCsv")} onClick={() => exportWorkItemsCsv("meus-itens", visibleItems)}><FiDownload /></IconButton>
+          {demoMode && <IconButton title={t("myItems.newTaskTitle")} onClick={createDemoTask}><i className="bi bi-plus-lg" /></IconButton>}
+          <IconButton title={t("qaBoard.refresh")} onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /></IconButton>
         </>}
       />
       <ConnectionGate needsAzureIntegration={needsAzureIntegration} error={error}>
@@ -1103,7 +1104,7 @@ export function MyItemsWorkbench() {
           <div className="mb-my-summary-top">
             <div className="mb-my-summary-user">
               <AvatarDot person={myCollaborator || { azureName: identityName, imageUrl: profile?.avatarUrl }} name={identityName} />
-              <small>{visibleItems.length} de {allMine.length} item(ns) no filtro atual</small>
+              <small>{t("myItems.itemsInFilter", { visible: visibleItems.length, total: allMine.length })}</small>
             </div>
             {/* Eram ate 7 mini-cards soltos pra QA (mesmo problema de excesso
                 de metricas do dashboard de Gestao de equipe) — agrupados em
@@ -1111,17 +1112,17 @@ export function MyItemsWorkbench() {
                 que eu fiz como QA. */}
             <div className="mb-my-summary-card-kpis">
               <div className="mb-my-metric-cluster primary">
-                <strong>Meus itens</strong>
-                <span><b>{allMine.length}</b><small>total</small></span>
-                <span><b>{tasks}</b><small>tasks</small></span>
-                <span><b>{bugs}</b><small>bugs</small></span>
-                {!isQa && <span title="Itens com build confirmado via Pipeline (QA/BETA)"><b>{pipelineConfirmedTotal}</b><small>confirmados</small></span>}
+                <strong>{t("myItems.clusterMyItems")}</strong>
+                <span><b>{allMine.length}</b><small>{t("myItems.totalLabel")}</small></span>
+                <span><b>{tasks}</b><small>{t("myItems.tasksLabel")}</small></span>
+                <span><b>{bugs}</b><small>{t("myItems.bugsLabel")}</small></span>
+                {!isQa && <span title={t("myItems.confirmedTitle")}><b>{pipelineConfirmedTotal}</b><small>{t("myItems.confirmedLabel")}</small></span>}
               </div>
               {isQa && (
                 <div className="mb-my-metric-cluster quality">
-                  <strong>Atividade de QA</strong>
-                  <span><b>{testedByMe}</b><small>testados por mim</small></span>
-                  <span><b>{testedTotal}</b><small>testados</small></span>
+                  <strong>{t("myItems.qaActivityCluster")}</strong>
+                  <span><b>{testedByMe}</b><small>{t("myItems.testedByMeLabel")}</small></span>
+                  <span><b>{testedTotal}</b><small>{t("myItems.testedLabel")}</small></span>
                   <span><b>{qaResponsibleTotal}</b><small>Tested by</small></span>
                   <span><b>{azureAssignedTotal}</b><small>Assigned</small></span>
                 </div>
@@ -1129,21 +1130,21 @@ export function MyItemsWorkbench() {
             </div>
           </div>
           <div className="mb-my-summary-hours-row">
-            <div className="mb-my-summary-hour-kpis"><span><small>Horas</small><b>{formatHours(totalHours)}</b></span><span><small>Meta</small><b>{formatHours(goal)}</b></span><span className={balance > 0 ? "above" : balance < 0 ? "below" : "met"}><small>{balance > 0 ? "Excedente" : balance < 0 ? "Restante" : "Meta"}</small><b>{formatHours(Math.abs(balance))}</b></span></div>
+            <div className="mb-my-summary-hour-kpis"><span><small>{t("myItems.hoursLabel")}</small><b>{formatHours(totalHours)}</b></span><span><small>{t("myItems.goalLabel")}</small><b>{formatHours(goal)}</b></span><span className={balance > 0 ? "above" : balance < 0 ? "below" : "met"}><small>{balance > 0 ? t("myItems.excessLabel") : balance < 0 ? t("myItems.remainingLabel") : t("myItems.goalLabel")}</small><b>{formatHours(Math.abs(balance))}</b></span></div>
             <div className="mb-my-summary-links">
-              <button type="button" className={hoursFilter === "with" ? "active" : ""} onClick={() => setHoursFilter("with")}><span>Com horas</span><b>{withHours}</b><em>Ver</em></button>
-              <button type="button" className={hoursFilter === "without" ? "active" : ""} onClick={() => setHoursFilter("without")}><span>Sem horas</span><b>{withoutHours}</b><em>Ver</em></button>
-              <button type="button" className={hoursFilter === "all" ? "active" : ""} onClick={() => setHoursFilter("all")}><span>Todos</span><b>{allMine.length}</b><em>Ver</em></button>
+              <button type="button" className={hoursFilter === "with" ? "active" : ""} onClick={() => setHoursFilter("with")}><span>{t("myItems.withHoursLabel")}</span><b>{withHours}</b><em>{t("myItems.viewAction")}</em></button>
+              <button type="button" className={hoursFilter === "without" ? "active" : ""} onClick={() => setHoursFilter("without")}><span>{t("myItems.withoutHoursLabel")}</span><b>{withoutHours}</b><em>{t("myItems.viewAction")}</em></button>
+              <button type="button" className={hoursFilter === "all" ? "active" : ""} onClick={() => setHoursFilter("all")}><span>{t("myItems.allLabel")}</span><b>{allMine.length}</b><em>{t("myItems.viewAction")}</em></button>
             </div>
           </div>
         </section>}
-        {selectedIds.length > 0 && <section className="mb-my-bulk-bar"><span>{selectedIds.length} selecionado(s)</span><button type="button" onClick={openBulkHours}>Alterar em massa</button><button type="button" onClick={() => setSelectedIds([])}>Limpar selecao</button></section>}
+        {selectedIds.length > 0 && <section className="mb-my-bulk-bar"><span>{t("myItems.selectedCount", { count: selectedIds.length })}</span><button type="button" onClick={openBulkHours}>{t("myItems.bulkChange")}</button><button type="button" onClick={() => setSelectedIds([])}>{t("myItems.clearSelection")}</button></section>}
         {!filtersCollapsed && <section className="mb-my-items-filters">
           {isQa && (
             <section className={`mb-my-insights ${insightsCollapsed ? "is-collapsed" : ""}`}>
               <header>
-                <div><strong>Resumo de testes</strong><small>{filteredTestCounts.total} evidencia(s) nos filtros atuais</small></div>
-                <button type="button" onClick={() => setInsightsCollapsed((value) => !value)}>{insightsCollapsed ? "Mostrar graficos" : "Ocultar graficos"}</button>
+                <div><strong>{t("myItems.testSummaryTitle")}</strong><small>{t("myItems.evidenceCountFilters", { count: filteredTestCounts.total })}</small></div>
+                <button type="button" onClick={() => setInsightsCollapsed((value) => !value)}>{insightsCollapsed ? t("qaBoard.showCharts") : t("qaBoard.hideCharts")}</button>
               </header>
               {!insightsCollapsed && <div className="mb-my-test-dashboard">
                 <div className="mb-my-test-chart">
@@ -1168,35 +1169,35 @@ export function MyItemsWorkbench() {
                   </div>
                   <div className="mb-my-test-legend">
                     {myTestResultOrder.map((key) => <span key={key}><i className={`bi ${myTestResultConfig[key].icon}`} /> {myTestResultConfig[key].label} {filteredTestCounts[key] || 0}</span>)}
-                    <strong>{filteredTestCounts.total} evidencia(s)</strong>
+                    <strong>{t("myItems.evidenceCount", { count: filteredTestCounts.total })}</strong>
                   </div>
                 </div>
                 <div className="mb-my-env-kpis">
                   {environmentOptions.map((env) => {
                     const row = filteredTestCounts.environments[env] || {};
-                    return <span key={env}><strong><img className="mb-my-env-icon" src={envIconSrc(env)} alt={env} />{env}</strong><small><i className="bi bi-check-lg" /> {row.pass || 0}</small><small><i className="bi bi-x-lg" /> {row.fail || 0}</small><small><i className="bi bi-exclamation-triangle-fill" /> {row.limitation || 0}</small><em>Total {row.total || 0}</em></span>;
+                    return <span key={env}><strong><img className="mb-my-env-icon" src={envIconSrc(env)} alt={env} />{env}</strong><small><i className="bi bi-check-lg" /> {row.pass || 0}</small><small><i className="bi bi-x-lg" /> {row.fail || 0}</small><small><i className="bi bi-exclamation-triangle-fill" /> {row.limitation || 0}</small><em>{t("myItems.envTotal", { count: row.total || 0 })}</em></span>;
                   })}
                 </div>
               </div>}
             </section>
           )}
-          <div className="mb-my-filter-heading"><strong>Filtros</strong><span>Combine tipo, sprint, status, ambiente e origem sem duplicar contexto.</span></div>
+          <div className="mb-my-filter-heading"><strong>{t("myItems.filtersHeading")}</strong><span>{t("myItems.filtersSubtitle")}</span></div>
           <div className="mb-my-items-filter-row">
             <div className="mb-my-type-toggles">
               <button type="button" data-my-type="Task" className={`${types.includes("Task") ? "active" : ""} task`} onClick={() => toggleType("Task")}><img src={typeIconSrc("Task")} alt="" /> Task</button>
               <button type="button" data-my-type="Bug" className={`${types.includes("Bug") ? "active" : ""} bug`} onClick={() => toggleType("Bug")}><img src={typeIconSrc("Bug")} alt="" /> Bug</button>
               {isQa && <button type="button" data-my-type="User Story" className={`${types.includes("User Story") ? "active" : ""} story`} onClick={() => toggleType("User Story")}><img src={typeIconSrc("User Story")} alt="" /> User Story</button>}
             </div>
-            <FilterCombobox label="Pais" options={countryOptions} values={countryFilter} onChange={setCountryFilter} placeholder="Buscar pais" renderOption={(option) => <span className="mbw-combobox-country"><CountryVisual code={option} compact /> {countries[option]?.label || option}</span>} />
-            <FilterCombobox label="Tag" options={tagOptions} values={tagFilter} onChange={setTagFilter} placeholder="Buscar tag" />
-            <FilterCombobox label="Status" options={statusOptions} values={statusFilter} onChange={setStatusFilter} placeholder="Buscar status" />
-            <FilterCombobox label="Sprint" options={sprintOptions} values={effectiveSprintFilter} onChange={setSprintFilter} placeholder="Buscar sprint" allLabel="Sprint atual" renderOption={(option) => compactSprintLabel(option)} />
-            {isQa && <div className="mb-my-filter-pills"><strong>Ambiente</strong>{environmentOptions.map((env) => <button key={env} type="button" className={environmentFilter.includes(env) ? "active" : ""} onClick={() => toggleFilter("environment", env)}><img src={envIconSrc(env)} alt="" /> {env}</button>)}</div>}
-            {isQa && <div className="mb-my-filter-pills"><strong>Teste</strong>{testResultOptions.map((option) => <button key={option.key} type="button" className={`${testResultFilter.includes(option.key) ? "active" : ""} ${option.key}`} onClick={() => toggleFilter("result", option.key)}><i className={`bi ${option.icon}`} /> {option.label}</button>)}</div>}
-            <FilterCombobox label="Agrupar" options={[{ value: "none", label: "Sem agrupamento" }, { value: "hours", label: "Com/Sem horas" }, { value: "source", label: "Origem do card" }]} values={[groupBy]} multiple={false} onChange={(value) => setGroupBy(value || "none")} />
-            <button type="button" className="mb-my-clear-filters" onClick={resetMyItemsFilters}>Limpar filtros</button>
+            <FilterCombobox label={t("qaBoard.countryLabel")} options={countryOptions} values={countryFilter} onChange={setCountryFilter} placeholder={t("qaBoard.countryPlaceholder")} renderOption={(option) => <span className="mbw-combobox-country"><CountryVisual code={option} compact /> {countries[option]?.label || option}</span>} />
+            <FilterCombobox label={t("myItems.tagLabel")} options={tagOptions} values={tagFilter} onChange={setTagFilter} placeholder={t("myItems.tagPlaceholder")} />
+            <FilterCombobox label={t("qaBoard.statusLabel")} options={statusOptions} values={statusFilter} onChange={setStatusFilter} placeholder={t("qaBoard.statusPlaceholder")} />
+            <FilterCombobox label={t("myItems.sprintLabel")} options={sprintOptions} values={effectiveSprintFilter} onChange={setSprintFilter} placeholder={t("qaBoard.sprintSearchPlaceholder")} allLabel={t("myItems.currentSprintLabel")} renderOption={(option) => compactSprintLabel(option)} />
+            {isQa && <div className="mb-my-filter-pills"><strong>{t("myItems.environmentLabel")}</strong>{environmentOptions.map((env) => <button key={env} type="button" className={environmentFilter.includes(env) ? "active" : ""} onClick={() => toggleFilter("environment", env)}><img src={envIconSrc(env)} alt="" /> {env}</button>)}</div>}
+            {isQa && <div className="mb-my-filter-pills"><strong>{t("myItems.testLabel")}</strong>{testResultOptions.map((option) => <button key={option.key} type="button" className={`${testResultFilter.includes(option.key) ? "active" : ""} ${option.key}`} onClick={() => toggleFilter("result", option.key)}><i className={`bi ${option.icon}`} /> {option.label}</button>)}</div>}
+            <FilterCombobox label={t("qaBoard.groupLabel")} options={[{ value: "none", label: t("qaBoard.groupNone") }, { value: "hours", label: t("myItems.groupHours") }, { value: "source", label: t("myItems.groupSource") }]} values={[groupBy]} multiple={false} onChange={(value) => setGroupBy(value || "none")} />
+            <button type="button" className="mb-my-clear-filters" onClick={resetMyItemsFilters}>{t("qaBoard.clearFilters")}</button>
           </div>
-          <label className="mb-my-items-search"><FiSearch /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Pesquisar ID ou titulo" /></label>
+          <label className="mb-my-items-search"><FiSearch /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("myItems.searchPlaceholder")} /></label>
         </section>}
         <main className="mb-my-items-content">
           {loading && <WorkbenchCardSkeleton rows={viewMode === "grid" ? 8 : 5} mode={viewMode} />}
@@ -1204,10 +1205,10 @@ export function MyItemsWorkbench() {
             {!loading && groupsForItems(visibleItems).map((group) => groupBy === "none" ? group.items.map(renderMyCard) : (
               <details key={group.key} className="mb-my-group" open>
                 <summary><span>{group.label}</span><b>{group.count}</b></summary>
-                <div className="mb-my-group-body">{group.items.length ? group.items.map(renderMyCard) : <EmptyState title="Nenhum card neste grupo." />}</div>
+                <div className="mb-my-group-body">{group.items.length ? group.items.map(renderMyCard) : <EmptyState title={t("qaBoard.emptyGroup")} />}</div>
               </details>
             ))}
-            {!loading && !visibleItems.length && <EmptyState title="Nenhum Work Item encontrado para os filtros atuais." />}
+            {!loading && !visibleItems.length && <EmptyState title={t("myItems.emptyBoard")} />}
           </div>
         </main>
       </ConnectionGate>
@@ -1216,9 +1217,9 @@ export function MyItemsWorkbench() {
           fallback={(error) => (
             <div className="mbaz-new-modal-overlay">
               <div className="stark-error-boundary" onClick={(event) => event.stopPropagation()}>
-                <strong>Nao foi possivel abrir este Work Item.</strong>
-                <p>{error?.message || "Erro desconhecido ao renderizar o modal."}</p>
-                <button type="button" onClick={closeActiveItem}>Fechar</button>
+                <strong>{t("qaBoard.modalErrorTitle")}</strong>
+                <p>{error?.message || t("qaBoard.modalErrorFallback")}</p>
+                <button type="button" onClick={closeActiveItem}>{t("qaBoard.close")}</button>
               </div>
             </div>
           )}
@@ -1237,15 +1238,15 @@ export function MyItemsWorkbench() {
         <div className="mb-my-hours-overlay">
           <div className="mb-my-hours-backdrop" onClick={() => setHoursTarget(null)} />
           <section className="mb-my-hours-modal">
-            <header><div><strong>{hoursTarget.items.length > 1 ? `Alterar ${hoursTarget.items.length} itens em massa` : `Atualizar ${formatWorkItemCode(hoursTarget.items[0]?.id, hoursTarget.items[0]?.type)}`}</strong><small>{hoursTarget.items.length > 1 ? "Horas em massa com status opcional" : `${hoursTarget.items[0]?.state} -> ${hoursTarget.nextState}`}</small></div><button type="button" onClick={() => setHoursTarget(null)}><i className="bi bi-x-lg" /></button></header>
+            <header><div><strong>{hoursTarget.items.length > 1 ? t("myItems.bulkTitle", { count: hoursTarget.items.length }) : t("myItems.updateTitle", { code: formatWorkItemCode(hoursTarget.items[0]?.id, hoursTarget.items[0]?.type) })}</strong><small>{hoursTarget.items.length > 1 ? t("myItems.bulkSubtitle") : t("myItems.stateTransition", { from: hoursTarget.items[0]?.state, to: hoursTarget.nextState })}</small></div><button type="button" onClick={() => setHoursTarget(null)}><i className="bi bi-x-lg" /></button></header>
             <div className="mb-my-hours-body">
               {hoursTarget.items.length === 1 && <p>{hoursTarget.items[0]?.title}</p>}
-              <label><span>Horas trabalhadas neste avanco *</span><input type="number" min="0.25" step="0.25" value={workedHours} onChange={(event) => setWorkedHours(event.target.value)} placeholder="Ex.: 4" autoFocus /></label>
-              {hoursTarget.items.length === 1 && <div className="mb-my-hours-comparison"><span><small>Valor atual</small><strong>{formatHours(hoursTarget.items[0]?.completedHours)}</strong></span><b>{"->"}</b><span><small>Apos atualizar</small><strong>{formatHours(Number(hoursTarget.items[0]?.completedHours || 0) + (Number(workedHours) || 0))}</strong></span></div>}
-              <div className="mb-my-hours-note">O valor informado sera somado ao Completed Work atual. O status so sera alterado apos o preenchimento.</div>
+              <label><span>{t("myItems.workedHoursLabel")}</span><input type="number" min="0.25" step="0.25" value={workedHours} onChange={(event) => setWorkedHours(event.target.value)} placeholder={t("myItems.hoursPlaceholder")} autoFocus /></label>
+              {hoursTarget.items.length === 1 && <div className="mb-my-hours-comparison"><span><small>{t("myItems.currentValueLabel")}</small><strong>{formatHours(hoursTarget.items[0]?.completedHours)}</strong></span><b>{"->"}</b><span><small>{t("myItems.afterUpdateLabel")}</small><strong>{formatHours(Number(hoursTarget.items[0]?.completedHours || 0) + (Number(workedHours) || 0))}</strong></span></div>}
+              <div className="mb-my-hours-note">{t("myItems.hoursNote")}</div>
               {hoursError && <div className="mb-my-hours-error">{hoursError}</div>}
             </div>
-            <footer><button type="button" className="secondary" onClick={() => setHoursTarget(null)}>Cancelar</button><button type="button" className="primary" onClick={saveHours}>Salvar horas e avancar</button></footer>
+            <footer><button type="button" className="secondary" onClick={() => setHoursTarget(null)}>{t("myItems.cancelButton")}</button><button type="button" className="primary" onClick={saveHours}>{t("myItems.saveHoursButton")}</button></footer>
           </section>
         </div>
       )}
@@ -1283,6 +1284,7 @@ function testSummaryForItem(item, evidence = []) {
 }
 
 function MyQaBoardItemCard({ item, collaboratorsById, qaPeople, onOpen, onQaChange, evidence = [], pipeline }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const status = qaStatusInfo(item.state);
   const type = workTypeInfo(item.type);
@@ -1295,7 +1297,7 @@ function MyQaBoardItemCard({ item, collaboratorsById, qaPeople, onOpen, onQaChan
   const sourceLabels = {
     azure: "Assigned",
     "qa-responsavel": "Tested by",
-    "qa-testado": "Testado por mim"
+    "qa-testado": t("myItems.testedByMeBadge")
   };
 
   return (
@@ -1322,7 +1324,7 @@ function MyQaBoardItemCard({ item, collaboratorsById, qaPeople, onOpen, onQaChan
           <span className="mbaz-sprint-pill" title={item.sprint || item.iteration || ""}>{compactSprintLabel(item.sprint || item.iteration)}</span>
         </div>
         <div className="mbaz-card-right mbaz-meta">
-          {age > 0 && <span className={`mbaz-pill ${age >= 7 ? "hot" : ""}`} title="Ultima alteracao">{age}d</span>}
+          {age > 0 && <span className={`mbaz-pill ${age >= 7 ? "hot" : ""}`} title={t("qaBoard.lastChangeTitle")}>{age}d</span>}
           {visibleTags.slice(0, 2).map((tag) => <span key={tag} className={`mbaz-pill ${/block|imped|critical|hotfix/i.test(tag) ? "hot" : ""}`}>{tag}</span>)}
         </div>
       </div>
@@ -1352,7 +1354,7 @@ function MyQaBoardItemCard({ item, collaboratorsById, qaPeople, onOpen, onQaChan
               </div>
             );
           })}
-          {!environmentsWithEvidence(records).length && <div className="mbaz-evidence-pending"><i className="bi bi-dash-lg mbaz-evidence-pending-icon" /> Sem testes registrados</div>}
+          {!environmentsWithEvidence(records).length && <div className="mbaz-evidence-pending"><i className="bi bi-dash-lg mbaz-evidence-pending-icon" /> {t("qaBoard.noTestsRegistered")}</div>}
         </div>
       </div>
     </article>
@@ -1360,6 +1362,7 @@ function MyQaBoardItemCard({ item, collaboratorsById, qaPeople, onOpen, onQaChan
 }
 
 function MyItemCard({ item, checked, onCheck, onOpen, onHours, pipeline }) {
+  const { t } = useTranslation();
   const typeClass = normalize(item.type) === "bug" ? "bug" : "task";
   const typeInfo = workItemTypes[item.type] || workItemTypes.Task;
   const visibleTags = (item.tags || []).filter((tag) => !/^0-[A-Z]{2}$/i.test(String(tag).trim()));
@@ -1370,11 +1373,11 @@ function MyItemCard({ item, checked, onCheck, onOpen, onHours, pipeline }) {
   const sourceLabels = {
     azure: "Assigned",
     "qa-responsavel": "Tested by",
-    "qa-testado": "Testado por mim"
+    "qa-testado": t("myItems.testedByMeBadge")
   };
   return (
     <article className={`mb-my-item-card ${typeClass} ${critical ? "is-critical" : ""}`} data-id={item.id} data-work-item-id={item.id} data-work-item-type={item.type} style={{ "--wi-type-color": typeInfo.color || "#64748b", "--wi-type-bg": typeInfo.background || "#f8fafc" }}>
-      <label className="mb-my-item-check" title="Selecionar"><input className="mb-my-item-select" type="checkbox" checked={checked} onChange={(event) => onCheck(item.id, event.target.checked)} /><span /></label>
+      <label className="mb-my-item-check" title={t("myItems.selectLabel")}><input className="mb-my-item-select" type="checkbox" checked={checked} onChange={(event) => onCheck(item.id, event.target.checked)} /><span /></label>
       <div className="mb-my-item-main">
         <div className="mb-my-item-normal-content">
           <div className="mb-my-item-topline">
@@ -1386,22 +1389,22 @@ function MyItemCard({ item, checked, onCheck, onOpen, onHours, pipeline }) {
           </div>
           <button type="button" className="mb-my-item-title-link" onClick={() => onOpen(item)}>{item.title}</button>
           <div className="mb-my-item-bottomline">
-            <div className="mb-my-item-meta"><span>{compactSprintLabel(item.sprint || item.iteration) || "Sem sprint"}</span><span>Completed: {formatHours(item.completedHours)}</span><span>Remaining: {"remainingHours" in item ? formatHours(item.remainingHours) : "-"}</span></div>
-            <button className="mb-my-item-status" type="button" onClick={() => onHours(item)} disabled={!nextLabel}><strong>{item.state}</strong><i>{nextLabel ? "->" : "-"}</i><small>{nextLabel || "Fluxo concluido"}</small></button>
+            <div className="mb-my-item-meta"><span>{compactSprintLabel(item.sprint || item.iteration) || t("myItems.noSprint")}</span><span>Completed: {formatHours(item.completedHours)}</span><span>Remaining: {"remainingHours" in item ? formatHours(item.remainingHours) : "-"}</span></div>
+            <button className="mb-my-item-status" type="button" onClick={() => onHours(item)} disabled={!nextLabel}><strong>{item.state}</strong><i>{nextLabel ? "->" : "-"}</i><small>{nextLabel || t("myItems.flowDone")}</small></button>
           </div>
           {testSummary.total > 0 && (
             <div className="mb-my-item-test-summary">
               <span><i className="bi bi-check-lg" /> {testSummary.pass}</span>
               <span><i className="bi bi-x-lg" /> {testSummary.fail}</span>
               <span><i className="bi bi-exclamation-triangle-fill" /> {testSummary.limitation}</span>
-              <strong>{testSummary.total} resultado(s)</strong>
+              <strong>{t("myItems.resultsCount", { count: testSummary.total })}</strong>
             </div>
           )}
         </div>
         <div className="mb-my-item-compact-row">
           <a className="mb-my-item-compact-id" href={itemUrl} target="_blank" rel="noopener noreferrer">{formatWorkItemCode(item.id, item.type)}</a>
           <div className="mb-my-item-compact-country">{(item.countries || []).map((country) => <CountryVisual key={country} code={country} compact />)}</div>
-          <button className="mb-my-item-status mb-my-item-status-compact" type="button" onClick={() => onHours(item)} disabled={!nextLabel}><strong>{item.state}</strong><i>{nextLabel ? "->" : "-"}</i><small>{nextLabel || "Fim"}</small></button>
+          <button className="mb-my-item-status mb-my-item-status-compact" type="button" onClick={() => onHours(item)} disabled={!nextLabel}><strong>{item.state}</strong><i>{nextLabel ? "->" : "-"}</i><small>{nextLabel || t("myItems.doneShort")}</small></button>
         </div>
       </div>
     </article>
@@ -1498,7 +1501,7 @@ export function HoursWorkbench() {
         map.set(key, {
           key,
           person,
-          displayName: person?.azureName || seed.displayName || "Nao atribuido",
+          displayName: person?.azureName || seed.displayName || t("governance.unassigned"),
           uniqueName: seed.uniqueName || person?.email || "",
           avatarUrl: person?.imageUrl || seed.imageUrl || "",
           color: person?.color || "#0b74de",
@@ -1513,7 +1516,7 @@ export function HoursWorkbench() {
     periodItems.forEach((item) => {
       const person = peopleById.get(item.assigneeId) || findCollaboratorByName(peopleByName, item.assigneeName);
       const key = person?.id || item.assigneeName || "unassigned";
-      ensure(key, { person, displayName: item.assigneeName || "Nao atribuido", imageUrl: item.assigneeImageUrl }).items.push(item);
+      ensure(key, { person, displayName: item.assigneeName || t("governance.unassigned"), imageUrl: item.assigneeImageUrl }).items.push(item);
       const qaPerson = peopleById.get(item.qaCollaboratorId);
       if (qaPerson && qaPerson.id !== key) {
         ensure(qaPerson.id, { person: qaPerson }).items.push({ ...item, qaGovernanceCard: true });
@@ -1570,7 +1573,7 @@ export function HoursWorkbench() {
       }));
       return { ...dev, items: devItems, completed, tasks, bugs, userStories, features, testableItems, nonTestableItems, testedItems, cardsWithHours, cardsWithoutHours, missingHours, extraHours, progressPercent, goalStatus: status, countries: countryCounts, countryHours, testMetrics, qaResponsibleCount: qaResponsibleItems.length, azureAssignedCount, pendingToTestCount };
     }).sort((a, b) => a.displayName.localeCompare(b.displayName, "pt-BR"));
-  }, [collaborators, goalDefault, periodItems, peopleById, peopleByName, evidence]);
+  }, [collaborators, goalDefault, periodItems, peopleById, peopleByName, evidence, t]);
 
   // Tipo/periodo/horas ja foram aplicados na agregacao (periodItems); aqui
   // sobram apenas os filtros de exibicao da lista (busca, colaborador, meta).
@@ -1657,15 +1660,15 @@ export function HoursWorkbench() {
       name: dev.displayName,
       hours: dev.completed,
       goal: dev.goalHours,
-      label: dev.goalStatus === "below" ? "Abaixo" : dev.goalStatus === "above" ? "Acima" : "Cumprida",
+      label: dev.goalStatus === "below" ? t("governance.below") : dev.goalStatus === "above" ? t("governance.above") : t("governance.met"),
       tone: dev.goalStatus === "below" ? "danger" : dev.goalStatus === "above" ? "warning" : "primary"
     }));
-    copyExecutiveReportText({ title: "Gestao da equipe - Horas", period: "Atual", totals: { hours: totals.completed, goal: totals.goal, missing: totals.missing, extra: totals.extra }, rows });
+    copyExecutiveReportText({ title: t("governance.reportTitle"), period: t("governance.currentPeriod"), totals: { hours: totals.completed, goal: totals.goal, missing: totals.missing, extra: totals.extra }, rows });
   }
 
   function pdfReport() {
     const rows = filteredDevelopers.map((dev) => ({ name: dev.displayName, hours: dev.completed, goal: dev.goalHours, label: dev.goalStatus, tone: dev.goalStatus === "below" ? "danger" : dev.goalStatus === "above" ? "warning" : "primary" }));
-    downloadExecutiveReportPdf({ title: "Stark Hub - Gestao da equipe", period: "Atual", totals: { hours: totals.completed, goal: totals.goal, missing: totals.missing, extra: totals.extra }, rows, filename: `stark-hub-Gestao-horas-${new Date().toISOString().slice(0, 10)}.pdf` });
+    downloadExecutiveReportPdf({ title: t("governance.pdfTitle"), period: t("governance.currentPeriod"), totals: { hours: totals.completed, goal: totals.goal, missing: totals.missing, extra: totals.extra }, rows, filename: `stark-hub-Gestao-horas-${new Date().toISOString().slice(0, 10)}.pdf` });
   }
 
   async function sendGovernanceSlack() {
@@ -1677,9 +1680,9 @@ export function HoursWorkbench() {
     }));
     const text = buildGovernanceSlackText({ totals: { developers: totals.developers, cards: totals.cards, hours: totals.completed, goal: totals.goal, missing: totals.missing, extra: totals.extra }, rows });
     const webhooks = resolveSlackWebhooks(getSetting);
-    if (!webhooks.length) { alert("Nenhum webhook do Slack configurado. Configure em Configuracoes > Slack."); return; }
+    if (!webhooks.length) { alert(t("governance.slackNotConfigured")); return; }
     const { data, error } = await supabase.functions.invoke("slackNotify", { body: { webhooks, text } });
-    if (error || !data?.ok) alert(`Nao foi possivel enviar ao Slack: ${error?.message || "verifique o webhook configurado."}`);
+    if (error || !data?.ok) alert(t("governance.slackSendError", { message: error?.message || "verifique o webhook configurado." }));
   }
 
   function copyHoursNotice(dev) {
@@ -1715,7 +1718,7 @@ export function HoursWorkbench() {
     const latest = records[0];
     const latestInfo = latest ? evidenceResultInfo(latest.result || latest.status) : null;
     const lastEnv = latest ? evidenceEnvironments(latest)[0] || null : null;
-    const testTooltip = records.length ? `${evidenceTransitionLabel(records)}\n\n${evidenceTooltip(records)}` : "Sem testes registrados";
+    const testTooltip = records.length ? `${evidenceTransitionLabel(records)}\n\n${evidenceTooltip(records)}` : t("qaBoard.noTestsRegistered");
     const isTestExpanded = expandedTests.has(itemKey);
     const completedHours = Number(item.completedHours || 0);
     const remainingHours = Number(item.remainingHours || 0);
@@ -1728,12 +1731,12 @@ export function HoursWorkbench() {
             <div className={`mbdhc-work-type-line ${String(item.type || "").toLowerCase()}`}><img className="mbdhc-work-type-icon" src={type.image} alt={item.type} /><strong>{formatWorkItemCode(item.id, item.type)}</strong><span>{item.type}</span></div>
             <h4 title={item.title}>{item.title}</h4>
             <div className="mbdhc-work-country-row"><CountryPills codes={item.countries || []} />{item.sprint && <span className="mbdhc-work-sprint">{compactSprintLabel(item.sprint)}</span>}</div>
-            <small>{item.qaGovernanceCard ? "Tested by" : "Assigned"} - {item.state || "Sem status"} - {item.areaPath || "Sem area"}</small>
+            <small>{item.qaGovernanceCard ? "Tested by" : "Assigned"} - {item.state || t("governance.noStatus")} - {item.areaPath || t("governance.noArea")}</small>
           </div>
           <div className="mbdhc-work-hours">
             <strong>{formatHours(item.completedHours)}</strong>
             <span>Completed</span>
-            {noHours && <em>Sem horas</em>}
+            {noHours && <em>{t("governance.noHours")}</em>}
             <i className="mbdhc-work-hour-progress" aria-hidden="true" />
           </div>
         </a>
@@ -1746,7 +1749,7 @@ export function HoursWorkbench() {
             onClick={() => toggleTestExpanded(itemKey)}
           >
             {latestInfo ? <i className={`bi ${latestInfo.icon}`} /> : <i className="bi bi-dash-lg" />}
-            <span>{latestInfo ? latestInfo.label : "Sem teste"}</span>
+            <span>{latestInfo ? latestInfo.label : t("governance.noTest")}</span>
             {lastEnv && <em>{lastEnv}</em>}
             {records.length > 0 && <b>{records.length}</b>}
             <i className={`bi ${isTestExpanded ? "bi-chevron-up" : "bi-chevron-down"}`} />
@@ -1769,7 +1772,7 @@ export function HoursWorkbench() {
                 </div>
               );
             })}
-            {!environmentsWithEvidence(records).length && <div className="mbaz-evidence-pending"><i className="bi bi-dash-lg mbaz-evidence-pending-icon" /> Sem testes registrados</div>}
+            {!environmentsWithEvidence(records).length && <div className="mbaz-evidence-pending"><i className="bi bi-dash-lg mbaz-evidence-pending-icon" /> {t("qaBoard.noTestsRegistered")}</div>}
           </div>
         )}
       </article>
@@ -1778,7 +1781,7 @@ export function HoursWorkbench() {
 
   function renderDeveloper(dev, { pinned = false } = {}) {
     const isOpen = expanded.has(dev.key);
-    const statusLabel = dev.goalStatus === "below" ? "Abaixo da meta" : dev.goalStatus === "above" ? "Acima da meta" : "Meta cumprida";
+    const statusLabel = dev.goalStatus === "below" ? t("governance.belowGoal") : dev.goalStatus === "above" ? t("governance.aboveGoal") : t("governance.metGoal");
     const progressWidth = Math.min(100, Math.max(0, dev.progressPercent));
     const itemPreview = dev.items;
     const testPassRate = dev.testMetrics.total ? Math.round((dev.testMetrics.pass / dev.testMetrics.total) * 100) : 0;
@@ -1801,7 +1804,7 @@ export function HoursWorkbench() {
     const rolePillLevels = collaboratorRoleLevels(dev.person).length ? collaboratorRoleLevels(dev.person) : (roleLevel ? [roleLevel] : []);
     return (
       <article key={dev.key} className={`mbdhc-dev-card role-${roleLevel || "none"} status-${dev.goalStatus} ${dev.goalStatus === "above" ? "pulse-over" : ""} ${pinned ? "mbdhc-dev-card-pinned" : ""}`} style={{ "--goal-progress": `${progressWidth}%`, "--goal-progress-color": progressColor }}>
-        {pinned && <div className="mbdhc-dev-pinned-label"><i className="bi bi-person-fill" /> Seu card</div>}
+        {pinned && <div className="mbdhc-dev-pinned-label"><i className="bi bi-person-fill" /> {t("governance.ownCard")}</div>}
         <div className="mbdhc-dev-head">
           <div className="mbdhc-dev-identity">
             <AvatarDot person={dev.person || { azureName: dev.displayName, imageUrl: dev.avatarUrl, color: dev.color }} name={dev.displayName} />
@@ -1809,7 +1812,7 @@ export function HoursWorkbench() {
               <span key={level} className={`mbdhc-role-pill role-${level}`}><RoleBadgeIcon level={level} /> {accessLevelLabels[level] || level}</span>
             ))}
           </div>
-          <div className="mbdhc-dev-status"><strong>{formatHours(dev.completed)}</strong><span>de {formatHours(dev.goalHours)}</span><em>{statusLabel}</em></div>
+          <div className="mbdhc-dev-status"><strong>{formatHours(dev.completed)}</strong><span>{t("governance.ofGoal", { goal: formatHours(dev.goalHours) })}</span><em>{statusLabel}</em></div>
         </div>
         <div className="mbdhc-country-pills">
           {visibleCountries.map(([country, count]) => <span key={country} className="mbdhc-country-pill"><CountryVisual code={country} compact /><strong>{count}</strong></span>)}
@@ -1827,32 +1830,32 @@ export function HoursWorkbench() {
             confundia. */}
         <div className="mbdhc-dev-metric-clusters">
           {isManagementOnly ? (
-            <div className="mbdhc-metric-cluster primary"><strong>Resumo</strong><span><b>{dev.items.length}</b><small>cards no periodo</small></span><span><b>{formatHours(dev.completed)}</b><small>horas</small></span></div>
+            <div className="mbdhc-metric-cluster primary"><strong>{t("governance.summaryCluster")}</strong><span><b>{dev.items.length}</b><small>{t("governance.cardsInPeriod")}</small></span><span><b>{formatHours(dev.completed)}</b><small>{t("governance.hoursLabel")}</small></span></div>
           ) : useTestMetrics ? (
             <>
-              <div className="mbdhc-metric-cluster primary"><strong>Testes</strong><span><b>{dev.testMetrics.total}</b><small>feitos</small></span><span><b>{dev.pendingToTestCount}</b><small>fila</small></span><span><b>{dev.qaResponsibleCount}</b><small>QA resp.</small></span></div>
-              <div className="mbdhc-metric-cluster quality"><strong>Resultado</strong><span className="approved"><i className="bi bi-check-lg" /><b>{dev.testMetrics.pass}</b><small>pass</small></span><span className="fail"><i className="bi bi-x-lg" /><b>{dev.testMetrics.fail}</b><small>fail</small></span><span className="limitation"><i className="bi bi-exclamation-triangle-fill" /><b>{dev.testMetrics.limitation}</b><small>lim.</small></span></div>
+              <div className="mbdhc-metric-cluster primary"><strong>{t("governance.testsCluster")}</strong><span><b>{dev.testMetrics.total}</b><small>{t("governance.testsDone")}</small></span><span><b>{dev.pendingToTestCount}</b><small>{t("governance.testsQueue")}</small></span><span><b>{dev.qaResponsibleCount}</b><small>{t("governance.testsQaResp")}</small></span></div>
+              <div className="mbdhc-metric-cluster quality"><strong>{t("governance.resultCluster")}</strong><span className="approved"><i className="bi bi-check-lg" /><b>{dev.testMetrics.pass}</b><small>{t("governance.passShort")}</small></span><span className="fail"><i className="bi bi-x-lg" /><b>{dev.testMetrics.fail}</b><small>{t("governance.failShort")}</small></span><span className="limitation"><i className="bi bi-exclamation-triangle-fill" /><b>{dev.testMetrics.limitation}</b><small>{t("governance.limitationShort")}</small></span></div>
             </>
           ) : (
             <>
-              <div className="mbdhc-metric-cluster primary"><strong>Entrega</strong><span><b>{dev.items.length}</b><small>cards</small></span><span><b>{dev.tasks}</b><small>tasks</small></span><span><b>{dev.bugs}</b><small>bugs</small></span></div>
-              <div className="mbdhc-metric-cluster quality"><strong>Qualidade · {testPassRate}% aprovacao</strong><span className="approved"><b>{dev.testMetrics.pass}</b><small>aprovados</small></span><span className="fail"><b>{dev.testMetrics.fail}</b><small>reprovados</small></span><span className="limitation"><b>{dev.testMetrics.limitation}</b><small>limitacao</small></span></div>
+              <div className="mbdhc-metric-cluster primary"><strong>{t("governance.deliveryCluster")}</strong><span><b>{dev.items.length}</b><small>{t("governance.cardsLabel")}</small></span><span><b>{dev.tasks}</b><small>{t("governance.tasksLabel")}</small></span><span><b>{dev.bugs}</b><small>{t("governance.bugsLabel")}</small></span></div>
+              <div className="mbdhc-metric-cluster quality"><strong>{t("governance.qualityCluster")} · {testPassRate}% {t("governance.approvalRate")}</strong><span className="approved"><b>{dev.testMetrics.pass}</b><small>{t("governance.approvedLabel")}</small></span><span className="fail"><b>{dev.testMetrics.fail}</b><small>{t("governance.rejectedLabel")}</small></span><span className="limitation"><b>{dev.testMetrics.limitation}</b><small>{t("governance.limitationLabel")}</small></span></div>
             </>
           )}
         </div>
         {(envStats.length > 0 || useTestMetrics) && (
           <details className="mbdhc-dev-env-details">
-            <summary><span>Ambientes</span><small>{dev.items.length} cards</small><i className="bi bi-chevron-down" /></summary>
+            <summary><span>{t("governance.environmentsLabel")}</span><small>{dev.items.length} {t("governance.cardsLabel")}</small><i className="bi bi-chevron-down" /></summary>
             <div>
               {(envStats.length ? envStats : ["DEV", "QA", "BETA", "PROD"].map((env) => ({ env, total: 0, pass: 0, fail: 0, limitation: 0 }))).map((row) => (
-                <span key={row.env} title={`${row.env}: ${row.total || 0} teste(s)`}><img src={envIconSrc(row.env)} alt="" /><b>{row.env}</b><small className="approved"><i className="bi bi-check-lg" />{row.pass || 0}</small><small className="fail"><i className="bi bi-x-lg" />{row.fail || 0}</small><small className="limitation"><i className="bi bi-exclamation-triangle-fill" />{row.limitation || 0}</small></span>
+                <span key={row.env} title={t("governance.testsCountTitle", { env: row.env, count: row.total || 0 })}><img src={envIconSrc(row.env)} alt="" /><b>{row.env}</b><small className="approved"><i className="bi bi-check-lg" />{row.pass || 0}</small><small className="fail"><i className="bi bi-x-lg" />{row.fail || 0}</small><small className="limitation"><i className="bi bi-exclamation-triangle-fill" />{row.limitation || 0}</small></span>
               ))}
             </div>
           </details>
         )}
         <div className="mbdhc-dev-actions">
-          <button className="mbdhc-button secondary" type="button" onClick={() => copyHoursNotice(dev)} title="Copiar aviso de horas para enviar ao colaborador"><i className="bi bi-clipboard-check" /> Copiar aviso</button>
-          {!pinned && <button className="mbdhc-button secondary" type="button" onClick={() => toggleDeveloper(dev.key)}>{isOpen ? "Ocultar" : "Ver mais"} <i className={`bi ${isOpen ? "bi-chevron-up" : "bi-chevron-down"}`} /></button>}
+          <button className="mbdhc-button secondary" type="button" onClick={() => copyHoursNotice(dev)} title={t("governance.copyHoursNoticeTitle")}><i className="bi bi-clipboard-check" /> {t("governance.copyHoursNoticeButton")}</button>
+          {!pinned && <button className="mbdhc-button secondary" type="button" onClick={() => toggleDeveloper(dev.key)}>{isOpen ? t("governance.hide") : t("governance.viewMore")} <i className={`bi ${isOpen ? "bi-chevron-up" : "bi-chevron-down"}`} /></button>}
         </div>
         {/* No card fixo (pinned) o usuario ja tem "Meus itens" pra ver o
             detalhe card a card — a lista aqui ficava sempre aberta (sem
@@ -1861,7 +1864,7 @@ export function HoursWorkbench() {
             "Ver mais" nos cards normais do time. */}
         {!pinned && (
           <div className="mbdhc-dev-items" hidden={!isOpen}>
-            <div className="mbdhc-dev-items-head"><strong>Cards do colaborador</strong><small>{dev.cardsWithoutHours} sem horas</small></div>
+            <div className="mbdhc-dev-items-head"><strong>{t("governance.collaboratorCards")}</strong><small>{t("governance.withoutHoursCount", { count: dev.cardsWithoutHours })}</small></div>
             <div className="mbdhc-dev-items-scroll">{itemPreview.map(renderWorkItem)}</div>
           </div>
         )}
@@ -1872,13 +1875,13 @@ export function HoursWorkbench() {
   return (
     <section className="mbw-page mbdhc-page mbdhc-governance">
       <WorkbenchHeader
-        kicker="Modulo 4"
+        kicker={t("governance.moduleKicker")}
         title={ownIsQaOnly ? t("nav.myMetrics") : t("pages.governance.title")}
-        subtitle={ownIsQaOnly ? "Seu card com metricas de teste. A visao completa do time e restrita a Gestao/Gerente." : t("pages.governance.subtitle")}
+        subtitle={ownIsQaOnly ? t("governance.qaSubtitle") : t("pages.governance.subtitle")}
         demoMode={demoMode}
         actions={ownIsQaOnly
-          ? <><Button onClick={() => downloadCsv(`minhas-metricas-${dateStamp()}.csv`, ["Colaborador", "Cards", "Tasks", "Bugs", "Horas", "Meta", "Sem horas"], ownDev ? [[ownDev.displayName, ownDev.items.length, ownDev.tasks, ownDev.bugs, ownDev.completed, ownDev.goalHours, ownDev.cardsWithoutHours]] : [])}><FiDownload /> CSV</Button><Button onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /> Atualizar</Button></>
-          : <><Button onClick={() => downloadCsv(`Gestao-equipe-${dateStamp()}.csv`, ["Colaborador", "Papel", "Cards", "Tasks", "Bugs", "User Stories", "Features", "Horas", "Meta", "Com horas", "Sem horas", "Saldo"], filteredDevelopers.map((dev) => [dev.displayName, accessLevelLabels[dev.person?.accessLevel] || (dev.person?.isQa ? "QA" : dev.person?.isDev ? "Dev" : dev.person?.isManagement ? "Gestao" : ""), dev.items.length, dev.tasks, dev.bugs, dev.userStories, dev.features, dev.completed, dev.goalHours, dev.cardsWithHours, dev.cardsWithoutHours, dev.completed - dev.goalHours]))}><FiDownload /> CSV</Button><Button onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /> Atualizar</Button><Button onClick={copyReport}><FiCopy /> Copiar</Button><Button onClick={sendGovernanceSlack}><i className="bi bi-slack" /> Slack</Button><Button onClick={pdfReport}><FiDownload /> PDF</Button></>}
+          ? <><Button onClick={() => downloadCsv(`minhas-metricas-${dateStamp()}.csv`, [t("governance.csvCollaborator"), t("governance.csvCards"), t("governance.csvTasks"), t("governance.csvBugs"), t("governance.csvHours"), t("governance.csvGoal"), t("governance.csvWithoutHours")], ownDev ? [[ownDev.displayName, ownDev.items.length, ownDev.tasks, ownDev.bugs, ownDev.completed, ownDev.goalHours, ownDev.cardsWithoutHours]] : [])}><FiDownload /> CSV</Button><Button onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /> {t("qaBoard.refresh")}</Button></>
+          : <><Button onClick={() => downloadCsv(`Gestao-equipe-${dateStamp()}.csv`, [t("governance.csvCollaborator"), t("governance.csvRole"), t("governance.csvCards"), t("governance.csvTasks"), t("governance.csvBugs"), t("governance.csvUserStories"), t("governance.csvFeatures"), t("governance.csvHours"), t("governance.csvGoal"), t("governance.csvWithHours"), t("governance.csvWithoutHours"), t("governance.csvBalance")], filteredDevelopers.map((dev) => [dev.displayName, accessLevelLabels[dev.person?.accessLevel] || (dev.person?.isQa ? "QA" : dev.person?.isDev ? "Dev" : dev.person?.isManagement ? "Gestao" : ""), dev.items.length, dev.tasks, dev.bugs, dev.userStories, dev.features, dev.completed, dev.goalHours, dev.cardsWithHours, dev.cardsWithoutHours, dev.completed - dev.goalHours]))}><FiDownload /> CSV</Button><Button onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /> {t("qaBoard.refresh")}</Button><Button onClick={copyReport}><FiCopy /> {t("governance.copyButton")}</Button><Button onClick={sendGovernanceSlack}><i className="bi bi-slack" /> Slack</Button><Button onClick={pdfReport}><FiDownload /> PDF</Button></>}
       />
       {error && <div className="mbw-alert error">{error}</div>}
       {/* O card fixo so faz sentido pra QA: pra ele e o UNICO conteudo desta
@@ -1889,20 +1892,20 @@ export function HoursWorkbench() {
           nao e Dev. */}
       {ownIsQaOnly && (ownDev
         ? <div className="mbdhc-own-card-wrap">{renderDeveloper(ownDev, { pinned: true })}</div>
-        : <EmptyState title="Sua conta ainda nao foi vinculada a um colaborador" />)}
+        : <EmptyState title={t("governance.accountNotLinked")} />)}
       {!ownIsQaOnly && (
       <>
       <details className="mbdhc-filters" open>
-        <summary><span>Filtros <small>{filteredDevelopers.length} colaborador(es)</small></span><b>{[search, collaboratorFilter.length, typeFilter !== "all", hourStatus !== "all", goalFilter !== "all", roleGroup !== "all"].filter(Boolean).length} ativos</b></summary>
+        <summary><span>{t("governance.filtersLabel")} <small>{t("governance.collaboratorsCount", { count: filteredDevelopers.length })}</small></span><b>{t("governance.activeCount", { count: [search, collaboratorFilter.length, typeFilter !== "all", hourStatus !== "all", goalFilter !== "all", roleGroup !== "all"].filter(Boolean).length })}</b></summary>
         <div className="mbdhc-filter-grid">
-          <label className="mbdhc-field"><span>Buscar</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Pessoa, card, titulo..." /></label>
-          <ProfileCombobox label="Colaborador" people={developers.map((dev) => ({ id: dev.key, azureName: dev.displayName, color: dev.color }))} values={collaboratorFilter} multiple onChange={setCollaboratorFilter} />
-          <FilterCombobox label="Funcao" options={[{ value: accessLevels.dev, label: "Dev" }, { value: accessLevels.qa, label: "QA" }, { value: accessLevels.gestao, label: "Gestao" }, { value: accessLevels.gerente, label: "Gerente" }]} values={roleGroup === "all" ? [] : [roleGroup]} multiple={false} onChange={(value) => setRoleGroup(value || "all")} />
-          <FilterCombobox label="Tipo" options={["Task", "Bug", "User Story", "Feature"].map((value) => ({ value, label: value }))} values={typeFilter === "all" ? [] : [typeFilter]} multiple={false} onChange={(value) => setTypeFilter(value || "all")} />
-          <FilterCombobox label="Sprint" options={sprintOptions.map((sprint) => ({ value: sprint, label: compactSprintLabel(sprint) }))} values={effectiveSprintFilter[0] ? [effectiveSprintFilter[0]] : []} multiple={false} allLabel="Sprint atual" onChange={(value) => setSprintFilter(value ? [value] : [])} />
-          <FilterCombobox label="Horas" options={[{ value: "with", label: "Com horas" }, { value: "without", label: "Sem horas" }]} values={hourStatus === "all" ? [] : [hourStatus]} multiple={false} onChange={(value) => setHourStatus(value || "all")} />
-          <FilterCombobox label="Status da meta" options={[{ value: "below", label: "Abaixo" }, { value: "met", label: "Cumprida" }, { value: "above", label: "Acima" }]} values={goalFilter === "all" ? [] : [goalFilter]} multiple={false} onChange={(value) => setGoalFilter(value || "all")} />
-          <div className="mbdhc-filter-actions"><button className="mbdhc-button secondary" type="button" onClick={resetFilters}>Limpar filtros</button></div>
+          <label className="mbdhc-field"><span>{t("governance.searchLabel")}</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("governance.searchPlaceholder")} /></label>
+          <ProfileCombobox label={t("governance.collaboratorLabel")} people={developers.map((dev) => ({ id: dev.key, azureName: dev.displayName, color: dev.color }))} values={collaboratorFilter} multiple onChange={setCollaboratorFilter} />
+          <FilterCombobox label={t("governance.roleLabel")} options={[{ value: accessLevels.dev, label: "Dev" }, { value: accessLevels.qa, label: "QA" }, { value: accessLevels.gestao, label: "Gestao" }, { value: accessLevels.gerente, label: "Gerente" }]} values={roleGroup === "all" ? [] : [roleGroup]} multiple={false} onChange={(value) => setRoleGroup(value || "all")} />
+          <FilterCombobox label={t("governance.typeLabel")} options={["Task", "Bug", "User Story", "Feature"].map((value) => ({ value, label: value }))} values={typeFilter === "all" ? [] : [typeFilter]} multiple={false} onChange={(value) => setTypeFilter(value || "all")} />
+          <FilterCombobox label={t("governance.sprintLabel")} options={sprintOptions.map((sprint) => ({ value: sprint, label: compactSprintLabel(sprint) }))} values={effectiveSprintFilter[0] ? [effectiveSprintFilter[0]] : []} multiple={false} allLabel={t("governance.currentSprint")} onChange={(value) => setSprintFilter(value ? [value] : [])} />
+          <FilterCombobox label={t("governance.hoursFilterLabel")} options={[{ value: "with", label: t("governance.withHours") }, { value: "without", label: t("governance.withoutHours") }]} values={hourStatus === "all" ? [] : [hourStatus]} multiple={false} onChange={(value) => setHourStatus(value || "all")} />
+          <FilterCombobox label={t("governance.goalStatusLabel")} options={[{ value: "below", label: t("governance.below") }, { value: "met", label: t("governance.met") }, { value: "above", label: t("governance.above") }]} values={goalFilter === "all" ? [] : [goalFilter]} multiple={false} onChange={(value) => setGoalFilter(value || "all")} />
+          <div className="mbdhc-filter-actions"><button className="mbdhc-button secondary" type="button" onClick={resetFilters}>{t("qaBoard.clearFilters")}</button></div>
         </div>
       </details>
       {/* Eram 8 cards KPI soltos e identicos em peso visual — o usuario
@@ -1913,43 +1916,43 @@ export function HoursWorkbench() {
         {loading ? <KpiSkeleton count={2} /> : (
           <>
             <div className="mbdhc-metric-cluster primary">
-              <strong>Equipe &amp; entregas</strong>
-              <span><b>{totals.developers}</b><small>colaboradores</small></span>
-              <span><b>{totals.cards}</b><small>cards</small></span>
-              <span><b>{totals.tasks}</b><small>tasks</small></span>
-              <span><b>{totals.bugs}</b><small>bugs</small></span>
+              <strong>{t("governance.teamAndDeliveries")}</strong>
+              <span><b>{totals.developers}</b><small>{t("governance.collaboratorsLabel")}</small></span>
+              <span><b>{totals.cards}</b><small>{t("governance.cardsLabel")}</small></span>
+              <span><b>{totals.tasks}</b><small>{t("governance.tasksLabel")}</small></span>
+              <span><b>{totals.bugs}</b><small>{t("governance.bugsLabel")}</small></span>
             </div>
             <div className="mbdhc-metric-cluster quality">
-              <strong>Horas</strong>
-              <span><b>{formatHours(totals.completed)}</b><small>registradas</small></span>
-              <span><b>{formatHours(totals.goal)}</b><small>meta total</small></span>
-              <span className="fail"><b>{formatHours(totals.missing)}</b><small>pendentes</small></span>
-              <span className="limitation"><b>+{formatHours(totals.extra)}</b><small>excedente</small></span>
+              <strong>{t("governance.hoursLabel")}</strong>
+              <span><b>{formatHours(totals.completed)}</b><small>{t("governance.registered")}</small></span>
+              <span><b>{formatHours(totals.goal)}</b><small>{t("governance.totalGoal")}</small></span>
+              <span className="fail"><b>{formatHours(totals.missing)}</b><small>{t("governance.pendingLabel")}</small></span>
+              <span className="limitation"><b>+{formatHours(totals.extra)}</b><small>{t("governance.surplus")}</small></span>
             </div>
           </>
         )}
       </section>
       <section className={`mbdhc-section mbdhc-charts-section ${chartsCollapsed ? "collapsed" : ""}`}>
-        <div className="mbdhc-section-header"><div><h3>Dashboard da equipe</h3><p>Horas, volume de itens e qualidade do ciclo atual.</p></div><button className="mbdhc-icon-button" type="button" onClick={() => setChartsCollapsed((value) => !value)}><i className={`bi ${chartsCollapsed ? "bi-chevron-down" : "bi-chevron-up"}`} /></button></div>
+        <div className="mbdhc-section-header"><div><h3>{t("governance.teamDashboard")}</h3><p>{t("governance.teamDashboardSubtitle")}</p></div><button className="mbdhc-icon-button" type="button" onClick={() => setChartsCollapsed((value) => !value)}><i className={`bi ${chartsCollapsed ? "bi-chevron-down" : "bi-chevron-up"}`} /></button></div>
         {!chartsCollapsed && !loading && (
           <div className="mbdhc-dashboard-overview">
             <section className="mbdhc-overview-card hours">
-              <header><span>Horas</span><strong>{formatHours(totals.completed)}</strong><small>de {formatHours(totals.goal)}</small></header>
+              <header><span>{t("governance.hoursOverview")}</span><strong>{formatHours(totals.completed)}</strong><small>{t("governance.ofGoal", { goal: formatHours(totals.goal) })}</small></header>
               <div className="mbdhc-overview-track"><b style={{ width: `${totals.goal ? Math.min(100, (totals.completed / totals.goal) * 100) : 0}%` }} /></div>
-              <footer><span>Pendente {formatHours(totals.missing)}</span><span>Excedente +{formatHours(totals.extra)}</span></footer>
+              <footer><span>{t("governance.pendingOverview", { hours: formatHours(totals.missing) })}</span><span>{t("governance.surplusOverview", { hours: formatHours(totals.extra) })}</span></footer>
             </section>
             <section className="mbdhc-overview-card volume">
-              <header><span>Quantidade</span><strong>{totals.cards}</strong><small>{totals.testable} testaveis</small></header>
+              <header><span>{t("governance.quantityOverview")}</span><strong>{totals.cards}</strong><small>{t("governance.testableCount", { count: totals.testable })}</small></header>
               <div className="mbdhc-segment-track">
                 <b className="task" style={{ width: `${totals.cards ? (totals.tasks / totals.cards) * 100 : 0}%` }} />
                 <b className="bug" style={{ width: `${totals.cards ? (totals.bugs / totals.cards) * 100 : 0}%` }} />
                 <b className="story" style={{ width: `${totals.cards ? (totals.userStories / totals.cards) * 100 : 0}%` }} />
                 <b className="feature" style={{ width: `${totals.cards ? (totals.features / totals.cards) * 100 : 0}%` }} />
               </div>
-              <footer><span>Tasks {totals.tasks}</span><span>Bugs {totals.bugs}</span><span>US {totals.userStories}</span><span>Feat {totals.features}</span></footer>
+              <footer><span>{t("governance.tasksShort", { count: totals.tasks })}</span><span>{t("governance.bugsShort", { count: totals.bugs })}</span><span>{t("governance.userStoriesShort", { count: totals.userStories })}</span><span>{t("governance.featuresShort", { count: totals.features })}</span></footer>
             </section>
             <section className="mbdhc-overview-card quality">
-              <header><span>Testes</span><strong>{totals.tests}</strong><small>{totals.nonTestable} nao testaveis</small></header>
+              <header><span>{t("governance.testsOverview")}</span><strong>{totals.tests}</strong><small>{t("governance.nonTestableCount", { count: totals.nonTestable })}</small></header>
               <div className="mbdhc-segment-track">
                 <b className="pass" style={{ width: `${totals.tests ? (totals.pass / totals.tests) * 100 : 0}%` }} />
                 <b className="fail" style={{ width: `${totals.tests ? (totals.fail / totals.tests) * 100 : 0}%` }} />
@@ -1971,10 +1974,10 @@ export function HoursWorkbench() {
             <>
               <section className="mbdhc-chart-card">
                 <div className="mbdhc-chart-card-head">
-                  <h3>Meta x realizado</h3>
+                  <h3>{t("governance.metaVsDone")}</h3>
                   <div className="mbdhc-metric-toggle">
-                    <button type="button" className={metaMetric === "hours" ? "active" : ""} onClick={() => setMetaMetric("hours")}>Horas</button>
-                    <button type="button" className={metaMetric === "qty" ? "active" : ""} onClick={() => setMetaMetric("qty")}>Qtd</button>
+                    <button type="button" className={metaMetric === "hours" ? "active" : ""} onClick={() => setMetaMetric("hours")}>{t("governance.hoursToggle")}</button>
+                    <button type="button" className={metaMetric === "qty" ? "active" : ""} onClick={() => setMetaMetric("qty")}>{t("governance.qtyToggle")}</button>
                   </div>
                 </div>
                 <ResponsiveContainer width="100%" height={metaChartHeight}>
@@ -1988,15 +1991,15 @@ export function HoursWorkbench() {
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-                {metaMetric === "hours" && <div className="mbdhc-legend discreet"><span><i className="red" />Abaixo da meta</span><span><i className="blue" />Meta cumprida</span><span><i className="gold" />Acima da meta</span></div>}
+                {metaMetric === "hours" && <div className="mbdhc-legend discreet"><span><i className="red" />{t("governance.belowGoal")}</span><span><i className="blue" />{t("governance.metGoal")}</span><span><i className="gold" />{t("governance.aboveGoal")}</span></div>}
               </section>
               <section className="mbdhc-chart-card">
-                <h3>Status das metas</h3>
+                <h3>{t("governance.goalStatusChart")}</h3>
                 <div className="mbdhc-donut-row">
                   <div className="mbaz-donut-wrap compact">
                     <ResponsiveContainer width="100%" height={donutChartHeight}>
                       <PieChart>
-                        <Pie data={[{ key: "below", name: "Abaixo", value: goalCounts.below }, { key: "met", name: "Cumprida", value: goalCounts.met }, { key: "above", name: "Acima", value: goalCounts.above }]} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="90%" paddingAngle={2}>
+                        <Pie data={[{ key: "below", name: t("governance.below"), value: goalCounts.below }, { key: "met", name: t("governance.met"), value: goalCounts.met }, { key: "above", name: t("governance.above"), value: goalCounts.above }]} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="90%" paddingAngle={2}>
                           <Cell fill={goalStatusColor("below")} stroke="var(--starkSurface)" strokeWidth={2} />
                           <Cell fill={goalStatusColor("met")} stroke="var(--starkSurface)" strokeWidth={2} />
                           <Cell fill={goalStatusColor("above")} stroke="var(--starkSurface)" strokeWidth={2} />
@@ -2004,21 +2007,21 @@ export function HoursWorkbench() {
                         <Tooltip content={<RechartsTooltip />} />
                       </PieChart>
                     </ResponsiveContainer>
-                    <div className="mbaz-donut-center"><strong>{totals.developers}</strong><small>Equipe</small></div>
+                    <div className="mbaz-donut-center"><strong>{totals.developers}</strong><small>{t("governance.teamLabel")}</small></div>
                   </div>
                   <ul className="mbdhc-legend-list">
-                    <li><i className="red" /><span>Abaixo</span><b>{goalCounts.below}</b></li>
-                    <li><i className="blue" /><span>Cumprida</span><b>{goalCounts.met}</b></li>
-                    <li><i className="gold" /><span>Acima</span><b>{goalCounts.above}</b></li>
+                    <li><i className="red" /><span>{t("governance.below")}</span><b>{goalCounts.below}</b></li>
+                    <li><i className="blue" /><span>{t("governance.met")}</span><b>{goalCounts.met}</b></li>
+                    <li><i className="gold" /><span>{t("governance.above")}</span><b>{goalCounts.above}</b></li>
                   </ul>
                 </div>
               </section>
               <section className="mbdhc-chart-card">
                 <div className="mbdhc-chart-card-head">
-                  <h3>Distribuicao por pais</h3>
+                  <h3>{t("governance.countryDistribution")}</h3>
                   <div className="mbdhc-metric-toggle">
-                    <button type="button" className={countryMetric === "count" ? "active" : ""} onClick={() => setCountryMetric("count")}>Qtd</button>
-                    <button type="button" className={countryMetric === "hours" ? "active" : ""} onClick={() => setCountryMetric("hours")}>Horas</button>
+                    <button type="button" className={countryMetric === "count" ? "active" : ""} onClick={() => setCountryMetric("count")}>{t("governance.qtyToggle")}</button>
+                    <button type="button" className={countryMetric === "hours" ? "active" : ""} onClick={() => setCountryMetric("hours")}>{t("governance.hoursToggle")}</button>
                   </div>
                 </div>
                 <ResponsiveContainer width="100%" height={countryChartHeight}>
@@ -2034,10 +2037,10 @@ export function HoursWorkbench() {
               </section>
               <section className="mbdhc-chart-card mbdhc-collab-country-card">
                 <div className="mbdhc-chart-card-head">
-                  <h3>Pais x colaborador</h3>
+                  <h3>{t("governance.countryByCollaborator")}</h3>
                   <div className="mbdhc-metric-toggle">
-                    <button type="button" className={countryMetric === "count" ? "active" : ""} onClick={() => setCountryMetric("count")}>Qtd</button>
-                    <button type="button" className={countryMetric === "hours" ? "active" : ""} onClick={() => setCountryMetric("hours")}>Horas</button>
+                    <button type="button" className={countryMetric === "count" ? "active" : ""} onClick={() => setCountryMetric("count")}>{t("governance.qtyToggle")}</button>
+                    <button type="button" className={countryMetric === "hours" ? "active" : ""} onClick={() => setCountryMetric("hours")}>{t("governance.hoursToggle")}</button>
                   </div>
                 </div>
                 <CollaboratorCountryMatrix developers={filteredDevelopers} metric={countryMetric} />
@@ -2047,8 +2050,8 @@ export function HoursWorkbench() {
         </div>}
       </section>
       <section className="mbdhc-section">
-        <div className="mbdhc-section-header"><div><h3>Resumo por colaborador</h3><p>{loading ? "Consultando Azure DevOps..." : `${filteredDevelopers.length} colaborador(es) no filtro atual.`}</p></div><div className="mbdhc-view-controls"><button className={viewMode === "list" ? "active" : ""} onClick={() => setViewMode("list")} type="button"><i className="bi bi-list-ul" /></button><button className={viewMode === "grid" ? "active" : ""} onClick={() => setViewMode("grid")} type="button"><i className="bi bi-grid-3x3-gap" /></button><button className={viewMode === "compact" ? "active" : ""} onClick={() => setViewMode("compact")} type="button"><i className="bi bi-layout-sidebar" /></button></div></div>
-        <div className={`mbdhc-dev-grid mode-${viewMode}`}>{loading ? <WorkbenchCardSkeleton rows={6} mode={viewMode} /> : filteredDevelopers.length ? filteredDevelopers.map(renderDeveloper) : <EmptyState title="Nenhum colaborador encontrado" />}</div>
+        <div className="mbdhc-section-header"><div><h3>{t("governance.collaboratorSummary")}</h3><p>{loading ? t("governance.queryingAzure") : t("governance.collaboratorsInFilter", { count: filteredDevelopers.length })}</p></div><div className="mbdhc-view-controls"><button className={viewMode === "list" ? "active" : ""} onClick={() => setViewMode("list")} type="button"><i className="bi bi-list-ul" /></button><button className={viewMode === "grid" ? "active" : ""} onClick={() => setViewMode("grid")} type="button"><i className="bi bi-grid-3x3-gap" /></button><button className={viewMode === "compact" ? "active" : ""} onClick={() => setViewMode("compact")} type="button"><i className="bi bi-layout-sidebar" /></button></div></div>
+        <div className={`mbdhc-dev-grid mode-${viewMode}`}>{loading ? <WorkbenchCardSkeleton rows={6} mode={viewMode} /> : filteredDevelopers.length ? filteredDevelopers.map(renderDeveloper) : <EmptyState title={t("governance.noCollaboratorsFound")} />}</div>
       </section>
       </>
       )}
@@ -2075,6 +2078,7 @@ function SettingsSection({ title, description, children, open = false }) {
 }
 
 export function SettingsWorkbench() {
+  const { t } = useTranslation();
   const { profile, user, demoMode, updateLocalAzureConnection } = useAuth();
   const { flags, isEnabled, setFlag } = useFeatureFlags();
   const { collaborators } = useCollaborators();
@@ -2215,9 +2219,9 @@ export function SettingsWorkbench() {
         // update flags via API immediately
         await Promise.all(Object.entries(localFlags).filter(([k, v]) => flags?.[k] !== v).map(([k, v]) => setFlag(k, v)));
         await saveSettings();
-        pushToast({ title: "Configurações", body: "Alterações aplicadas com sucesso.", tone: "success" });
+        pushToast({ title: t("settings.toastSettingsTitle"), body: t("settings.toastAppliedSuccess"), tone: "success" });
       } catch (err) {
-        pushToast({ title: "Erro", body: err?.message || String(err), tone: "danger" });
+        pushToast({ title: t("settings.toastErrorTitle"), body: err?.message || String(err), tone: "danger" });
       }
     })();
   }
@@ -2233,9 +2237,9 @@ export function SettingsWorkbench() {
       setAzureMaxItems(Number(azureMaxItemsDraft) || 200);
       setIterationPattern(iterationPatternDraft);
       await saveSettings();
-      pushToast({ title: "Conexões", body: "Conexões aplicadas.", tone: "success" });
+      pushToast({ title: t("settings.toastConnectionsTitle"), body: t("settings.toastConnectionsApplied"), tone: "success" });
     } catch (err) {
-      pushToast({ title: "Erro", body: err?.message || String(err), tone: "danger" });
+      pushToast({ title: t("settings.toastErrorTitle"), body: err?.message || String(err), tone: "danger" });
     }
   }
 
@@ -2249,9 +2253,9 @@ export function SettingsWorkbench() {
       setPipelineQaName(pipelineQaDraft);
       setPipelineBetaName(pipelineBetaDraft);
       await saveSettings();
-      pushToast({ title: "Pipelines", body: "Pipelines aplicadas.", tone: "success" });
+      pushToast({ title: t("settings.toastPipelinesTitle"), body: t("settings.toastPipelinesApplied"), tone: "success" });
     } catch (err) {
-      pushToast({ title: "Erro", body: err?.message || String(err), tone: "danger" });
+      pushToast({ title: t("settings.toastErrorTitle"), body: err?.message || String(err), tone: "danger" });
     }
   }
 
@@ -2275,9 +2279,9 @@ export function SettingsWorkbench() {
       }
       setSlackWebhooks(buildSlackWebhookEntries());
       await saveSettings();
-      pushToast({ title: "Slack", body: "Slack aplicado.", tone: "success" });
+      pushToast({ title: "Slack", body: t("settings.toastSlackApplied"), tone: "success" });
     } catch (err) {
-      pushToast({ title: "Erro", body: err?.message || String(err), tone: "danger" });
+      pushToast({ title: t("settings.toastErrorTitle"), body: err?.message || String(err), tone: "danger" });
     }
   }
 
@@ -2301,20 +2305,20 @@ export function SettingsWorkbench() {
 
   async function testSlackWebhook(url, label) {
     if (!url) {
-      pushToast({ title: "Slack", body: `Preencha o webhook de ${label} antes de testar.`, tone: "warning" });
+      pushToast({ title: "Slack", body: t("settings.toastFillWebhook", { label }), tone: "warning" });
       return;
     }
     await supabase.functions.invoke("slackNotify", { body: { webhooks: [url], text: `:test-tag: Teste Stark Hub - ${label}` } });
-    pushToast({ title: "Slack", body: `Mensagem de teste enviada para ${label}.`, tone: "success" });
+    pushToast({ title: "Slack", body: t("settings.toastTestSent", { label }), tone: "success" });
   }
 
   async function applyGovernanceSection() {
     try {
       setGoalHours(goalHoursDraft);
       await saveSettings();
-      pushToast({ title: "Governança", body: "Governança aplicada.", tone: "success" });
+      pushToast({ title: t("settings.toastGovernanceTitle"), body: t("settings.toastGovernanceApplied"), tone: "success" });
     } catch (err) {
-      pushToast({ title: "Erro", body: err?.message || String(err), tone: "danger" });
+      pushToast({ title: t("settings.toastErrorTitle"), body: err?.message || String(err), tone: "danger" });
     }
   }
 
@@ -2328,9 +2332,9 @@ export function SettingsWorkbench() {
       setNotificationSoundPrefs(notificationSoundPrefsDraft);
       // saveSettings writes notification preferences
       await saveSettings();
-      pushToast({ title: "Notificações", body: "Notificações aplicadas.", tone: "success" });
+      pushToast({ title: t("settings.toastNotificationsTitle"), body: t("settings.toastNotificationsApplied"), tone: "success" });
     } catch (err) {
-      pushToast({ title: "Erro", body: err?.message || String(err), tone: "danger" });
+      pushToast({ title: t("settings.toastErrorTitle"), body: err?.message || String(err), tone: "danger" });
     }
   }
 
@@ -2369,7 +2373,7 @@ export function SettingsWorkbench() {
     // Persist everything
     await saveSettings();
     setSaving("");
-    pushToast({ title: "Configurações", body: "Todas as alterações aplicadas.", tone: "success" });
+    pushToast({ title: t("settings.toastSettingsTitle"), body: t("settings.toastAllApplied"), tone: "success" });
   }
 
   function cancelAllDrafts() {
@@ -2388,7 +2392,7 @@ export function SettingsWorkbench() {
     setNotificationSoundsMutedDraft(notificationSoundsMuted);
     setNotificationSoundPrefsDraft(notificationSoundPrefs);
     setLocalFlags(flags || {});
-    pushToast({ title: "Rascunhos", body: "Todas as alterações locais foram descartadas.", tone: "warning" });
+    pushToast({ title: t("settings.toastDraftsTitle"), body: t("settings.toastDraftsDiscarded"), tone: "warning" });
   }
 
   function cancelProductSection() {
@@ -2422,15 +2426,15 @@ export function SettingsWorkbench() {
   }, [settingsLoading]);
 
   const featureLabels = {
-    showQaBoard: ["Quality Board", "Cards disponiveis para validacao"],
-    showMyItems: ["Meus itens", "Work Items do usuario logado"],
-    showTestResults: ["Resultado", "Resultado de QA/Beta nos cards"],
-    showEvidenceHistory: ["Historico de testes", "Evidencias dentro de Meus itens para QA"],
-    showGovernance: ["Gestao da equipe", "Horas, metas e indicadores"],
-    enableBulkEdit: ["Alteracao em massa", "Acoes coletivas do workbench"],
-    enableNewTask: ["Nova tarefa", "Criacao rapida de Work Items"],
-    showImportWorkItems: ["Import Work Items", "Criacao hierarquica no Azure"],
-    enableReadyBetaNotifications: ["Alertas Ready to Beta", "Slack e notificacoes quando aplicavel"]
+    showQaBoard: [t("featureFlags.showQaBoard"), t("featureFlags.showQaBoardDesc")],
+    showMyItems: [t("featureFlags.showMyItems"), t("featureFlags.showMyItemsDesc")],
+    showTestResults: [t("featureFlags.showTestResults"), t("featureFlags.showTestResultsDesc")],
+    showEvidenceHistory: [t("featureFlags.showEvidenceHistory"), t("featureFlags.showEvidenceHistoryDesc")],
+    showGovernance: [t("featureFlags.showGovernance"), t("featureFlags.showGovernanceDesc")],
+    enableBulkEdit: [t("featureFlags.enableBulkEdit"), t("featureFlags.enableBulkEditDesc")],
+    enableNewTask: [t("featureFlags.enableNewTask"), t("featureFlags.enableNewTaskDesc")],
+    showImportWorkItems: [t("featureFlags.showImportWorkItems"), t("featureFlags.showImportWorkItemsDesc")],
+    enableReadyBetaNotifications: [t("featureFlags.enableReadyBetaNotifications"), t("featureFlags.enableReadyBetaNotificationsDesc")]
   };
 
   async function saveSettings() {
@@ -2462,12 +2466,12 @@ export function SettingsWorkbench() {
           updatedAt: new Date().toISOString()
         });
     } catch (error) {
-      pushToast({ title: "Erro", body: `Falha ao aplicar: ${error.message}`, tone: "danger" });
+      pushToast({ title: t("settings.toastErrorTitle"), body: t("settings.toastApplyFailedGeneric", { message: error.message }), tone: "danger" });
       setSaving("");
       return;
     }
     if (!isGestao) {
-      pushToast({ title: "Configurações", body: "Configurações aplicadas com sucesso.", tone: "success" });
+      pushToast({ title: t("settings.toastSettingsTitle"), body: t("settings.toastPersonalApplied"), tone: "success" });
       setSaving("");
       return;
     }
@@ -2483,9 +2487,9 @@ export function SettingsWorkbench() {
     ]);
     const failed = results.filter((result) => result?.error);
     if (failed.length) {
-      pushToast({ title: "Erro", body: `Falha ao aplicar ${failed.length} configuracao(oes): ${failed[0].error.message}`, tone: "danger" });
+      pushToast({ title: t("settings.toastErrorTitle"), body: t("settings.toastApplyFailedCount", { count: failed.length, message: failed[0].error.message }), tone: "danger" });
     } else {
-      pushToast({ title: "Configurações", body: "Configurações aplicadas com sucesso.", tone: "success" });
+      pushToast({ title: t("settings.toastSettingsTitle"), body: t("settings.toastPersonalApplied"), tone: "success" });
     }
     setSaving("");
   }
@@ -2702,19 +2706,19 @@ export function SettingsWorkbench() {
           );
           return (
             <WorkbenchHeader
-              kicker="Produto"
-              title="Configuracoes"
-              subtitle={isGestao ? "Produto, funcionalidades, conexoes e Gestao." : "Conexoes pessoais do Azure, pipelines e Slack."}
+              kicker={t("settings.kicker")}
+              title={t("pages.settings.title")}
+              subtitle={isGestao ? t("settings.headerSubtitleGestao") : t("settings.headerSubtitlePersonal")}
               demoMode={demoMode}
               actions={<>
-                {isGestao && <div className="mb-settings-scope"><FilterCombobox label="Escopo" options={[{ value: accessLevels.dev, label: "Dev" }, { value: accessLevels.qa, label: "QA" }, { value: accessLevels.gestao, label: "Gestao" }, { value: accessLevels.gerente, label: "Gerente" }]} values={[configScope]} multiple={false} onChange={(value) => setConfigScope(value || accessLevels.gestao)} /></div>}
-                <Button onClick={() => importRef.current?.click()}><FiUpload /> Importar</Button>
-                <Button onClick={exportSettingsCsv}><FiDownload /> CSV</Button>
-                <Button onClick={exportConfig}><FiDownload /> Exportar</Button>
-                <Button onClick={exportTeamOnboardingConfig} title="Gera um arquivo com org/projeto/pipelines/webhook (sem PAT) pra mandar a qualquer colaborador novo"><FiDownload /> Config. p/ equipe</Button>
-                <Button onClick={previewSlack}><FiCopy /> Testar Slack</Button>
-                <Button onClick={applyAllAndSave} tone="primary" disabled={!anyDirty}>{saving ? "Aplicando..." : "Aplicar tudo"}</Button>
-                <Button onClick={cancelAllDrafts} disabled={!anyDirty}>Cancelar tudo</Button>
+                {isGestao && <div className="mb-settings-scope"><FilterCombobox label={t("settings.scopeLabel")} options={[{ value: accessLevels.dev, label: "Dev" }, { value: accessLevels.qa, label: "QA" }, { value: accessLevels.gestao, label: "Gestao" }, { value: accessLevels.gerente, label: "Gerente" }]} values={[configScope]} multiple={false} onChange={(value) => setConfigScope(value || accessLevels.gestao)} /></div>}
+                <Button onClick={() => importRef.current?.click()}><FiUpload /> {t("settings.importButton")}</Button>
+                <Button onClick={exportSettingsCsv}><FiDownload /> {t("settings.csvButton")}</Button>
+                <Button onClick={exportConfig}><FiDownload /> {t("settings.exportButton")}</Button>
+                <Button onClick={exportTeamOnboardingConfig} title={t("settings.teamConfigTitle")}><FiDownload /> {t("settings.teamConfigButton")}</Button>
+                <Button onClick={previewSlack}><FiCopy /> {t("settings.testSlackButton")}</Button>
+                <Button onClick={applyAllAndSave} tone="primary" disabled={!anyDirty}>{saving ? t("settings.applying") : t("settings.applyAll")}</Button>
+                <Button onClick={cancelAllDrafts} disabled={!anyDirty}>{t("settings.cancelAll")}</Button>
               </>}
             />
           );
@@ -2722,13 +2726,13 @@ export function SettingsWorkbench() {
       }
       <input ref={importRef} type="file" accept="application/json" hidden onChange={importConfig} />
       <div className="mb-settings-grid">
-        {isGestao && <SettingsSection title="Produto e funcionalidades" description="Identidade do produto e feature flags." open>
-            <label className="mb-form-row"><span>Nome do produto</span><input value={productDraft} onChange={(event) => setProductDraft(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
-            <label className="mb-form-row"><span>Intervalo de atualizacao automatica (segundos)</span><input type="number" min="0" step="10" value={azureAutoRefreshDraft} onChange={(event) => setAzureAutoRefreshDraft(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
-          <small className="mb-settings-note">Tempo entre cada atualizacao automatica do Quality Board e Meus itens. Use 0 para desativar o auto-reload.</small>
+        {isGestao && <SettingsSection title={t("settings.productSectionTitle")} description={t("settings.productSectionDesc")} open>
+            <label className="mb-form-row"><span>{t("settings.productNameLabel")}</span><input value={productDraft} onChange={(event) => setProductDraft(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
+            <label className="mb-form-row"><span>{t("settings.autoRefreshLabel")}</span><input type="number" min="0" step="10" value={azureAutoRefreshDraft} onChange={(event) => setAzureAutoRefreshDraft(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
+          <small className="mb-settings-note">{t("settings.autoRefreshNote")}</small>
           {isAdmin && (
             <>
-              <div className="mb-settings-subtitle">Funcionalidades</div>
+              <div className="mb-settings-subtitle">{t("settings.featuresSubtitle")}</div>
               <div className="mb-featureflag-grid">
                 {Object.entries(featureLabels).map(([key, [label, description]]) => (
                   <label key={key} className="mb-switch-row">
@@ -2744,8 +2748,8 @@ export function SettingsWorkbench() {
             return (
               dirty && (
                 <div className="mb-settings-actions" style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                  <Button tone="primary" onClick={applyProductSection}>Confirmar</Button>
-                  <Button onClick={cancelProductSection}>Cancelar</Button>
+                  <Button tone="primary" onClick={applyProductSection}>{t("settings.confirmButton")}</Button>
+                  <Button onClick={cancelProductSection}>{t("settings.cancelButton")}</Button>
                 </div>
               )
             );
@@ -2753,26 +2757,26 @@ export function SettingsWorkbench() {
           {/* success/error shown as toasts */}
         </SettingsSection>}
 
-        <SettingsSection title={isGestao ? "Conexoes globais" : "Conexoes"} description={isGestao ? "Azure DevOps, pipelines e Slack compartilhados." : "Azure DevOps, pipelines e Slack locais deste usuario."} open={!isGestao}>
+        <SettingsSection title={isGestao ? t("settings.connectionsGlobalTitle") : t("settings.connectionsPersonalTitle")} description={isGestao ? t("settings.connectionsGlobalDesc") : t("settings.connectionsPersonalDesc")} open={!isGestao}>
           {!demoMode && (
             <details className="mb-inner-accordion" open>
-              <summary><span>Azure</span><small>Organizacao, projeto, time e autenticacao</small></summary>
-              <div className="mb-inner-accordion-body"><AzureConnectionForm submitLabel="Testar e atualizar" /></div>
+              <summary><span>{t("settings.azureTitle")}</span><small>{t("settings.azureDesc")}</small></summary>
+              <div className="mb-inner-accordion-body"><AzureConnectionForm submitLabel={t("settings.testAndUpdate")} /></div>
             </details>
           )}
           {isGestao && (
             <details className="mb-inner-accordion">
-              <summary><span>Sincronizacao Azure</span><small>Escopo da busca de work items (todas as telas)</small></summary>
+              <summary><span>{t("settings.azureSyncTitle")}</span><small>{t("settings.azureSyncDesc")}</small></summary>
               <div className="mb-inner-accordion-body">
-                <label className="mb-form-row"><span>Limite de itens buscados</span><input type="number" min="100" step="100" value={azureMaxItemsDraft} onChange={(event) => setAzureMaxItemsDraft(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
-                <label className="mb-form-row"><span>Iteration pattern</span><input value={iterationPatternDraft} onChange={(event) => setIterationPatternDraft(event.target.value)} placeholder="MB Labs" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
-                <small className="mb-settings-note">Afeta Quality Board, Meus itens e Gestao — nao e especifico de nenhuma tela.</small>
+                <label className="mb-form-row"><span>{t("settings.itemLimitLabel")}</span><input type="number" min="100" step="100" value={azureMaxItemsDraft} onChange={(event) => setAzureMaxItemsDraft(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
+                <label className="mb-form-row"><span>{t("settings.iterationPatternLabel")}</span><input value={iterationPatternDraft} onChange={(event) => setIterationPatternDraft(event.target.value)} placeholder="MB Labs" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
+                <small className="mb-settings-note">{t("settings.azureSyncNote")}</small>
                 {(() => {
                   const dirty = String(azureMaxItemsDraft) !== String(azureMaxItems) || iterationPatternDraft !== iterationPattern;
                   return dirty && (
                     <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                      <Button tone="primary" onClick={applyConnectionsSection}>Confirmar</Button>
-                      <Button onClick={cancelConnectionsSection}>Cancelar</Button>
+                      <Button tone="primary" onClick={applyConnectionsSection}>{t("settings.confirmButton")}</Button>
+                      <Button onClick={cancelConnectionsSection}>{t("settings.cancelButton")}</Button>
                     </div>
                   );
                 })()}
@@ -2781,17 +2785,17 @@ export function SettingsWorkbench() {
             </details>
           )}
           <details className="mb-inner-accordion">
-            <summary><span>Pipelines</span><small>Nomes das pipelines QA e BETA</small></summary>
+            <summary><span>{t("settings.pipelinesTitle")}</span><small>{t("settings.pipelinesDesc")}</small></summary>
             <div className="mb-inner-accordion-body">
-              <label className="mb-form-row"><span>Pipeline QA</span><input value={pipelineQaDraft} onChange={(event) => setPipelineQaDraft(event.target.value)} placeholder="Preencha nas configuracoes" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
-              <label className="mb-form-row"><span>Pipeline BETA</span><input value={pipelineBetaDraft} onChange={(event) => setPipelineBetaDraft(event.target.value)} placeholder="Preencha nas configuracoes" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
-              {!isGestao && <small className="mb-settings-note">Estas informacoes ficam salvas localmente no navegador deste usuario.</small>}
+              <label className="mb-form-row"><span>{t("settings.pipelineQaLabel")}</span><input value={pipelineQaDraft} onChange={(event) => setPipelineQaDraft(event.target.value)} placeholder={t("settings.pipelinePlaceholder")} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
+              <label className="mb-form-row"><span>{t("settings.pipelineBetaLabel")}</span><input value={pipelineBetaDraft} onChange={(event) => setPipelineBetaDraft(event.target.value)} placeholder={t("settings.pipelinePlaceholder")} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
+              {!isGestao && <small className="mb-settings-note">{t("settings.pipelinesPersonalNote")}</small>}
               {(() => {
                 const dirty = pipelineQaDraft !== pipelineQaName || pipelineBetaDraft !== pipelineBetaName;
                 return dirty && (
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                    <Button tone="primary" onClick={applyPipelinesSection}>Confirmar</Button>
-                    <Button onClick={cancelPipelinesSection}>Cancelar</Button>
+                    <Button tone="primary" onClick={applyPipelinesSection}>{t("settings.confirmButton")}</Button>
+                    <Button onClick={cancelPipelinesSection}>{t("settings.cancelButton")}</Button>
                   </div>
                 );
               })()}
@@ -2799,18 +2803,18 @@ export function SettingsWorkbench() {
             </div>
           </details>
           <details className="mb-inner-accordion">
-            <summary><span>Slack</span><small>Webhook, teste e canal principal</small></summary>
+            <summary><span>Slack</span><small>{t("settings.slackDesc")}</small></summary>
             <div className="mb-inner-accordion-body">
-              <label className="mb-switch-row"><span><strong>Modo teste</strong><small>Usar webhook de teste quando disponivel</small></span><span className="mb-switch"><input type="checkbox" checked={slackTestModeDraft} onChange={(event) => setSlackTestModeDraft(event.target.checked)} /><span className="mb-switch-slider" /></span></label>
-              <label className="mb-form-row"><span>Nome do canal principal</span><input value={slackPrimaryNameDraft} onChange={(event) => setSlackPrimaryNameDraft(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
-              <label className="mb-form-row"><span>Webhook principal</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={slackWebhookDraft} onChange={(event) => setSlackWebhookDraft(event.target.value)} placeholder="Cole o webhook nas configuracoes" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /><button type="button" className={`mb-secret-toggle ${showSecrets ? "is-revealed" : ""}`} onClick={() => setShowSecrets((value) => !value)} /></div></label>
-              <label className="mb-form-row"><span>Webhook de teste</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={slackTestWebhookDraft} onChange={(event) => setSlackTestWebhookDraft(event.target.value)} placeholder="Cole o webhook de teste nas configuracoes" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /><button type="button" className={`mb-secret-toggle ${showSecrets ? "is-revealed" : ""}`} onClick={() => setShowSecrets((value) => !value)} /></div></label>
+              <label className="mb-switch-row"><span><strong>{t("settings.testModeLabel")}</strong><small>{t("settings.testModeDesc")}</small></span><span className="mb-switch"><input type="checkbox" checked={slackTestModeDraft} onChange={(event) => setSlackTestModeDraft(event.target.checked)} /><span className="mb-switch-slider" /></span></label>
+              <label className="mb-form-row"><span>{t("settings.primaryChannelLabel")}</span><input value={slackPrimaryNameDraft} onChange={(event) => setSlackPrimaryNameDraft(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
+              <label className="mb-form-row"><span>{t("settings.primaryWebhookLabel")}</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={slackWebhookDraft} onChange={(event) => setSlackWebhookDraft(event.target.value)} placeholder={t("settings.webhookPlaceholder")} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /><button type="button" className={`mb-secret-toggle ${showSecrets ? "is-revealed" : ""}`} onClick={() => setShowSecrets((value) => !value)} /></div></label>
+              <label className="mb-form-row"><span>{t("settings.testWebhookLabel")}</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={slackTestWebhookDraft} onChange={(event) => setSlackTestWebhookDraft(event.target.value)} placeholder={t("settings.testWebhookPlaceholder")} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /><button type="button" className={`mb-secret-toggle ${showSecrets ? "is-revealed" : ""}`} onClick={() => setShowSecrets((value) => !value)} /></div></label>
               <div className="mb-settings-webhook-grid">
-                <label className="mb-form-row"><span>Resultado de testes</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={slackResultWebhookDraft} onChange={(event) => setSlackResultWebhookDraft(event.target.value)} placeholder="Webhook para resultados QA" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /><button type="button" onClick={() => testSlackWebhook(slackResultWebhookDraft, "resultado de testes")}>Testar</button></div></label>
-                <label className="mb-form-row"><span>Criação de Work Items</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={slackCreationWebhookDraft} onChange={(event) => setSlackCreationWebhookDraft(event.target.value)} placeholder="Webhook qa-demand-notification" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /><button type="button" onClick={() => testSlackWebhook(slackCreationWebhookDraft, "criacao de Work Items")}>Testar</button></div></label>
-                <label className="mb-form-row"><span>Custom</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={slackCustomWebhookDraft} onChange={(event) => setSlackCustomWebhookDraft(event.target.value)} placeholder="Webhook opcional" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /><button type="button" onClick={() => testSlackWebhook(slackCustomWebhookDraft, "custom")}>Testar</button></div></label>
+                <label className="mb-form-row"><span>{t("settings.resultWebhookLabel")}</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={slackResultWebhookDraft} onChange={(event) => setSlackResultWebhookDraft(event.target.value)} placeholder={t("settings.resultWebhookPlaceholder")} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /><button type="button" onClick={() => testSlackWebhook(slackResultWebhookDraft, t("settings.resultWebhookTestLabel"))}>{t("settings.testButton")}</button></div></label>
+                <label className="mb-form-row"><span>{t("settings.creationWebhookLabel")}</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={slackCreationWebhookDraft} onChange={(event) => setSlackCreationWebhookDraft(event.target.value)} placeholder={t("settings.creationWebhookPlaceholder")} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /><button type="button" onClick={() => testSlackWebhook(slackCreationWebhookDraft, t("settings.creationWebhookTestLabel"))}>{t("settings.testButton")}</button></div></label>
+                <label className="mb-form-row"><span>{t("settings.customWebhookLabel")}</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={slackCustomWebhookDraft} onChange={(event) => setSlackCustomWebhookDraft(event.target.value)} placeholder={t("settings.customWebhookPlaceholder")} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /><button type="button" onClick={() => testSlackWebhook(slackCustomWebhookDraft, t("settings.customWebhookTestLabel"))}>{t("settings.testButton")}</button></div></label>
               </div>
-              {!isGestao && <small className="mb-settings-note">Webhooks pessoais ficam somente no localStorage deste navegador.</small>}
+              {!isGestao && <small className="mb-settings-note">{t("settings.slackPersonalNote")}</small>}
               {(() => {
                 const currentPurposeWebhooks = slackWebhooks || [];
                 const dirty = slackTestModeDraft !== (isGestao ? slackTestMode : personalSlackTestMode)
@@ -2822,8 +2826,8 @@ export function SettingsWorkbench() {
                   || slackCustomWebhookDraft !== (currentPurposeWebhooks.find((entry) => entry.purpose === "custom")?.url || "");
                 return dirty && (
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                    <Button tone="primary" onClick={applySlackSection}>Confirmar</Button>
-                    <Button onClick={cancelSlackSection}>Cancelar</Button>
+                    <Button tone="primary" onClick={applySlackSection}>{t("settings.confirmButton")}</Button>
+                    <Button onClick={cancelSlackSection}>{t("settings.cancelButton")}</Button>
                   </div>
                 );
               })()}
@@ -2832,34 +2836,34 @@ export function SettingsWorkbench() {
           </details>
         </SettingsSection>
 
-        {isGestao && <SettingsSection title="Gestao" description="Meta padrao de horas usada quando um colaborador nao tem meta propria.">
+        {isGestao && <SettingsSection title={t("settings.governanceTitle")} description={t("settings.governanceDesc")}>
           <div className="mb-governance-grid">
-            <label className="mb-form-row"><span>Meta padrao de horas</span><input type="number" min="0" step="0.5" value={goalHoursDraft} onChange={(event) => setGoalHoursDraft(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
+            <label className="mb-form-row"><span>{t("settings.defaultGoalLabel")}</span><input type="number" min="0" step="0.5" value={goalHoursDraft} onChange={(event) => setGoalHoursDraft(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
             {(() => {
               const dirty = String(goalHoursDraft) !== String(goalHours);
               return dirty && (
                 <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                  <Button tone="primary" onClick={applyGovernanceSection}>Confirmar</Button>
-                  <Button onClick={cancelGovernanceSection}>Cancelar</Button>
+                  <Button tone="primary" onClick={applyGovernanceSection}>{t("settings.confirmButton")}</Button>
+                  <Button onClick={cancelGovernanceSection}>{t("settings.cancelButton")}</Button>
                 </div>
               );
             })()}
             {/* status shown as toast */}
           </div>
-          <small className="mb-settings-note">Periodo, limite de itens e sprint agora sao filtros dentro da propria tela de Gestao da equipe, nao configuracoes globais.</small>
+          <small className="mb-settings-note">{t("settings.governanceNote")}</small>
         </SettingsSection>}
 
-        <SettingsSection title="Notificacoes sonoras" description="Ative ou desative o som de cada notificacao. Preferencia individual, salva neste navegador.">
+        <SettingsSection title={t("settings.soundNotificationsTitle")} description={t("settings.soundNotificationsDesc")}>
           <label className="mb-switch-row">
-            <span><strong>Silenciar todas</strong><small>Desliga qualquer som de notificacao para este usuario</small></span>
+            <span><strong>{t("settings.muteAllLabel")}</strong><small>{t("settings.muteAllDesc")}</small></span>
             <span className="mb-switch"><input type="checkbox" checked={notificationSoundsMutedDraft} onChange={(event) => setNotificationSoundsMutedDraft(event.target.checked)} /><span className="mb-switch-slider" /></span>
           </label>
           <div className="mb-notification-sound-grid">
-            {notificationTypes.map(({ key, label, description }) => (
+            {notificationTypes.map(({ key }) => (
               <div key={key} className="mb-notification-sound-row">
-                <span><strong>{label}</strong><small>{description}</small></span>
+                <span><strong>{t(`notificationTypes.${key}.label`)}</strong><small>{t(`notificationTypes.${key}.description`)}</small></span>
                 <span className="mb-switch"><input type="checkbox" checked={notificationSoundPrefsDraft[key]} disabled={notificationSoundsMutedDraft} onChange={(event) => setNotificationSoundPrefsDraft((current) => ({ ...current, [key]: event.target.checked }))} /><span className="mb-switch-slider" /></span>
-                <Button onClick={() => playSoundFile(key)} disabled={notificationSoundsMutedDraft}>Testar</Button>
+                <Button onClick={() => playSoundFile(key)} disabled={notificationSoundsMutedDraft}>{t("settings.testButton")}</Button>
               </div>
             ))}
           </div>
@@ -2867,32 +2871,32 @@ export function SettingsWorkbench() {
             const dirty = notificationSoundsMutedDraft !== notificationSoundsMuted || Object.entries(notificationSoundPrefsDraft).some(([k, v]) => notificationSoundPrefs[k] !== v);
             return dirty && (
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <Button tone="primary" onClick={applyNotificationsSection}>Confirmar</Button>
-                <Button onClick={cancelNotificationsSection}>Cancelar</Button>
+                <Button tone="primary" onClick={applyNotificationsSection}>{t("settings.confirmButton")}</Button>
+                <Button onClick={cancelNotificationsSection}>{t("settings.cancelButton")}</Button>
               </div>
             );
           })()}
           {/* status shown as toast */}
         </SettingsSection>
 
-        <SettingsSection title="Notificacoes do navegador" description="Alerta do sistema operacional quando algo relevante para o seu papel mudar, mesmo com a aba em segundo plano.">
-          {browserNotifPermission === "unsupported" && <small className="mb-settings-note">Este navegador nao suporta notificacoes.</small>}
+        <SettingsSection title={t("settings.browserNotificationsTitle")} description={t("settings.browserNotificationsDesc")}>
+          {browserNotifPermission === "unsupported" && <small className="mb-settings-note">{t("settings.notSupported")}</small>}
           {browserNotifPermission !== "unsupported" && (
             <>
               <label className="mb-switch-row">
                 <span>
-                  <strong>Ativar notificacoes</strong>
+                  <strong>{t("settings.enableNotificationsLabel")}</strong>
                   <small>
-                    {browserNotifPermission === "denied" && "Bloqueado pelo navegador — libere manualmente nas configuracoes do site para reativar."}
-                    {browserNotifPermission === "granted" && "Permissao concedida."}
-                    {browserNotifPermission === "default" && "Ainda nao solicitado."}
+                    {browserNotifPermission === "denied" && t("settings.deniedNote")}
+                    {browserNotifPermission === "granted" && t("settings.grantedNote")}
+                    {browserNotifPermission === "default" && t("settings.defaultNote")}
                   </small>
                 </span>
                 {browserNotifPermission === "granted"
                   ? <span className="mb-switch"><input type="checkbox" checked={browserNotifEnabled} onChange={(event) => toggleBrowserNotifEnabled(event.target.checked)} /><span className="mb-switch-slider" /></span>
-                  : <Button tone="primary" onClick={requestBrowserNotifications} disabled={browserNotifPermission === "denied"}>Ativar</Button>}
+                  : <Button tone="primary" onClick={requestBrowserNotifications} disabled={browserNotifPermission === "denied"}>{t("settings.enableButton")}</Button>}
               </label>
-              <small className="mb-settings-note">Dev ve quando um QA pega um item seu para teste. QA ve itens que entram em In QA/In BETA/Ready Beta/HMG CNK. So funciona com o Stark Hub aberto em alguma aba do navegador.</small>
+              <small className="mb-settings-note">{t("settings.browserNotificationsNote")}</small>
             </>
           )}
         </SettingsSection>

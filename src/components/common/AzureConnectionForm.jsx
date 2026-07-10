@@ -1,4 +1,5 @@
 import React, { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../../lib/supabaseClient.js";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { normalizeAzureOrgUrl } from "../../utils/azure.js";
@@ -6,7 +7,9 @@ import { writePersonalSettings } from "../../utils/personalSettings.js";
 
 const DEFAULT_ORG_URL = "https://dev.azure.com/cinemarkintl";
 
-export default function AzureConnectionForm({ onSuccess, submitLabel = "Testar e salvar" }) {
+export default function AzureConnectionForm({ onSuccess, submitLabel }) {
+  const { t } = useTranslation();
+  const resolvedSubmitLabel = submitLabel ?? t("settings.testAndUpdate");
   const { profile, user, updateLocalAzureConnection } = useAuth();
   const [orgUrl, setOrgUrl] = useState(profile?.azureOrgUrl || DEFAULT_ORG_URL);
   const [project, setProject] = useState(profile?.azureProject || "");
@@ -30,7 +33,7 @@ export default function AzureConnectionForm({ onSuccess, submitLabel = "Testar e
       try {
         const payload = JSON.parse(String(reader.result || "{}"));
         if (payload.schema !== "stark-hub-config" || payload.type !== "team-onboarding") {
-          setStatus({ type: "error", message: "Arquivo de configuracao invalido." });
+          setStatus({ type: "error", message: t("azureForm.invalidConfigFile") });
           return;
         }
         const azure = payload.azure || {};
@@ -46,9 +49,9 @@ export default function AzureConnectionForm({ onSuccess, submitLabel = "Testar e
           slackTestMode: Boolean(slack.testMode),
           slackPrimaryWebhookName: slack.primaryWebhookName || "Canal principal"
         });
-        setStatus({ type: "success", message: "Configuracao importada. Falta so colar seu PAT pessoal e testar a conexao." });
+        setStatus({ type: "success", message: t("azureForm.configImported") });
       } catch {
-        setStatus({ type: "error", message: "Nao foi possivel ler o arquivo de configuracao." });
+        setStatus({ type: "error", message: t("azureForm.unreadableConfigFile") });
       }
     };
     reader.readAsText(file);
@@ -59,7 +62,7 @@ export default function AzureConnectionForm({ onSuccess, submitLabel = "Testar e
     e.preventDefault();
     const effectivePat = pat || profile?.azurePat;
     if (!effectivePat) {
-      setStatus({ type: "error", message: "Informe o Personal Access Token." });
+      setStatus({ type: "error", message: t("azureForm.missingPat") });
       return;
     }
 
@@ -86,10 +89,10 @@ export default function AzureConnectionForm({ onSuccess, submitLabel = "Testar e
         azureVerifiedAt: new Date().toISOString()
       });
 
-      setStatus({ type: "success", message: `Conectado ao projeto "${data.projectName}" com sucesso.` });
+      setStatus({ type: "success", message: t("azureForm.connectedSuccess", { project: data.projectName }) });
       onSuccess?.();
     } catch (err) {
-      setStatus({ type: "error", message: err.message || "Falha ao testar conexão." });
+      setStatus({ type: "error", message: err.message || t("azureForm.connectionFailed") });
     } finally {
       setTesting(false);
     }
@@ -100,59 +103,59 @@ export default function AzureConnectionForm({ onSuccess, submitLabel = "Testar e
       <div className="d-flex justify-content-end">
         <input ref={importRef} type="file" accept="application/json" hidden onChange={handleImportConfig} />
         <button type="button" className="btn btn-outline-secondary btn-sm" onClick={() => importRef.current?.click()}>
-          <i className="bi bi-upload" /> Importar configuração
+          <i className="bi bi-upload" /> {t("azureForm.importConfig")}
         </button>
       </div>
       <div>
-        <label className="form-label small text-muted">URL da organização Azure DevOps</label>
+        <label className="form-label small text-muted">{t("azureForm.orgUrlLabel")}</label>
         <input
           className="form-control"
-          placeholder="https://dev.azure.com/sua-organizacao"
+          placeholder={t("azureForm.orgUrlPlaceholder")}
           value={orgUrl}
           onChange={(e) => setOrgUrl(e.target.value)}
           required
         />
       </div>
       <div>
-        <label className="form-label small text-muted">Projeto</label>
+        <label className="form-label small text-muted">{t("azureForm.projectLabel")}</label>
         <input
           className="form-control"
-          placeholder="Nome do projeto"
+          placeholder={t("azureForm.projectPlaceholder")}
           value={project}
           onChange={(e) => setProject(e.target.value)}
           required
         />
       </div>
       <div>
-        <label className="form-label small text-muted">Time (Team) do Azure DevOps</label>
+        <label className="form-label small text-muted">{t("azureForm.teamLabel")}</label>
         <input
           className="form-control"
-          placeholder="ex: MB Labs"
+          placeholder={t("azureForm.teamPlaceholder")}
           value={team}
           onChange={(e) => setTeam(e.target.value)}
           required
         />
         <div className="form-text">
-          Essencial: as sprints e work items são buscados só dentro deste time. Sem isso, itens de outros times do mesmo projeto (ex.: outro cliente) apareceriam misturados.
+          {t("azureForm.teamNote")}
         </div>
       </div>
       <div>
-        <label className="form-label small text-muted">Personal Access Token (PAT)</label>
+        <label className="form-label small text-muted">{t("azureForm.patLabel")}</label>
         <input
           type="password"
           className="form-control"
-          placeholder={alreadyConnected ? "•••••••• (deixe em branco para manter o atual)" : "Cole seu PAT aqui"}
+          placeholder={alreadyConnected ? t("azureForm.patPlaceholderKeep") : t("azureForm.patPlaceholder")}
           value={pat}
           onChange={(e) => setPat(e.target.value)}
         />
         <div className="stark-onboarding-hint">
           <p className="mb-1">
-            Ainda não tem um token? <a href={`${normalizeAzureOrgUrl(orgUrl) || DEFAULT_ORG_URL}/_usersSettings/tokens`} target="_blank" rel="noreferrer">Clique aqui para gerar no Azure DevOps</a>.
+            {t("azureForm.patHintPrefix")} <a href={`${normalizeAzureOrgUrl(orgUrl) || DEFAULT_ORG_URL}/_usersSettings/tokens`} target="_blank" rel="noreferrer">{t("azureForm.patHintLink")}</a>.
           </p>
           <ol className="mb-0 ps-3">
-            <li>Clique em "+ New Token" e dê um nome (ex.: "Stark Hub").</li>
-            <li>Em Scopes, marque <strong>Full access</strong> — ou, no modo custom, habilite ao menos: Work Items (Read &amp; Write), Code (Read), Project and Team (Read) e Identity (Read).</li>
-            <li>Copie o token gerado (ele só aparece uma vez) e cole no campo acima.</li>
+            <li>{t("azureForm.patStep1")}</li>
+            <li>{t("azureForm.patStep2Prefix")} <strong>{t("azureForm.patStep2Bold")}</strong> {t("azureForm.patStep2Suffix")}</li>
+            <li>{t("azureForm.patStep3")}</li>
           </ol>
         </div>
       </div>
@@ -162,7 +165,7 @@ export default function AzureConnectionForm({ onSuccess, submitLabel = "Testar e
         </div>
       )}
       <button type="submit" className="btn btn-primary" disabled={testing}>
-        {testing ? "Testando conexão..." : submitLabel}
+        {testing ? t("azureForm.testing") : resolvedSubmitLabel}
       </button>
     </form>
   );

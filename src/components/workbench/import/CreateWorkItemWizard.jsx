@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../../../contexts/AuthContext.jsx";
 import { useWorkItems } from "../../../hooks/useWorkItems.js";
 import { useToast } from "../../../contexts/ToastContext.jsx";
@@ -119,6 +120,7 @@ function azureTypeColorVar(type) {
 // eram 3 campos de busca identicos e separados; agora e uma busca so, e
 // cada resultado pode ser marcado com o papel certo direto na lista.
 function WorkItemLinkPicker({ form, setField, items = [] }) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const results = useMemo(() => {
     const tokens = query.trim().toLowerCase().split(/[,\s;]+/).filter(Boolean);
@@ -153,8 +155,8 @@ function WorkItemLinkPicker({ form, setField, items = [] }) {
   return (
     <div className="mbwiz-link-picker">
       <label className="mbwiz-field">
-        <span>Vincular work items (parent, related, child)</span>
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por ID ou titulo..." />
+        <span>{t("wizard.linkPickerLabel")}</span>
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("wizard.linkPickerPlaceholder")} />
       </label>
       {results.length > 0 && (
         <div className="mbwiz-id-results">
@@ -164,9 +166,9 @@ function WorkItemLinkPicker({ form, setField, items = [] }) {
               <b className="mbwiz-id-result-id" style={{ color: azureTypeColorVar(item.type) }}>{item.id}</b>
               <span className="mbwiz-id-result-title">{item.title}</span>
               <div className="mbwiz-id-result-actions">
-                <button type="button" onClick={() => addToRole(item, "parent")}>Pai</button>
-                <button type="button" onClick={() => addToRole(item, "related")}>Relacionado</button>
-                <button type="button" onClick={() => addToRole(item, "child")}>Filho</button>
+                <button type="button" onClick={() => addToRole(item, "parent")}>{t("wizard.parentButton")}</button>
+                <button type="button" onClick={() => addToRole(item, "related")}>{t("wizard.relatedButton")}</button>
+                <button type="button" onClick={() => addToRole(item, "child")}>{t("wizard.childButton")}</button>
               </div>
             </div>
           ))}
@@ -179,7 +181,7 @@ function WorkItemLinkPicker({ form, setField, items = [] }) {
             <div className="mbwiz-chip-row">
               {row.ids.length ? row.ids.map((id) => (
                 <span key={id} className="mbwiz-chip active">{id}<button type="button" onClick={() => removeFromRole(id, row.key)}><i className="bi bi-x" /></button></span>
-              )) : <em className="mbwiz-link-role-empty">Nenhum</em>}
+              )) : <em className="mbwiz-link-role-empty">{t("wizard.noneLabel")}</em>}
             </div>
           </div>
         ))}
@@ -189,6 +191,7 @@ function WorkItemLinkPicker({ form, setField, items = [] }) {
 }
 
 export function CreateWorkItemWizard({ onClose, embedded = false, initialType = null }) {
+  const { t } = useTranslation();
   const { profile, user } = useAuth();
   const { addItem, items = [] } = useWorkItems();
   const { getSetting } = useAppSettings();
@@ -263,7 +266,7 @@ export function CreateWorkItemWizard({ onClose, embedded = false, initialType = 
       setForm((current) => ({ ...emptyFormFor(parsed.typeKey || typeKey), ...current, ...(parsed.form || {}) }));
       setConfirmPayload(null);
     } catch {
-      setError("Nao foi possivel ler o template (JSON invalido).");
+      setError(t("wizard.invalidTemplateFile"));
     }
   }
 
@@ -302,7 +305,7 @@ export function CreateWorkItemWizard({ onClose, embedded = false, initialType = 
     const missing = validateWorkItemWizardForm(typeKey, form);
     if (missing.length) {
       setMissingFields(missing);
-      setError(`Preencha os campos obrigatorios: ${missing.join(", ")}.`);
+      setError(t("wizard.fillRequiredFields", { fields: missing.join(", ") }));
       return;
     }
     setMissingFields([]);
@@ -333,17 +336,17 @@ export function CreateWorkItemWizard({ onClose, embedded = false, initialType = 
 
       const payload = buildPayload(attachmentUrls);
       const result = await addItem(payload.item);
-      if (result?.ok === false) throw new Error(result.error || "Azure DevOps nao confirmou a criacao.");
+      if (result?.ok === false) throw new Error(result.error || t("wizard.azureCreationNotConfirmed"));
       const createdItem = { ...payload.item, id: result?.id || payload.item.id };
       const webhooks = resolveSlackWebhooks(getSetting, "workItemCreation");
       if (webhooks.length) {
         const text = buildWorkItemCreationSlackText({ item: createdItem, form, authorName: profile?.azureName || user?.user_metadata?.full_name || user?.email });
         supabase.functions.invoke("slackNotify", { body: { webhooks, text } }).catch(() => {});
       }
-      pushToast({ title: "Work item criado", body: `${typeDef.label} ${createdItem.id || ""} - ${form.title}`, tone: "success" });
+      pushToast({ title: t("wizard.itemCreatedTitle"), body: `${typeDef.label} ${createdItem.id || ""} - ${form.title}`, tone: "success" });
       onClose();
     } catch (err) {
-      setError(err?.message || "Falha ao criar o work item.");
+      setError(err?.message || t("wizard.createFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -352,7 +355,7 @@ export function CreateWorkItemWizard({ onClose, embedded = false, initialType = 
   async function copyImportPrompt() {
     const text = buildWorkItemImportPrompt({ typeKey, form });
     await navigator.clipboard?.writeText(text);
-    pushToast({ title: "Prompt copiado", body: "Use com a IA para gerar o JSON de importacao.", tone: "success" });
+    pushToast({ title: t("wizard.promptCopiedTitle"), body: t("wizard.promptCopiedBody"), tone: "success" });
   }
 
   function fieldClass(key) {
@@ -388,9 +391,9 @@ export function CreateWorkItemWizard({ onClose, embedded = false, initialType = 
   const content = (
       <section className={`mbaz-new-modal mbwiz-modal ${embedded ? "embedded" : ""}`} style={{ "--mbwiz-accent": typeColor }} onClick={(event) => event.stopPropagation()}>
         <header className="mbaz-new-modal-header">
-          <div className="mbaz-new-modal-title"><i className="bi bi-magic" /> <span>{typeDef ? `Novo ${typeDef.label}` : "Criar Work Item"}</span></div>
+          <div className="mbaz-new-modal-title"><i className="bi bi-magic" /> <span>{typeDef ? t("wizard.newItemTitle", { type: typeDef.label }) : t("wizard.createTitle")}</span></div>
           <div className="mbaz-new-modal-actions">
-            {typeKey && <button type="button" className="mbaz-new-modal-close" title="Trocar tipo" onClick={() => selectType(null)}><i className="bi bi-arrow-left" /></button>}
+            {typeKey && <button type="button" className="mbaz-new-modal-close" title={t("wizard.changeTypeTitle")} onClick={() => selectType(null)}><i className="bi bi-arrow-left" /></button>}
             <button type="button" className="mbaz-new-modal-close" onClick={onClose}><i className="bi bi-x-lg" /></button>
           </div>
         </header>
@@ -408,18 +411,18 @@ export function CreateWorkItemWizard({ onClose, embedded = false, initialType = 
             <form data-allow-submit="true" className="mbwiz-form" onSubmit={handleSubmit}>
               <div className="mbwiz-form-toolbar">
                 <input ref={templateInputRef} type="file" accept=".json" hidden onChange={handleTemplateImport} />
-                <Button type="button" onClick={() => templateInputRef.current?.click()}><i className="bi bi-upload" /> Importar template</Button>
-                <Button type="button" onClick={exportTemplate}><i className="bi bi-download" /> Salvar como template</Button>
-                <Button type="button" onClick={copyImportPrompt}><i className="bi bi-stars" /> Copiar prompt IA</Button>
+                <Button type="button" onClick={() => templateInputRef.current?.click()}><i className="bi bi-upload" /> {t("wizard.importTemplate")}</Button>
+                <Button type="button" onClick={exportTemplate}><i className="bi bi-download" /> {t("wizard.saveAsTemplate")}</Button>
+                <Button type="button" onClick={copyImportPrompt}><i className="bi bi-stars" /> {t("wizard.copyAiPrompt")}</Button>
               </div>
 
-              <div className={`mbwiz-field${fieldClass("countries")}`}><span>Pais * <InfoTooltip text="Paises afetados pela demanda - viram tags 0-PAIS automaticamente." /></span><CountryToggle values={selectedCountries} onChange={(value) => setField("countries", value)} /></div>
+              <div className={`mbwiz-field${fieldClass("countries")}`}><span>{t("wizard.countryLabel")} <InfoTooltip text={t("wizard.countryTooltip")} /></span><CountryToggle values={selectedCountries} onChange={(value) => setField("countries", value)} /></div>
 
-              <label className={`mbwiz-field${fieldClass("title")}`}><span>Titulo *</span><input value={form.title || ""} onChange={(event) => setField("title", event.target.value)} placeholder="Titulo do work item" /></label>
+              <label className={`mbwiz-field${fieldClass("title")}`}><span>{t("wizard.titleLabel")}</span><input value={form.title || ""} onChange={(event) => setField("title", event.target.value)} placeholder={t("wizard.titlePlaceholder")} /></label>
 
               <label className={`mbwiz-field mbwiz-field-full${fieldClass("relatedFeatures")}`}>
-                <span>Feature/Pagina relacionada</span>
-                <FilterCombobox label="Feature/Pagina" options={featurePageOptions} values={form.relatedFeatures || []} onChange={(values) => setField("relatedFeatures", values)} placeholder="Buscar feature ou pagina..." renderOption={(option) => <span title={option.group}>{option.label}</span>} />
+                <span>{t("wizard.relatedFeaturesLabel")}</span>
+                <FilterCombobox label={t("wizard.relatedFeaturesComboLabel")} options={featurePageOptions} values={form.relatedFeatures || []} onChange={(values) => setField("relatedFeatures", values)} placeholder={t("wizard.relatedFeaturesPlaceholder")} renderOption={(option) => <span title={option.group}>{option.label}</span>} />
                 {(form.relatedFeatures || []).length > 0 && (
                   <div className="mbwiz-chip-row">
                     {form.relatedFeatures.map((value) => {
@@ -432,44 +435,44 @@ export function CreateWorkItemWizard({ onClose, embedded = false, initialType = 
 
               {typeKey === "bug" && (
                 <>
-                  <label className={`mbwiz-field mbwiz-field-full${fieldClass("serviceLayers")}`}><span>Service Layer / Parceiro</span><MultiChip options={[{ value: "Nao sei / nao aplica", label: "Nao sei / nao aplica" }, ...serviceLayerOptions]} values={form.serviceLayers || []} onChange={(values) => setField("serviceLayers", values)} /></label>
-                  <label className="mbwiz-field"><span>Documentacao de backend</span><input value={form.backendDocumentation || ""} onChange={(event) => setField("backendDocumentation", event.target.value)} placeholder="Link ou 'Not available'" /></label>
-                  <label className={`mbwiz-field${fieldClass("environments")}`}><span>Ambiente</span><MultiChip options={environmentOptions} values={selectedEnvironments} onChange={(values) => setField("environments", values)} renderLabel={(option) => <><img className="mbwiz-chip-icon" src={envIconSrc(option)} alt="" /> {option}</>} /></label>
-                  <label className="mbwiz-switch-row"><span>Possivel reproduzir em PROD?</span><span className="mb-switch"><input type="checkbox" checked={Boolean(form.reproducibleInProd)} onChange={(event) => setField("reproducibleInProd", event.target.checked)} /><span className="mb-switch-slider" /></span></label>
-                  <label className="mbwiz-field"><span>Passos para reproducao</span><textarea className="mbwiz-textarea" rows={4} value={form.reproSteps || ""} onChange={(event) => setField("reproSteps", event.target.value)} placeholder={"1. ...\n2. ...\n3. ..."} /></label>
-                  <label className="mbwiz-field"><span>Breakpoint</span><MultiChip options={breakpointOptions} values={form.breakpoints || []} onChange={(values) => setField("breakpoints", values)} renderLabel={(option) => <><i className={`bi ${option.value === "360px" ? "bi-phone" : "bi-display"}`} /> {option.label}</>} /></label>
+                  <label className={`mbwiz-field mbwiz-field-full${fieldClass("serviceLayers")}`}><span>{t("wizard.serviceLayerLabel")}</span><MultiChip options={[{ value: "Nao sei / nao aplica", label: t("wizard.serviceLayerNotApplicable") }, ...serviceLayerOptions]} values={form.serviceLayers || []} onChange={(values) => setField("serviceLayers", values)} /></label>
+                  <label className="mbwiz-field"><span>{t("wizard.backendDocLabel")}</span><input value={form.backendDocumentation || ""} onChange={(event) => setField("backendDocumentation", event.target.value)} placeholder={t("wizard.backendDocPlaceholder")} /></label>
+                  <label className={`mbwiz-field${fieldClass("environments")}`}><span>{t("wizard.environmentLabel")}</span><MultiChip options={environmentOptions} values={selectedEnvironments} onChange={(values) => setField("environments", values)} renderLabel={(option) => <><img className="mbwiz-chip-icon" src={envIconSrc(option)} alt="" /> {option}</>} /></label>
+                  <label className="mbwiz-switch-row"><span>{t("wizard.reproInProdLabel")}</span><span className="mb-switch"><input type="checkbox" checked={Boolean(form.reproducibleInProd)} onChange={(event) => setField("reproducibleInProd", event.target.checked)} /><span className="mb-switch-slider" /></span></label>
+                  <label className="mbwiz-field"><span>{t("wizard.reproStepsLabel")}</span><textarea className="mbwiz-textarea" rows={4} value={form.reproSteps || ""} onChange={(event) => setField("reproSteps", event.target.value)} placeholder={"1. ...\n2. ...\n3. ..."} /></label>
+                  <label className="mbwiz-field"><span>{t("wizard.breakpointLabel")}</span><MultiChip options={breakpointOptions} values={form.breakpoints || []} onChange={(values) => setField("breakpoints", values)} renderLabel={(option) => <><i className={`bi ${option.value === "360px" ? "bi-phone" : "bi-display"}`} /> {option.label}</>} /></label>
                   <div className="mbwiz-field-grid">
-                    <label className="mbwiz-field"><span>Cinema/Localizacao</span><input value={form.location || ""} onChange={(event) => setField("location", event.target.value)} placeholder="Hoyts Unicenter, etc." /></label>
-                    <label className="mbwiz-field"><span>Usuario</span><input value={form.user || ""} onChange={(event) => setField("user", event.target.value)} placeholder="email@email.com" /></label>
-                    <label className="mbwiz-field"><span>Senha</span><input type="text" value={form.password || ""} onChange={(event) => setField("password", event.target.value)} /></label>
+                    <label className="mbwiz-field"><span>{t("wizard.locationLabel")}</span><input value={form.location || ""} onChange={(event) => setField("location", event.target.value)} placeholder={t("wizard.locationPlaceholder")} /></label>
+                    <label className="mbwiz-field"><span>{t("wizard.userLabel")}</span><input value={form.user || ""} onChange={(event) => setField("user", event.target.value)} placeholder="email@email.com" /></label>
+                    <label className="mbwiz-field"><span>{t("wizard.passwordLabel")}</span><input type="text" value={form.password || ""} onChange={(event) => setField("password", event.target.value)} /></label>
                   </div>
-                  <label className="mbwiz-field mbwiz-field-full"><span>Tipo de usuario</span><MultiChip options={userTypeOptions} values={form.userTypes || []} onChange={(values) => setField("userTypes", values)} renderLabel={(option) => { const icon = userTypeIconSrc(option); return <>{icon ? <img className="mbwiz-chip-icon" src={icon} alt="" /> : <i className="bi bi-person-badge" />} {option}</>; }} /></label>
+                  <label className="mbwiz-field mbwiz-field-full"><span>{t("wizard.userTypeLabel")}</span><MultiChip options={userTypeOptions} values={form.userTypes || []} onChange={(values) => setField("userTypes", values)} renderLabel={(option) => { const icon = userTypeIconSrc(option); return <>{icon ? <img className="mbwiz-chip-icon" src={icon} alt="" /> : <i className="bi bi-person-badge" />} {option}</>; }} /></label>
                 </>
               )}
 
               {(typeKey === "feature" || typeKey === "userStory") && (
                 <>
-                  <label className="mbwiz-switch-row"><span>Ja validado pela presidencia/Marketing?</span><span className="mb-switch"><input type="checkbox" checked={Boolean(form.validated)} onChange={(event) => setField("validated", event.target.checked)} /><span className="mb-switch-slider" /></span></label>
-                  <label className="mbwiz-field"><span>Tipo de demanda</span><MultiChip options={demandTypeOptions} values={form.demandType ? [form.demandType] : []} onChange={(values) => setField("demandType", values[values.length - 1] || "")} /></label>
-                  <label className="mbwiz-field"><span>Como um...</span><textarea className="mbwiz-textarea" rows={2} value={form.asA || ""} onChange={(event) => setField("asA", event.target.value)} placeholder="Que tipo de usuario esse item resolve o problema" /></label>
-                  <label className="mbwiz-field"><span>Eu quero...</span><textarea className="mbwiz-textarea" rows={2} value={form.iWant || ""} onChange={(event) => setField("iWant", event.target.value)} placeholder="Eu quero poder..." /></label>
-                  <label className="mbwiz-field"><span>Para que...</span><textarea className="mbwiz-textarea" rows={2} value={form.soThat || ""} onChange={(event) => setField("soThat", event.target.value)} placeholder="Qual o objetivo/comportamento esperado" /></label>
-                  <label className="mbwiz-field"><span>Criterios de aceite</span><textarea className="mbwiz-textarea" rows={4} value={form.acceptanceCriteria || ""} onChange={(event) => setField("acceptanceCriteria", event.target.value)} placeholder={"Given...\nWhen...\nThen..."} /></label>
+                  <label className="mbwiz-switch-row"><span>{t("wizard.validatedLabel")}</span><span className="mb-switch"><input type="checkbox" checked={Boolean(form.validated)} onChange={(event) => setField("validated", event.target.checked)} /><span className="mb-switch-slider" /></span></label>
+                  <label className="mbwiz-field"><span>{t("wizard.demandTypeLabel")}</span><MultiChip options={demandTypeOptions} values={form.demandType ? [form.demandType] : []} onChange={(values) => setField("demandType", values[values.length - 1] || "")} /></label>
+                  <label className="mbwiz-field"><span>{t("wizard.asALabel")}</span><textarea className="mbwiz-textarea" rows={2} value={form.asA || ""} onChange={(event) => setField("asA", event.target.value)} placeholder={t("wizard.asAPlaceholder")} /></label>
+                  <label className="mbwiz-field"><span>{t("wizard.iWantLabel")}</span><textarea className="mbwiz-textarea" rows={2} value={form.iWant || ""} onChange={(event) => setField("iWant", event.target.value)} placeholder={t("wizard.iWantPlaceholder")} /></label>
+                  <label className="mbwiz-field"><span>{t("wizard.soThatLabel")}</span><textarea className="mbwiz-textarea" rows={2} value={form.soThat || ""} onChange={(event) => setField("soThat", event.target.value)} placeholder={t("wizard.soThatPlaceholder")} /></label>
+                  <label className="mbwiz-field"><span>{t("wizard.acceptanceCriteriaLabel")}</span><textarea className="mbwiz-textarea" rows={4} value={form.acceptanceCriteria || ""} onChange={(event) => setField("acceptanceCriteria", event.target.value)} placeholder={"Given...\nWhen...\nThen..."} /></label>
                 </>
               )}
 
               {typeKey === "testCase" && (
-                <label className="mbwiz-field"><span>Criterios de aceite / passos esperados</span><textarea className="mbwiz-textarea" rows={4} value={form.acceptanceCriteria || ""} onChange={(event) => setField("acceptanceCriteria", event.target.value)} placeholder={"1. ...\n2. ..."} /></label>
+                <label className="mbwiz-field"><span>{t("wizard.testCaseCriteriaLabel")}</span><textarea className="mbwiz-textarea" rows={4} value={form.acceptanceCriteria || ""} onChange={(event) => setField("acceptanceCriteria", event.target.value)} placeholder={"1. ...\n2. ..."} /></label>
               )}
 
-              <label className="mbwiz-field"><span>Contexto</span><textarea className="mbwiz-textarea" rows={3} value={form.context || ""} onChange={(event) => setField("context", event.target.value)} placeholder="Explique o contexto/cenario desta demanda" /></label>
-              <label className="mbwiz-field"><span>Regra de negocio / solucao esperada</span><textarea className="mbwiz-textarea" rows={3} value={form.businessRule || ""} onChange={(event) => setField("businessRule", event.target.value)} /></label>
-              <label className="mbwiz-field"><span>Link Figma (opcional)</span><input value={form.figmaLink || ""} onChange={(event) => setField("figmaLink", event.target.value)} placeholder="https://figma.com/..." /></label>
+              <label className="mbwiz-field"><span>{t("wizard.contextLabel")}</span><textarea className="mbwiz-textarea" rows={3} value={form.context || ""} onChange={(event) => setField("context", event.target.value)} placeholder={t("wizard.contextPlaceholder")} /></label>
+              <label className="mbwiz-field"><span>{t("wizard.businessRuleLabel")}</span><textarea className="mbwiz-textarea" rows={3} value={form.businessRule || ""} onChange={(event) => setField("businessRule", event.target.value)} /></label>
+              <label className="mbwiz-field"><span>{t("wizard.figmaLabel")}</span><input value={form.figmaLink || ""} onChange={(event) => setField("figmaLink", event.target.value)} placeholder="https://figma.com/..." /></label>
               <details className="mbwiz-section" open>
-                <summary>Campos do Azure</summary>
+                <summary>{t("wizard.azureFieldsSection")}</summary>
                 <div className="mbwiz-field-grid">
                   <label className="mbwiz-field"><span>Reason</span><select value={form.reason || "New"} onChange={(event) => setField("reason", event.target.value)}>{reasonOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
-                  <label className="mbwiz-field"><span>Country</span><select value={form.generalCountry || ""} onChange={(event) => setField("generalCountry", event.target.value)}><option value="">Selecionar...</option>{azureCountryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+                  <label className="mbwiz-field"><span>Country</span><select value={form.generalCountry || ""} onChange={(event) => setField("generalCountry", event.target.value)}><option value="">{t("wizard.selectPlaceholder")}</option>{azureCountryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
                   <label className="mbwiz-field"><span>PmRider</span><input value={form.pmRider || ""} onChange={(event) => setField("pmRider", event.target.value)} /></label>
                   <label className="mbwiz-field"><span>Platform</span><input value={form.platform || ""} onChange={(event) => setField("platform", event.target.value)} placeholder="WebApp" /></label>
                   <label className="mbwiz-field"><span>Area</span><input value={form.areaPath || ""} onChange={(event) => setField("areaPath", event.target.value)} placeholder="WebApp" /></label>
@@ -490,13 +493,13 @@ export function CreateWorkItemWizard({ onClose, embedded = false, initialType = 
               <WorkItemLinkPicker form={form} setField={setField} items={items} />
 
               <label className="mbwiz-field mbwiz-field-full">
-                <span>Imagens/gifs (evidencia) <InfoTooltip text="Anexado direto no Azure DevOps e embutido na descricao do item." /></span>
+                <span>{t("wizard.attachmentsLabel")} <InfoTooltip text={t("wizard.attachmentsTooltip")} /></span>
                 <input ref={fileInputRef} type="file" accept="image/*" multiple hidden onChange={handleAttachmentPick} />
                 <div className="mbwiz-dropzone" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); addFiles(event.dataTransfer.files); }}>
                   <i className="bi bi-image" />
-                  <strong>Arraste imagens ou GIFs aqui</strong>
-                  <span>ou importe arquivos do computador</span>
-                  <Button type="button" onClick={() => fileInputRef.current?.click()}><i className="bi bi-upload" /> Importar evidencias</Button>
+                  <strong>{t("wizard.dropzoneTitle")}</strong>
+                  <span>{t("wizard.dropzoneSubtitle")}</span>
+                  <Button type="button" onClick={() => fileInputRef.current?.click()}><i className="bi bi-upload" /> {t("wizard.importEvidenceButton")}</Button>
                 </div>
                 {attachments.length > 0 && (
                   <div className="mbwiz-attachments">
@@ -515,29 +518,29 @@ export function CreateWorkItemWizard({ onClose, embedded = false, initialType = 
               {confirmPayload && (
                 <div className="mbwiz-confirm-panel">
                   <div className="mbwiz-confirm-head">
-                    <strong>Tem certeza que deseja criar este work item?</strong>
-                    <span>Revise a descricao do Azure e a mensagem do Slack antes de confirmar.</span>
+                    <strong>{t("wizard.confirmTitle")}</strong>
+                    <span>{t("wizard.confirmSubtitle")}</span>
                   </div>
                   <div className="mbwiz-preview-grid">
                     <section>
-                      <h4>Descricao no Azure</h4>
+                      <h4>{t("wizard.azureDescriptionHeading")}</h4>
                       <div className="mbwiz-html-preview" dangerouslySetInnerHTML={{ __html: confirmPayload.descriptionHtml }} />
                     </section>
                     <section>
-                      <h4>Mensagem Slack</h4>
+                      <h4>{t("wizard.slackMessageHeading")}</h4>
                       <pre>{confirmPayload.slackText}</pre>
                     </section>
                   </div>
                   <div className="mbwiz-submit-row compact">
-                    <Button type="button" onClick={() => setConfirmPayload(null)}>Editar</Button>
-                    <Button type="button" tone="primary" disabled={submitting} onClick={confirmCreate}>{submitting ? "Criando..." : "Confirmar e criar"}</Button>
+                    <Button type="button" onClick={() => setConfirmPayload(null)}>{t("wizard.editButton")}</Button>
+                    <Button type="button" tone="primary" disabled={submitting} onClick={confirmCreate}>{submitting ? t("wizard.creatingButton") : t("wizard.confirmCreateButton")}</Button>
                   </div>
                 </div>
               )}
 
               <div className="mbwiz-submit-row">
-                <Button type="button" onClick={onClose}>Cancelar</Button>
-                <Button type="submit" tone="primary" disabled={submitting}>{confirmPayload ? "Atualizar previa" : "Gerar previa"}</Button>
+                <Button type="button" onClick={onClose}>{t("wizard.cancelButton")}</Button>
+                <Button type="submit" tone="primary" disabled={submitting}>{confirmPayload ? t("wizard.updatePreviewButton") : t("wizard.generatePreviewButton")}</Button>
               </div>
             </form>
           )}
