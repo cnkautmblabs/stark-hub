@@ -6,7 +6,7 @@ import {
   FiSearch,
   FiUpload
 } from "react-icons/fi";
-import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, Cell, LabelList, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import AzureConnectionForm from "../common/AzureConnectionForm.jsx";
 import { ErrorBoundary } from "../common/ErrorBoundary.jsx";
 import {
@@ -1380,6 +1380,14 @@ function goalStatus(hours, goal) {
   return { key: "met", label: "Na meta", tone: "blue" };
 }
 
+// Mesmas cores do --mbdhc-red/blue/gold ja usadas nas barras/legenda CSS de
+// Gestao de equipe — os graficos Recharts reaproveitam em vez de duplicar.
+function goalStatusColor(status) {
+  if (status === "below") return "#d14343";
+  if (status === "above") return "#c99a00";
+  return "#0078d4";
+}
+
 function governanceRoleLevel(person) {
   return person?.accessLevel
     || (person?.isManagement ? "gestao" : person?.isQa ? "qa" : person?.isDev ? "dev" : null);
@@ -1878,9 +1886,50 @@ export function HoursWorkbench() {
             </>
           ) : (
             <>
-              <section className="mbdhc-chart-card"><h3>Meta x realizado</h3><div className="mbdhc-bars">{filteredDevelopers.slice(0, 12).map((dev) => <div key={dev.key} className="mbdhc-bar-row"><span>{shortName(dev.displayName)}</span><div><b className={dev.goalStatus} style={{ width: `${Math.min(100, (Math.max(dev.completed, 1) / maxCompleted) * 100)}%` }} /></div><strong>{formatHours(dev.completed)}</strong></div>)}</div></section>
-              <section className="mbdhc-chart-card"><h3>Status das metas</h3><div className="mbdhc-donut-wrap"><div className="mbdhc-donut" style={{ "--below": totals.developers ? (goalCounts.below / totals.developers) * 100 : 0, "--met": totals.developers ? (goalCounts.met / totals.developers) * 100 : 0 }} /><div className="mbdhc-legend"><span><i className="red" />Abaixo: {goalCounts.below}</span><span><i className="blue" />Cumprida: {goalCounts.met}</span><span><i className="gold" />Acima: {goalCounts.above}</span></div></div></section>
-              <section className="mbdhc-chart-card"><h3>Distribuicao por pais</h3><div className="mbdhc-country-bars">{countryTotals.map(([country, count]) => <div key={country} className="mbdhc-country-bar"><span><CountryVisual code={country} compact /></span><i><b style={{ width: `${(count / maxCountry) * 100}%` }} /></i><strong>{count}</strong></div>)}</div></section>
+              <section className="mbdhc-chart-card">
+                <h3>Meta x realizado</h3>
+                <ResponsiveContainer width="100%" height={Math.max(160, filteredDevelopers.slice(0, 12).length * 32)}>
+                  <BarChart data={filteredDevelopers.slice(0, 12).map((dev) => ({ key: dev.key, name: shortName(dev.displayName), value: dev.completed, status: dev.goalStatus }))} layout="vertical" margin={{ top: 4, right: 36, bottom: 4, left: 4 }}>
+                    <XAxis type="number" hide domain={[0, maxCompleted]} />
+                    <YAxis type="category" dataKey="name" width={90} tick={{ fontSize: 11, fill: "var(--starkMuted)" }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
+                    <Bar dataKey="value" radius={[0, 6, 6, 0]}>
+                      {filteredDevelopers.slice(0, 12).map((dev) => <Cell key={dev.key} fill={goalStatusColor(dev.goalStatus)} />)}
+                      <LabelList dataKey="value" position="right" formatter={formatHours} style={{ fill: "var(--starkMuted)", fontSize: 11 }} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </section>
+              <section className="mbdhc-chart-card">
+                <h3>Status das metas</h3>
+                <div className="mbaz-donut-wrap">
+                  <ResponsiveContainer width="100%" height={180}>
+                    <PieChart>
+                      <Pie data={[{ key: "below", name: "Abaixo", value: goalCounts.below }, { key: "met", name: "Cumprida", value: goalCounts.met }, { key: "above", name: "Acima", value: goalCounts.above }]} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="85%" paddingAngle={2}>
+                        <Cell fill={goalStatusColor("below")} stroke="var(--starkSurface)" strokeWidth={2} />
+                        <Cell fill={goalStatusColor("met")} stroke="var(--starkSurface)" strokeWidth={2} />
+                        <Cell fill={goalStatusColor("above")} stroke="var(--starkSurface)" strokeWidth={2} />
+                      </Pie>
+                      <Tooltip content={<RechartsTooltip />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="mbaz-donut-center"><strong>{totals.developers}</strong><small>Equipe</small></div>
+                </div>
+                <div className="mbdhc-legend"><span><i className="red" />Abaixo: {goalCounts.below}</span><span><i className="blue" />Cumprida: {goalCounts.met}</span><span><i className="gold" />Acima: {goalCounts.above}</span></div>
+              </section>
+              <section className="mbdhc-chart-card">
+                <h3>Distribuicao por pais</h3>
+                <ResponsiveContainer width="100%" height={Math.max(140, countryTotals.length * 34)}>
+                  <BarChart data={countryTotals.map(([country, count]) => ({ country, count }))} layout="vertical" margin={{ top: 4, right: 30, bottom: 4, left: 4 }}>
+                    <XAxis type="number" hide domain={[0, maxCountry]} />
+                    <YAxis type="category" dataKey="country" width={50} tick={{ fontSize: 11, fill: "var(--starkMuted)" }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
+                    <Bar dataKey="count" radius={[0, 6, 6, 0]} fill="#0078d4">
+                      <LabelList dataKey="count" position="right" style={{ fill: "var(--starkMuted)", fontSize: 11 }} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </section>
               <section className="mbdhc-chart-card mbdhc-collab-country-card"><h3>Colaborador x pais</h3><CollaboratorCountryMatrix developers={filteredDevelopers} /></section>
             </>
           )}
