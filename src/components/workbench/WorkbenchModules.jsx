@@ -35,6 +35,7 @@ import {
   typeIconSrc,
 } from "./ui/WorkbenchPrimitives.jsx";
 import { AzureWorkItemModal, workItemUrl } from "./ui/AzureWorkItemModal.jsx";
+import { CreateWorkItemWizard } from "./import/CreateWorkItemWizard.jsx";
 import { CollaboratorCountryMatrix, CountryStateMatrix } from "./ui/MatrixCharts.jsx";
 import { supabase } from "../../lib/supabaseClient.js";
 import { useAuth } from "../../contexts/AuthContext.jsx";
@@ -289,7 +290,7 @@ function PipelineEnvPill({ item, pipeline }) {
 
 export function QaBoardWorkbench() {
   const { profile, demoMode } = useAuth();
-  const { items, updateItem, addItem, reload, loading, refreshing, needsAzureIntegration, error } = useWorkItems();
+  const { items, updateItem, reload, loading, refreshing, needsAzureIntegration, error } = useWorkItems();
   const { collaborators } = useCollaborators();
   const { evidence, reload: reloadEvidence } = useTestEvidence();
   const { getSetting } = useAppSettings();
@@ -313,7 +314,6 @@ export function QaBoardWorkbench() {
   const [groupBy, setGroupBy] = usePersistentState("starkHubFilters:qaBoard:groupBy", "none");
   const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [chartsCollapsed, setChartsCollapsed] = usePersistentState("starkHubFilters:qaBoard:chartsCollapsed", false);
-  const [newItem, setNewItem] = useState({ type: "Bug", country: "BR", title: "", state: "In QA" });
   const { activeItem, openItem: setActiveItem, closeItem: closeActiveItem } = usePersistentActiveWorkItem("starkHubActiveWorkItem:qaBoard", items);
 
   const byId = useMemo(() => new Map(collaborators.map((person) => [person.id, person])), [collaborators]);
@@ -485,24 +485,6 @@ export function QaBoardWorkbench() {
     });
   }
 
-  async function createItem(event) {
-    event.preventDefault();
-    if (!newItem.title.trim()) return;
-    await addItem({
-      id: Date.now(),
-      type: newItem.type,
-      title: newItem.title.trim(),
-      state: newItem.state,
-      env: "qa",
-      countries: [newItem.country],
-      assigneeId: devPeople[0]?.id,
-      assigneeName: devPeople[0]?.azureName,
-      updatedAt: new Date().toISOString()
-    });
-    setNewItem((current) => ({ ...current, title: "" }));
-    setShowCreate(false);
-  }
-
   function renderEvidenceJourney(item, environment) {
     const records = evidenceRecordsForEnvironment(evidenceById.get(Number(item.id)) || [], environment);
     if (!records.length) return <div className="mbaz-evidence-pending"><i className="bi bi-dash-lg mbaz-evidence-pending-icon" /></div>;
@@ -608,7 +590,7 @@ export function QaBoardWorkbench() {
         </div>
         <div className="mbaz-tabs">
           <div className="mbaz-search"><FiSearch /><input id="mbaz-search" className="mbaz-input" placeholder="Buscar por id, titulo, pessoa, pais..." value={search} onChange={(event) => setSearch(event.target.value)} /></div>
-          <button id="mbaz-toggle-create" className="mbaz-btn" type="button" onClick={() => setShowCreate((value) => !value)}>Novo</button>
+          <button id="mbaz-toggle-create" className="mbaz-btn" type="button" onClick={() => setShowCreate(true)}><i className="bi bi-magic" /> Criar Work Item</button>
           <button id="mbaz-view-toggle" className={`mbaz-icon-btn ${viewMode === "list" ? "active" : ""}`} type="button" title="Lista" onClick={() => setViewMode("list")}><i className="bi bi-view-list" /></button>
           <button className={`mbaz-icon-btn ${viewMode === "grid" ? "active" : ""}`} type="button" title="Grid" onClick={() => setViewMode("grid")}><i className="bi bi-grid-3x3-gap" /></button>
           <button className={`mbaz-icon-btn ${viewMode === "compact" ? "active" : ""}`} type="button" title="Compacto" onClick={() => setViewMode("compact")}><i className="bi bi-list" /></button>
@@ -781,14 +763,7 @@ export function QaBoardWorkbench() {
               </button>
             </div>
             <div id="mbaz-panel-board" className="mbaz-panel">
-              <form data-allow-submit="true" id="mbaz-create-form" className={`mbaz-create ${showCreate ? "open" : ""}`} onSubmit={createItem}>
-                <div className="mbaz-create-grid">
-                  <label>Tipo<select className="mbaz-select" value={newItem.type} onChange={(event) => setNewItem((current) => ({ ...current, type: event.target.value }))}><option value="Bug">Bug</option><option value="Task">Task</option><option value="User Story">User Story</option></select></label>
-                  <label>Pais<select className="mbaz-select" value={newItem.country} onChange={(event) => setNewItem((current) => ({ ...current, country: event.target.value }))}>{Object.keys(countries).map((code) => <option key={code} value={code}>{code}</option>)}</select></label>
-                  <label className="mbaz-field-full">Titulo<input className="mbaz-input" value={newItem.title} onChange={(event) => setNewItem((current) => ({ ...current, title: event.target.value }))} /></label>
-                  <button className="mbaz-btn mbaz-primary" type="submit">Criar</button>
-                </div>
-              </form>
+              {showCreate && <CreateWorkItemWizard onClose={() => setShowCreate(false)} />}
               <div id="mbaz-results" className={`mbaz-results mode-${viewMode} ${viewMode === "grid" ? "grid" : ""} ${groupBy !== "none" ? "is-grouped" : ""}`}>
                 {loading ? <WorkbenchCardSkeleton rows={8} mode={viewMode === "grid" ? "grid" : viewMode} /> : filtered.length ? groupsForBoard(filtered).map((group) => groupBy === "none" ? group.items.map(renderCard) : (
                   <details key={group.key} className="mb-my-group" open>
