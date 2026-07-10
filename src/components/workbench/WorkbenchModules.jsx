@@ -23,6 +23,7 @@ import {
   KpiSkeleton,
   ProfileCombobox,
   QaPicker,
+  RechartsTooltip,
   RoleBadgeIcon,
   TextField,
   WorkbenchCardSkeleton,
@@ -280,24 +281,6 @@ function PipelineEnvPill({ item, pipeline }) {
       <i className={`bi ${statusIcon}`} />
       <span>{label}</span>
     </button>
-  );
-}
-
-// Tooltip compartilhado entre os graficos Recharts do app — segue as mesmas
-// variaveis de tema (var(--stark*)) usadas no resto da UI, entao adapta
-// sozinho no toggle claro/escuro sem precisar de uma versao por tema.
-function RechartsTooltip({ active, payload, label }) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="mbw-chart-tooltip">
-      {label && <strong>{label}</strong>}
-      {payload.map((entry) => (
-        <span key={entry.dataKey || entry.name}>
-          <i style={{ background: entry.color || entry.payload?.color }} />
-          {entry.name}: <b>{entry.value}</b>
-        </span>
-      ))}
-    </div>
   );
 }
 

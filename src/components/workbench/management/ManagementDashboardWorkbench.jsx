@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Bar, BarChart, Cell, LabelList, Tooltip, XAxis, YAxis, ResponsiveContainer } from "recharts";
 import { useAuth } from "../../../contexts/AuthContext.jsx";
 import { useWorkItems } from "../../../hooks/useWorkItems.js";
 import { useCollaborators } from "../../../hooks/useCollaborators.js";
@@ -7,7 +8,7 @@ import { usePersistentState } from "../../../hooks/usePersistentState.js";
 import { compactSprintLabel } from "../../../utils/sprints.js";
 import { dateStamp, downloadCsv } from "../../../utils/csvExport.js";
 import { buildCollaboratorNameIndex, evidenceDedupeKey, evidenceEnvironments, findCollaboratorByName, isQaEvidenceEntry, normalizeResult } from "../../../utils/workbench/formatters.js";
-import { AvatarDot, ChartSkeleton, FilterCombobox, Kpi, KpiSkeleton, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
+import { AvatarDot, ChartSkeleton, FilterCombobox, Kpi, KpiSkeleton, RechartsTooltip, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
 
 const monthOrder = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
@@ -191,34 +192,35 @@ export function ManagementDashboardWorkbench() {
       <div className="mb-mgmt-grid">
         <section className="mb-mgmt-card">
           <header><strong>Entregas de Feature por sprint</strong><small>Total x entregue (env prod)</small></header>
-          {loading ? <ChartSkeleton rows={6} /> : (
-            <div className="mb-mgmt-bars">
-              {featuresPerSprint.map((row) => (
-                <div key={row.sprint} className="mb-mgmt-bar-row">
-                  <span>{row.sprint}</span>
-                  <div><b style={{ width: `${(row.total / maxFeatureValue) * 100}%` }} /><i style={{ width: `${(row.delivered / maxFeatureValue) * 100}%` }} /></div>
-                  <strong>{row.delivered}/{row.total}</strong>
-                </div>
-              ))}
-              {!featuresPerSprint.length && <span className="mb-mgmt-empty">Sem dados no periodo.</span>}
-            </div>
-          )}
+          {loading ? <ChartSkeleton rows={6} /> : featuresPerSprint.length ? (
+            <ResponsiveContainer width="100%" height={Math.max(160, featuresPerSprint.length * 34)}>
+              <BarChart data={featuresPerSprint} layout="vertical" margin={{ top: 4, right: 30, bottom: 4, left: 4 }}>
+                <XAxis type="number" hide domain={[0, maxFeatureValue]} />
+                <YAxis type="category" dataKey="sprint" width={56} tick={{ fontSize: 11, fill: "var(--starkMuted)" }} axisLine={false} tickLine={false} />
+                <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
+                <Bar dataKey="total" name="Total" fill="#cbd5e1" radius={[0, 6, 6, 0]} barSize={10} />
+                <Bar dataKey="delivered" name="Entregue" fill="#16a34a" radius={[0, 6, 6, 0]} barSize={10}>
+                  <LabelList dataKey="delivered" position="right" style={{ fill: "var(--starkMuted)", fontSize: 11 }} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <span className="mb-mgmt-empty">Sem dados no periodo.</span>}
         </section>
 
         <section className="mb-mgmt-card">
           <header><strong>Bugs por sprint</strong><small>Volume total de Bug work items</small></header>
-          {loading ? <ChartSkeleton rows={6} /> : (
-            <div className="mb-mgmt-bars">
-              {bugsPerSprint.map((row) => (
-                <div key={row.sprint} className="mb-mgmt-bar-row">
-                  <span>{row.sprint}</span>
-                  <div><b className="danger" style={{ width: `${(row.total / maxBugValue) * 100}%` }} /></div>
-                  <strong>{row.total}</strong>
-                </div>
-              ))}
-              {!bugsPerSprint.length && <span className="mb-mgmt-empty">Sem dados no periodo.</span>}
-            </div>
-          )}
+          {loading ? <ChartSkeleton rows={6} /> : bugsPerSprint.length ? (
+            <ResponsiveContainer width="100%" height={Math.max(160, bugsPerSprint.length * 34)}>
+              <BarChart data={bugsPerSprint} layout="vertical" margin={{ top: 4, right: 30, bottom: 4, left: 4 }}>
+                <XAxis type="number" hide domain={[0, maxBugValue]} />
+                <YAxis type="category" dataKey="sprint" width={56} tick={{ fontSize: 11, fill: "var(--starkMuted)" }} axisLine={false} tickLine={false} />
+                <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
+                <Bar dataKey="total" name="Bugs" fill="#dc2626" radius={[0, 6, 6, 0]}>
+                  <LabelList dataKey="total" position="right" style={{ fill: "var(--starkMuted)", fontSize: 11 }} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <span className="mb-mgmt-empty">Sem dados no periodo.</span>}
         </section>
 
         <section className="mb-mgmt-card">
@@ -240,24 +242,27 @@ export function ManagementDashboardWorkbench() {
 
         <section className="mb-mgmt-card">
           <header><strong>Metricas de testes</strong><small>Resultados registrados no periodo</small></header>
-          {loading ? <ChartSkeleton rows={3} /> : (
+          {loading ? <ChartSkeleton rows={3} /> : testMetrics.total ? (
             <>
               <div className="mb-mgmt-test-summary">
                 <span className="approved">{testMetrics.pass} Approved</span>
                 <span className="fail">{testMetrics.fail} Fail</span>
                 <span className="limitation">{testMetrics.limitation} Limitation</span>
               </div>
-              <div className="mb-mgmt-test-bar">
-                {testMetrics.total ? (
-                  <>
-                    <b style={{ width: `${(testMetrics.pass / testMetrics.total) * 100}%` }} />
-                    <i style={{ width: `${(testMetrics.fail / testMetrics.total) * 100}%` }} />
-                    <em style={{ width: `${(testMetrics.limitation / testMetrics.total) * 100}%` }} />
-                  </>
-                ) : <span className="mb-mgmt-empty">Sem evidencias no periodo.</span>}
-              </div>
+              <ResponsiveContainer width="100%" height={150}>
+                <BarChart data={[{ key: "pass", name: "Approved", value: testMetrics.pass }, { key: "fail", name: "Fail", value: testMetrics.fail }, { key: "limitation", name: "Limitation", value: testMetrics.limitation }]} margin={{ top: 8, right: 8, bottom: 4, left: 8 }}>
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--starkMuted)" }} axisLine={false} tickLine={false} />
+                  <YAxis hide />
+                  <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
+                  <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                    <Cell fill="#16a34a" />
+                    <Cell fill="#dc2626" />
+                    <Cell fill="#d97706" />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </>
-          )}
+          ) : <span className="mb-mgmt-empty">Sem evidencias no periodo.</span>}
         </section>
 
         <section className="mb-mgmt-card">

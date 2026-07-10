@@ -3,6 +3,25 @@ import { FiAlertCircle, FiSearch } from "react-icons/fi";
 import { countries, environments, flagUrl, formatWorkItemCode, testResultTypes, workItemTypes } from "../../../utils/constants.js";
 import { compactSprintLabel } from "../../../utils/sprints.js";
 
+// Tooltip compartilhado entre TODOS os graficos Recharts do app (Quality
+// Board, Gestao de equipe, Gestao de projeto, Perfil, Home) — le as
+// variaveis de tema (var(--stark*)) usadas no resto da UI, entao adapta
+// sozinho no toggle claro/escuro sem precisar de uma versao por tela.
+export function RechartsTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="mbw-chart-tooltip">
+      {label && <strong>{label}</strong>}
+      {payload.map((entry) => (
+        <span key={entry.dataKey || entry.name}>
+          <i style={{ background: entry.color || entry.payload?.color }} />
+          {entry.name}: <b>{entry.value}</b>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function initials(name) {
   return String(name || "?").trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 }
