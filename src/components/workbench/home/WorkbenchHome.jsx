@@ -66,7 +66,7 @@ function renderNoteHtml(text) {
 function faviconUrl(url) {
   try {
     const host = new URL(url).hostname;
-    return `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(host)}`;
+    return `https://www.google.com/s2/favicons?sz=128&domain=${encodeURIComponent(host)}`;
   } catch {
     return "";
   }
@@ -353,13 +353,14 @@ function WidgetToolbar({ onEdit, onRemove, widget }) {
 function WidgetCard({ widget, onRemove, onEdit, onDragStart, onDragOver, onDrop, onDragEnd, dragging }) {
   const dragProps = { draggable: true, onDragStart, onDragOver, onDrop, onDragEnd };
 
-  if (widget.type === "shortcut") {
+  if (widget.type === "shortcut" || widget.type === "link") {
+    const hostname = (() => { try { return new URL(widget.url).hostname; } catch { return widget.url; } })();
     return (
       <article className={`mb-home-widget shortcut ${dragging ? "dragging" : ""}`} {...dragProps}>
         <WidgetToolbar widget={widget} onEdit={onEdit} onRemove={onRemove} />
         <a href={widget.url} target="_blank" rel="noreferrer" className="mb-home-widget-shortcut-body">
           <WidgetImage src={widget.imageUrl || faviconUrl(widget.url)} />
-          <span className="mb-home-widget-shortcut-caption">{widget.title}</span>
+          <span className="mb-home-widget-shortcut-caption"><strong>{widget.title}</strong>{widget.type === "link" && <small>{hostname}</small>}</span>
         </a>
       </article>
     );
@@ -378,15 +379,7 @@ function WidgetCard({ widget, onRemove, onEdit, onDragStart, onDragOver, onDrop,
     );
   }
 
-  return (
-    <article className={`mb-home-widget ${dragging ? "dragging" : ""}`} style={widget.color ? { borderLeft: `4px solid ${widget.color}` } : undefined} {...dragProps}>
-      <WidgetToolbar widget={widget} onEdit={onEdit} onRemove={onRemove} />
-      <a href={widget.url} target="_blank" rel="noreferrer" className="mb-home-widget-body">
-        <WidgetImage src={widget.imageUrl || faviconUrl(widget.url)} alt="" />
-        <span className="mb-home-widget-text"><strong>{widget.title}</strong><small>{(() => { try { return new URL(widget.url).hostname; } catch { return widget.url; } })()}</small></span>
-      </a>
-    </article>
-  );
+  return null;
 }
 
 function WidgetsGrid({ widgets, onRemove, onReorder, onEdit }) {
@@ -889,7 +882,7 @@ export function WorkbenchHome() {
     widgets: {
       subtitle: "Notas, links e atalhos que voce fixar aqui ficam salvos neste navegador.",
       summary: `${widgets.length} item${widgets.length === 1 ? "" : "s"} fixado${widgets.length === 1 ? "" : "s"}`,
-      actions: <><ShortcutTemplateActions widgets={widgets} onImport={handleShortcutImport} /><AddWidgetMenu onPick={setWidgetModalType} /></>,
+      actions: <div className="mb-home-panel-actions"><ShortcutTemplateActions widgets={widgets} onImport={handleShortcutImport} /><AddWidgetMenu onPick={setWidgetModalType} /></div>,
       body: <WidgetsGrid widgets={widgets} onRemove={removeWidget} onReorder={reorderWidgets} onEdit={setEditingWidget} />
     },
     devPanel: {

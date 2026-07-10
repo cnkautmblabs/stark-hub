@@ -1388,6 +1388,22 @@ body {
   transform: translateY(-2px);
   box-shadow: 0 8px 18px rgba(15,23,42,.14);
 }
+.mb-home-widget.shortcut .mb-home-widget-toolbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(rgba(0,0,0,.5), transparent);
+}
+.mb-home-widget.shortcut .mb-home-widget-drag {
+  color: rgba(255,255,255,.85);
+}
+.mb-home-widget.shortcut .mb-home-widget-edit,
+.mb-home-widget.shortcut .mb-home-widget-remove {
+  background: rgba(0,0,0,.4);
+  border-color: transparent;
+  color: #fff;
+}
 .mb-home-widget-drag,
 .mb-home-widget-edit,
 .mb-home-widget-remove {
@@ -1507,38 +1523,46 @@ body {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-/* Atalho = botao com logo centralizado + nome embaixo (nao mais foto de
-   fundo esticada com legenda por cima). */
+/* Atalho e link usam o mesmo visual: a imagem (favicon do site, em
+   resolucao maior pra nao borrar ao esticar) preenche o card inteiro,
+   com o nome sobreposto embaixo. */
 .mb-home-widget-shortcut-body {
+  position: relative;
   flex: 1;
-  min-height: 100px;
+  min-height: 140px;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 8px 16px;
   text-decoration: none;
 }
 .mb-home-widget-shortcut-body img,
 .mb-home-widget-shortcut-body .mb-home-widget-placeholder {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  object-fit: contain;
-  background: var(--starkSurface);
-  border: 1px solid var(--starkBorder);
-  padding: 6px;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0;
 }
 .mb-home-widget-shortcut-caption {
-  max-width: 100%;
-  color: var(--starkText);
-  font-size: 12px;
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 22px 12px 10px;
+  background: linear-gradient(transparent, rgba(0,0,0,.7));
+  color: #fff;
+}
+.mb-home-widget-shortcut-caption strong {
+  display: block;
+  font-size: 12.5px;
   font-weight: 800;
-  text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+.mb-home-widget-shortcut-caption small {
+  display: block;
+  margin-top: 1px;
+  color: rgba(255,255,255,.75);
+  font-size: 10px;
+  font-weight: 700;
 }
 .mb-home-modal-overlay {
   position: fixed;
@@ -1781,6 +1805,13 @@ body {
 .mb-home-template-actions {
   display: flex;
   gap: 6px;
+}
+.mb-home-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 /* Editor WYSIWYG do post-it: sem markdown visivel, formata em tempo real. */
 .mb-home-note-editor {
