@@ -11,6 +11,7 @@ import Governance from "../pages/management/Governance.jsx";
 import ManagementDashboard from "../pages/management/ManagementDashboard.jsx";
 import Collaborators from "../pages/management/Collaborators.jsx";
 import Import from "../pages/Import.jsx";
+import NewItem from "../pages/NewItem.jsx";
 import Settings from "../pages/Settings.jsx";
 import Faq from "../pages/Faq.jsx";
 import About from "../pages/About.jsx";
@@ -33,6 +34,7 @@ export default function AppRouter() {
         <Route path="/management" element={<ProtectedRoute allow={["qa", "gestao", "gerente"]}><Governance /></ProtectedRoute>} />
         <Route path="/management/dashboard" element={<ProtectedRoute allow={["gerente"]}><ManagementDashboard /></ProtectedRoute>} />
         <Route path="/management/collaborators" element={<ProtectedRoute allow={["dev", "qa", "gestao", "gerente"]}><Collaborators /></ProtectedRoute>} />
+        <Route path="/new-item" element={<NewItem />} />
         <Route path="/import" element={<ProtectedRoute allow={["qa", "gestao", "gerente"]}><Import /></ProtectedRoute>} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/faq" element={<Faq />} />

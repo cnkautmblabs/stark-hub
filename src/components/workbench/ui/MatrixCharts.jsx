@@ -3,10 +3,11 @@ import { shortName } from "../../../utils/workbench/formatters.js";
 import { CountryVisual } from "./WorkbenchPrimitives.jsx";
 
 export function CountryStateMatrix({ countriesInBoard, items, statusOrder, statusConfig, resolveStatus }) {
-  if (!countriesInBoard.length) return <div id="mbaz-country-state" className="mbaz-country-state"><div className="mbaz-empty">Sem paises para cruzar com status</div></div>;
+  if (!countriesInBoard.length) return <div id="mbaz-country-state" className="mbaz-country-state"><div className="mbaz-chart-head"><h3>Ambiente x pais</h3><span>0 item(s)</span></div><div className="mbaz-empty">Sem paises para cruzar com status</div></div>;
   const maxCount = Math.max(1, ...statusOrder.flatMap((status) => countriesInBoard.map((country) => items.filter((item) => resolveStatus(item.state).key === status && (item.countries || []).includes(country)).length)));
   return (
     <div id="mbaz-country-state" className="mbaz-country-state">
+      <div className="mbaz-chart-head"><h3>Ambiente x pais</h3><span>{items.length} item(s)</span></div>
       <div className="mbaz-cs-table">
         <div className="mbaz-cs-row mbaz-cs-head" style={{ gridTemplateColumns: `76px repeat(${countriesInBoard.length}, minmax(34px, 1fr))` }}>
           <span>Ambiente</span>
@@ -22,7 +23,7 @@ export function CountryStateMatrix({ countriesInBoard, items, statusOrder, statu
             {countriesInBoard.map((country) => {
               const count = items.filter((item) => resolveStatus(item.state).key === status && (item.countries || []).includes(country)).length;
               const alpha = count ? Math.min(.18 + (count / maxCount) * .72, .9) : .05;
-              return <span key={country} className="mbaz-cs-cell" style={{ background: `color-mix(in srgb, ${statusConfig[status].color} ${Math.round(alpha * 100)}%, transparent)` }}>{count || ""}</span>;
+              return <span key={country} className="mbaz-cs-cell" title={`${statusConfig[status].label} / ${countries[country]?.label || country}: ${count} item(s)`} style={{ background: `color-mix(in srgb, ${statusConfig[status].color} ${Math.round(alpha * 100)}%, transparent)` }}>{count || ""}</span>;
             })}
           </div>
         ))}
@@ -31,28 +32,30 @@ export function CountryStateMatrix({ countriesInBoard, items, statusOrder, statu
   );
 }
 
-export function CollaboratorCountryMatrix({ developers }) {
+export function CollaboratorCountryMatrix({ developers, metric = "count" }) {
   const countriesInBoard = Array.from(new Set(developers.flatMap((dev) => Object.keys(dev.countries || {})))).sort();
   if (!countriesInBoard.length) return <div className="mbdhc-country-matrix-empty">Sem paises para cruzar com colaboradores</div>;
-  const maxCount = Math.max(1, ...developers.flatMap((dev) => countriesInBoard.map((country) => dev.countries?.[country] || 0)));
+  const valueFor = (dev, country) => metric === "hours" ? (dev.countryHours?.[country] || 0) : (dev.countries?.[country] || 0);
+  const maxCount = Math.max(1, ...developers.flatMap((dev) => countriesInBoard.map((country) => valueFor(dev, country))));
+  const visibleDevelopers = developers.slice(0, 12);
   return (
     <div className="mbdhc-collab-country-matrix mbaz-country-state">
       <div className="mbaz-cs-table">
-        <div className="mbaz-cs-row mbaz-cs-head" style={{ gridTemplateColumns: `96px repeat(${countriesInBoard.length}, minmax(34px, 1fr))` }}>
-          <span>Colaborador</span>
-          {countriesInBoard.map((country) => (
-            <span key={country} className="mbaz-cs-country-head" title={`${countries[country]?.label || country} - ${country}`}>
-              <CountryVisual code={country} compact />
+        <div className="mbaz-cs-row mbaz-cs-head" style={{ gridTemplateColumns: `76px repeat(${visibleDevelopers.length}, minmax(52px, 1fr))` }}>
+          <span>Pais</span>
+          {visibleDevelopers.map((dev) => (
+            <span key={dev.key} className="mbaz-cs-country-head" title={dev.displayName}>
+              {shortName(dev.displayName)}
             </span>
           ))}
         </div>
-        {developers.map((dev) => (
-          <div key={dev.key} className="mbaz-cs-row" style={{ gridTemplateColumns: `96px repeat(${countriesInBoard.length}, minmax(34px, 1fr))` }}>
-            <strong title={dev.displayName}>{shortName(dev.displayName)}</strong>
-            {countriesInBoard.map((country) => {
-              const count = dev.countries?.[country] || 0;
+        {countriesInBoard.map((country) => (
+          <div key={country} className="mbaz-cs-row" style={{ gridTemplateColumns: `76px repeat(${visibleDevelopers.length}, minmax(52px, 1fr))` }}>
+            <strong title={`${countries[country]?.label || country} - ${country}`}><CountryVisual code={country} compact /></strong>
+            {visibleDevelopers.map((dev) => {
+              const count = valueFor(dev, country);
               const alpha = count ? Math.min(.16 + (count / maxCount) * .74, .9) : .05;
-              return <span key={country} className="mbaz-cs-cell" style={{ background: `color-mix(in srgb, #0b9fb8 ${Math.round(alpha * 100)}%, transparent)` }}>{count || ""}</span>;
+              return <span key={dev.key} className="mbaz-cs-cell" title={`${dev.displayName} / ${countries[country]?.label || country}: ${metric === "hours" ? `${count}h` : `${count} item(s)`}`} style={{ background: `color-mix(in srgb, #0b9fb8 ${Math.round(alpha * 100)}%, transparent)` }}>{count ? (metric === "hours" ? `${count}h` : count) : ""}</span>;
             })}
           </div>
         ))}

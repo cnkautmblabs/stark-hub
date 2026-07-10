@@ -3,11 +3,16 @@
 // pessoa). Aqui os webhooks vivem em app_settings (Configurações) e a
 // menção por pessoa vem direto de collaborators.slackMemberId.
 
-export function resolveSlackWebhooks(getSetting) {
+export function resolveSlackWebhooks(getSetting, purpose = "testResult") {
   if (getSetting("slackTestMode", false)) {
     const testUrl = getSetting("slackTestWebhookUrl", "");
     return testUrl ? [testUrl] : [];
   }
+  const configured = getSetting("slackWebhooks", []) || [];
+  const purposeUrls = configured
+    .filter((webhook) => webhook?.enabled !== false && webhook?.url && (!purpose || webhook.purpose === purpose))
+    .map((webhook) => webhook.url);
+  if (purposeUrls.length) return purposeUrls;
   const urls = [];
   const primary = getSetting("slackWebhookUrl", "");
   if (primary) urls.push(primary);

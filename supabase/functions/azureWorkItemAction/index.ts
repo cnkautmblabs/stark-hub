@@ -64,7 +64,17 @@ async function createWorkItem(baseUrl, project, authHeader, item) {
   if (item.areaPath) patchOps.push({ op: "add", path: "/fields/System.AreaPath", value: item.areaPath });
   if (item.description) patchOps.push({ op: "add", path: "/fields/System.Description", value: item.description });
   if (item.assigneeAlias) patchOps.push({ op: "add", path: "/fields/System.AssignedTo", value: item.assigneeAlias });
-  const tags = [...(item.countries || []).map((code) => `0-${code}`), ...(item.tags || [])];
+  if (item.priority) {
+    const priorityNumber = Number(String(item.priority).match(/\d+/)?.[0] || item.priority);
+    if (priorityNumber) patchOps.push({ op: "add", path: "/fields/Microsoft.VSTS.Common.Priority", value: priorityNumber });
+  }
+  if (item.effort) patchOps.push({ op: "add", path: "/fields/Microsoft.VSTS.Scheduling.Effort", value: Number(item.effort) });
+  if (item.originalEstimate) patchOps.push({ op: "add", path: "/fields/Microsoft.VSTS.Scheduling.OriginalEstimate", value: Number(item.originalEstimate) });
+  if (item.completedHours) patchOps.push({ op: "add", path: "/fields/Microsoft.VSTS.Scheduling.CompletedWork", value: Number(item.completedHours) });
+  if (typeof item.remainingHours !== "undefined" && item.remainingHours !== "") patchOps.push({ op: "add", path: "/fields/Microsoft.VSTS.Scheduling.RemainingWork", value: Number(item.remainingHours) });
+  if (item.startDate) patchOps.push({ op: "add", path: "/fields/Microsoft.VSTS.Scheduling.StartDate", value: item.startDate });
+  if (item.targetDate) patchOps.push({ op: "add", path: "/fields/Microsoft.VSTS.Scheduling.TargetDate", value: item.targetDate });
+  const tags = Array.from(new Set([...(item.countries || []).map((code) => `0-${code}`), ...(item.tags || [])].filter(Boolean)));
   if (tags.length) patchOps.push({ op: "add", path: "/fields/System.Tags", value: tags.join("; ") });
   // Vincula como filho da User Story/Bug escolhida como Parent — mesmo
   // comportamento do userscript legado (criar Task a partir de uma US/Bug).
@@ -76,6 +86,30 @@ async function createWorkItem(baseUrl, project, authHeader, item) {
         rel: "System.LinkTypes.Hierarchy-Reverse",
         url: `${baseUrl}/_apis/wit/workItems/${item.parentId}`,
         attributes: { comment: "Criado pelo Stark Hub a partir do Parent" }
+      }
+    });
+  }
+  const relatedIds = String(item.relatedIds || "").split(/[,\s;]+/).map((id) => id.trim()).filter(Boolean);
+  for (const relatedId of relatedIds) {
+    patchOps.push({
+      op: "add",
+      path: "/relations/-",
+      value: {
+        rel: "System.LinkTypes.Related",
+        url: `${baseUrl}/_apis/wit/workItems/${relatedId}`,
+        attributes: { comment: "Relacionado pelo Stark Hub" }
+      }
+    });
+  }
+  const childIds = String(item.childIds || "").split(/[,\s;]+/).map((id) => id.trim()).filter(Boolean);
+  for (const childId of childIds) {
+    patchOps.push({
+      op: "add",
+      path: "/relations/-",
+      value: {
+        rel: "System.LinkTypes.Hierarchy-Forward",
+        url: `${baseUrl}/_apis/wit/workItems/${childId}`,
+        attributes: { comment: "Vinculado como filho pelo Stark Hub" }
       }
     });
   }

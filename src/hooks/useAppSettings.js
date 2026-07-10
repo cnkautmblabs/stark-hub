@@ -76,6 +76,7 @@ export function useAppSettings() {
     }
     if (key === "slackWebhookUrl" && personal.slackWebhookUrl) return personal.slackWebhookUrl;
     if (key === "slackTestWebhookUrl" && personal.slackTestWebhookUrl) return personal.slackTestWebhookUrl;
+    if (key === "slackWebhooks" && Array.isArray(personal.slackWebhooks) && personal.slackWebhooks.length) return personal.slackWebhooks;
     if (key === "slackTestMode" && "slackTestMode" in personal) return personal.slackTestMode;
     if (key === "slackPrimaryWebhookName" && personal.slackPrimaryWebhookName) return personal.slackPrimaryWebhookName;
     return settings[key] ?? fallback;

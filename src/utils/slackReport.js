@@ -5,15 +5,12 @@ import { countries as countryCatalog, environments as environmentCatalog, format
 // :task-tag:, etc.) e aviso de horas por colaborador pronto para copiar ou
 // enviar via Slack incoming webhook.
 // Aliases exatamente iguais aos configurados no Slack pelo tampermonkey —
-// ":feat-tag:" (usado antes aqui) nao existe como emoji custom real, so
-// ":feature-tag:" existe; qualquer alias que nao bata exatamente aparece
-// como texto cru `:algo:` sem virar emoji, tanto na previa quanto no Slack.
 export function workItemSlackTag(type) {
   const normalized = String(type || "").trim().toLowerCase();
   if (normalized === "bug" || normalized === "defect") return ":bug-tag:";
   if (normalized === "task") return ":task-tag:";
   if (normalized === "user story" || normalized === "userstory" || normalized === "us") return ":us-tag:";
-  if (normalized === "feature") return ":feature-tag:";
+  if (normalized === "feature") return ":feat-tag:";
   if (normalized === "epic") return ":epic-tag:";
   if (normalized === "test case" || normalized === "testcase") return ":test-tag:";
   return ":task-tag:";

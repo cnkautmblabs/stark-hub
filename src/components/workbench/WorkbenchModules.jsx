@@ -417,6 +417,15 @@ export function QaBoardWorkbench() {
     return acc;
   }, { pass: 0, fail: 0, limitation: 0, pending: 0 });
   const countriesInBoard = Array.from(new Set(filtered.flatMap((item) => item.countries || []))).sort();
+  const testedCount = testResultCounts.pass + testResultCounts.fail + testResultCounts.limitation;
+  const resultRate = filtered.length ? Math.round((testedCount / filtered.length) * 100) : 0;
+  const passRate = testedCount ? Math.round((testResultCounts.pass / testedCount) * 100) : 0;
+  const blockedCount = filtered.filter((item) => (item.tags || []).some((tag) => /block|imped|critical|hotfix/i.test(tag))).length;
+  const staleCount = filtered.filter((item) => itemAgeDays(item) >= 7).length;
+  const qaActiveCount = qaMetrics.filter((row) => row.count > 0).length;
+  const topCountry = countriesInBoard
+    .map((country) => ({ country, count: filtered.filter((item) => (item.countries || []).includes(country)).length }))
+    .sort((a, b) => b.count - a.count)[0];
 
   // Agrupamento do board — pedido explicito do usuario ("filtros por
   // agrupamento": ambiente, QA responsavel, assignee, pais). Mesmo padrao
@@ -585,7 +594,6 @@ export function QaBoardWorkbench() {
           </div>
           <div className="mbaz-actions">
             {demoMode && <span className="stark-badge-demo">demo</span>}
-            <button className="mbaz-icon-btn" type="button" title="Tela cheia"><i className="bi bi-arrows-fullscreen" /></button>
           </div>
         </div>
         <div className="mbaz-tabs">
@@ -663,6 +671,16 @@ export function QaBoardWorkbench() {
               </div>
             </details>
             <div id="mbaz-dashboard" className={`mbaz-dashboard ${chartsCollapsed ? "collapsed" : ""}`}>
+              {!loading && !chartsCollapsed && (
+                <div className="mbaz-insight-strip">
+                  <button type="button" className="mbaz-insight-card" onClick={() => setStatusFilter([])}><span>Itens</span><strong>{filtered.length}</strong><small>{boardItems.length} no board</small><i style={{ width: "100%" }} /></button>
+                  <button type="button" className="mbaz-insight-card good" onClick={() => setResultFilter(["pass"])}><span>Result rate</span><strong>{resultRate}%</strong><small>{testedCount} testado(s)</small><i style={{ width: `${resultRate}%` }} /></button>
+                  <button type="button" className="mbaz-insight-card pass" onClick={() => setResultFilter(["pass"])}><span>Pass rate</span><strong>{passRate}%</strong><small>{testResultCounts.pass} approved</small><i style={{ width: `${passRate}%` }} /></button>
+                  <button type="button" className="mbaz-insight-card warn" onClick={() => setResultFilter(["pending"])}><span>Pendentes</span><strong>{testResultCounts.pending}</strong><small>{filtered.length ? Math.round((testResultCounts.pending / filtered.length) * 100) : 0}% do filtro</small><i style={{ width: `${filtered.length ? (testResultCounts.pending / filtered.length) * 100 : 0}%` }} /></button>
+                  <button type="button" className="mbaz-insight-card danger"><span>Risco</span><strong>{blockedCount + staleCount}</strong><small>{blockedCount} tags, {staleCount} antigos</small><i style={{ width: `${filtered.length ? Math.min(100, ((blockedCount + staleCount) / filtered.length) * 100) : 0}%` }} /></button>
+                  <button type="button" className="mbaz-insight-card info"><span>Cobertura</span><strong>{topCountry?.country || "-"}</strong><small>{qaActiveCount} QA, {countriesInBoard.length} paises</small><i style={{ width: `${countriesInBoard.length ? Math.min(100, (topCountry?.count || 0) / Math.max(1, filtered.length) * 100) : 0}%` }} /></button>
+                </div>
+              )}
               {loading ? (
                 <div className="mbaz-chart"><ChartSkeleton rows={3} /></div>
               ) : (
@@ -680,7 +698,7 @@ export function QaBoardWorkbench() {
                       ))}
                     </div>
                     <div className="mbaz-donut-wrap">
-                      <ResponsiveContainer width="100%" height={200}>
+                      <ResponsiveContainer width="100%" height={126}>
                         <PieChart>
                           <Pie
                             data={qaStatusOrder.map((key) => ({ key, name: qaStatusConfig[key].label, value: filteredCounts[key] }))}
@@ -709,7 +727,7 @@ export function QaBoardWorkbench() {
                 <div id="mbaz-qa-metrics" className="mbaz-qa-metrics">
                   <div className="mbaz-chart-head"><h3>Carga por QA</h3><span>{qaBarTotal} item(s)</span></div>
                   <div className="mbaz-qa-stack-wrap">
-                    <ResponsiveContainer width="100%" height={40}>
+                    <ResponsiveContainer width="100%" height={30}>
                       <BarChart data={qaBarData} layout="vertical" margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                         <XAxis type="number" hide domain={[0, Math.max(1, qaBarTotal)]} />
                         <YAxis type="category" dataKey="name" hide />
@@ -737,7 +755,7 @@ export function QaBoardWorkbench() {
               ) : (
                 <div id="mbaz-test-results" className="mbaz-chart">
                   <div className="mbaz-chart-head"><h3>Resultado de teste</h3><span>{filtered.length} item(s)</span></div>
-                  <ResponsiveContainer width="100%" height={180}>
+                  <ResponsiveContainer width="100%" height={118}>
                     <BarChart data={testResultOrder.map((key) => ({ key, name: testResultConfig[key].label, value: testResultCounts[key] || 0 }))} margin={{ top: 8, right: 8, bottom: 4, left: 8 }}>
                       <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--starkMuted)" }} axisLine={false} tickLine={false} />
                       <YAxis hide />
@@ -1687,6 +1705,7 @@ export function HoursWorkbench() {
     const latest = records[0];
     const latestInfo = latest ? evidenceResultInfo(latest.result || latest.status) : null;
     const lastEnv = latest ? evidenceEnvironments(latest)[0] || null : null;
+    const testTooltip = records.length ? `${evidenceTransitionLabel(records)}\n\n${evidenceTooltip(records)}` : "Sem testes registrados";
     const isTestExpanded = expandedTests.has(itemKey);
     const completedHours = Number(item.completedHours || 0);
     const remainingHours = Number(item.remainingHours || 0);
@@ -1712,7 +1731,8 @@ export function HoursWorkbench() {
           <button
             type="button"
             className={`mbdhc-work-test-toggle ${latestInfo?.className || "pending"}`}
-            title={evidenceTooltip(records)}
+            title={testTooltip}
+            data-tooltip={testTooltip}
             onClick={() => toggleTestExpanded(itemKey)}
           >
             {latestInfo ? <i className={`bi ${latestInfo.icon}`} /> : <i className="bi bi-dash-lg" />}
@@ -1783,7 +1803,7 @@ export function HoursWorkbench() {
         </div>
         <div className="mbdhc-country-pills">
           {visibleCountries.map(([country, count]) => <span key={country} className="mbdhc-country-pill"><CountryVisual code={country} compact /><strong>{count}</strong></span>)}
-          {hiddenCountryCount > 0 && <span className="mbdhc-country-pill more" title={hiddenCountryTitle}>+{hiddenCountryCount}</span>}
+          {hiddenCountryCount > 0 && <button type="button" className="mbdhc-country-pill more" title={hiddenCountryTitle} data-tooltip={hiddenCountryTitle}>+{hiddenCountryCount}</button>}
         </div>
         <div className="mbdhc-progress" title={`${Math.round(dev.progressPercent)}% da meta`}><span /></div>
         {/* Cards de Dev/QA mostravam os MESMOS 3 clusters (com um rotulo
@@ -1800,8 +1820,8 @@ export function HoursWorkbench() {
             <div className="mbdhc-metric-cluster primary"><strong>Resumo</strong><span><b>{dev.items.length}</b><small>cards no periodo</small></span><span><b>{formatHours(dev.completed)}</b><small>horas</small></span></div>
           ) : useTestMetrics ? (
             <>
-              <div className="mbdhc-metric-cluster primary"><strong>Cobertura de teste</strong><span><b>{dev.testMetrics.total}</b><small>testados</small></span><span><b>{dev.pendingToTestCount}</b><small>na fila</small></span><span><b>{dev.qaResponsibleCount}</b><small>sob resp.</small></span></div>
-              <div className="mbdhc-metric-cluster quality"><strong>Resultados encontrados</strong><span className="approved"><b>{dev.testMetrics.pass}</b><small>aprovados</small></span><span className="fail"><b>{dev.testMetrics.fail}</b><small>bugs achados</small></span><span className="limitation"><b>{dev.testMetrics.limitation}</b><small>limitacao</small></span></div>
+              <div className="mbdhc-metric-cluster primary"><strong>Testes</strong><span><b>{dev.testMetrics.total}</b><small>feitos</small></span><span><b>{dev.pendingToTestCount}</b><small>fila</small></span><span><b>{dev.qaResponsibleCount}</b><small>QA resp.</small></span></div>
+              <div className="mbdhc-metric-cluster quality"><strong>Resultado</strong><span className="approved"><i className="bi bi-check-lg" /><b>{dev.testMetrics.pass}</b><small>pass</small></span><span className="fail"><i className="bi bi-x-lg" /><b>{dev.testMetrics.fail}</b><small>fail</small></span><span className="limitation"><i className="bi bi-exclamation-triangle-fill" /><b>{dev.testMetrics.limitation}</b><small>lim.</small></span></div>
             </>
           ) : (
             <>
@@ -1810,12 +1830,12 @@ export function HoursWorkbench() {
             </>
           )}
         </div>
-        {envStats.length > 0 && (
+        {(envStats.length > 0 || useTestMetrics) && (
           <details className="mbdhc-dev-env-details">
-            <summary>Detalhes por ambiente <i className="bi bi-chevron-down" /></summary>
+            <summary><span>Ambientes</span><small>{dev.items.length} cards</small><i className="bi bi-chevron-down" /></summary>
             <div>
-              {envStats.map((row) => (
-                <span key={row.env}><img src={envIconSrc(row.env)} alt="" /><b>{row.env}</b><small><i className="bi bi-check-lg" /> {row.pass || 0}</small><small><i className="bi bi-x-lg" /> {row.fail || 0}</small><small><i className="bi bi-exclamation-triangle-fill" /> {row.limitation || 0}</small></span>
+              {(envStats.length ? envStats : ["DEV", "QA", "BETA", "PROD"].map((env) => ({ env, total: 0, pass: 0, fail: 0, limitation: 0 }))).map((row) => (
+                <span key={row.env} title={`${row.env}: ${row.total || 0} teste(s)`}><img src={envIconSrc(row.env)} alt="" /><b>{row.env}</b><small className="approved"><i className="bi bi-check-lg" />{row.pass || 0}</small><small className="fail"><i className="bi bi-x-lg" />{row.fail || 0}</small><small className="limitation"><i className="bi bi-exclamation-triangle-fill" />{row.limitation || 0}</small></span>
               ))}
             </div>
           </details>
@@ -1947,7 +1967,7 @@ export function HoursWorkbench() {
                     <button type="button" className={metaMetric === "qty" ? "active" : ""} onClick={() => setMetaMetric("qty")}>Qtd</button>
                   </div>
                 </div>
-                <ResponsiveContainer width="100%" height={Math.max(160, filteredDevelopers.slice(0, 12).length * 32)}>
+                <ResponsiveContainer width="100%" height={180}>
                   <BarChart data={filteredDevelopers.slice(0, 12).map((dev) => ({ key: dev.key, name: shortName(dev.displayName), value: metaMetric === "hours" ? dev.completed : dev.items.length, status: dev.goalStatus }))} layout="vertical" margin={{ top: 4, right: 36, bottom: 4, left: 4 }}>
                     <XAxis type="number" hide domain={[0, metaMetric === "hours" ? maxCompleted : maxCards]} />
                     <YAxis type="category" dataKey="name" width={90} tick={<CompactAxisTick width={82} />} axisLine={false} tickLine={false} />
@@ -1985,7 +2005,7 @@ export function HoursWorkbench() {
                     <button type="button" className={countryMetric === "hours" ? "active" : ""} onClick={() => setCountryMetric("hours")}>Horas</button>
                   </div>
                 </div>
-                <ResponsiveContainer width="100%" height={Math.max(140, countryTotals.length * 34)}>
+                <ResponsiveContainer width="100%" height={180}>
                   <BarChart data={countryTotals.map(([country, value]) => ({ country, value }))} layout="vertical" margin={{ top: 4, right: 36, bottom: 4, left: 4 }}>
                     <XAxis type="number" hide domain={[0, maxCountry]} />
                     <YAxis type="category" dataKey="country" width={50} tick={<CountryFlagAxisTick width={46} />} axisLine={false} tickLine={false} />
@@ -1996,7 +2016,16 @@ export function HoursWorkbench() {
                   </BarChart>
                 </ResponsiveContainer>
               </section>
-              <section className="mbdhc-chart-card mbdhc-collab-country-card"><h3>Colaborador x pais</h3><CollaboratorCountryMatrix developers={filteredDevelopers} /></section>
+              <section className="mbdhc-chart-card mbdhc-collab-country-card">
+                <div className="mbdhc-chart-card-head">
+                  <h3>Pais x colaborador</h3>
+                  <div className="mbdhc-metric-toggle">
+                    <button type="button" className={countryMetric === "count" ? "active" : ""} onClick={() => setCountryMetric("count")}>Qtd</button>
+                    <button type="button" className={countryMetric === "hours" ? "active" : ""} onClick={() => setCountryMetric("hours")}>Horas</button>
+                  </div>
+                </div>
+                <CollaboratorCountryMatrix developers={filteredDevelopers} metric={countryMetric} />
+              </section>
             </>
           )}
         </div>}
@@ -2106,6 +2135,7 @@ export function SettingsWorkbench() {
   const [personalSlackTestWebhookUrl, setPersonalSlackTestWebhookUrl] = useState(() => readPersonalSetting("slackTestWebhookUrl", ""));
   const [personalSlackTestMode, setPersonalSlackTestMode] = useState(() => Boolean(readPersonalSetting("slackTestMode", false)));
   const [personalSlackPrimaryWebhookName, setPersonalSlackPrimaryWebhookName] = useState(() => readPersonalSetting("slackPrimaryWebhookName", "Canal pessoal"));
+  const [slackWebhooks, setSlackWebhooks] = useState(() => readPersonalSetting("slackWebhooks", []));
   const [configScope, setConfigScope] = usePersistentState("starkHubFilters:settings:configScope", profile?.accessLevel || accessLevels.dev);
   const [showSecrets, setShowSecrets] = useState(false);
   const [saving, setSaving] = useState("");
@@ -2129,6 +2159,9 @@ export function SettingsWorkbench() {
   const [slackPrimaryNameDraft, setSlackPrimaryNameDraft] = useState(isGestao ? slackPrimaryWebhookName : personalSlackPrimaryWebhookName);
   const [slackWebhookDraft, setSlackWebhookDraft] = useState(isGestao ? slackWebhookUrl : personalSlackWebhookUrl);
   const [slackTestWebhookDraft, setSlackTestWebhookDraft] = useState(isGestao ? slackTestWebhookUrl : personalSlackTestWebhookUrl);
+  const [slackResultWebhookDraft, setSlackResultWebhookDraft] = useState(() => (slackWebhooks || []).find((entry) => entry.purpose === "testResult")?.url || "");
+  const [slackCreationWebhookDraft, setSlackCreationWebhookDraft] = useState(() => (slackWebhooks || []).find((entry) => entry.purpose === "workItemCreation")?.url || "");
+  const [slackCustomWebhookDraft, setSlackCustomWebhookDraft] = useState(() => (slackWebhooks || []).find((entry) => entry.purpose === "custom")?.url || "");
 
   const [goalHoursDraft, setGoalHoursDraft] = useState(goalHours);
 
@@ -2148,6 +2181,11 @@ export function SettingsWorkbench() {
   useEffect(() => setSlackPrimaryNameDraft(isGestao ? slackPrimaryWebhookName : personalSlackPrimaryWebhookName), [slackPrimaryWebhookName, personalSlackPrimaryWebhookName, isGestao]);
   useEffect(() => setSlackWebhookDraft(isGestao ? slackWebhookUrl : personalSlackWebhookUrl), [slackWebhookUrl, personalSlackWebhookUrl, isGestao]);
   useEffect(() => setSlackTestWebhookDraft(isGestao ? slackTestWebhookUrl : personalSlackTestWebhookUrl), [slackTestWebhookUrl, personalSlackTestWebhookUrl, isGestao]);
+  useEffect(() => {
+    setSlackResultWebhookDraft((slackWebhooks || []).find((entry) => entry.purpose === "testResult")?.url || "");
+    setSlackCreationWebhookDraft((slackWebhooks || []).find((entry) => entry.purpose === "workItemCreation")?.url || "");
+    setSlackCustomWebhookDraft((slackWebhooks || []).find((entry) => entry.purpose === "custom")?.url || "");
+  }, [slackWebhooks]);
   useEffect(() => setGoalHoursDraft(goalHours), [goalHours]);
   useEffect(() => setNotificationSoundsMutedDraft(notificationSoundsMuted), [notificationSoundsMuted]);
   useEffect(() => setNotificationSoundPrefsDraft(notificationSoundPrefs), [notificationSoundPrefs]);
@@ -2219,6 +2257,7 @@ export function SettingsWorkbench() {
         setPersonalSlackWebhookUrl(slackWebhookDraft);
         setPersonalSlackTestWebhookUrl(slackTestWebhookDraft);
       }
+      setSlackWebhooks(buildSlackWebhookEntries());
       await saveSettings();
       pushToast({ title: "Slack", body: "Slack aplicado.", tone: "success" });
     } catch (err) {
@@ -2231,6 +2270,26 @@ export function SettingsWorkbench() {
     setSlackPrimaryNameDraft(isGestao ? slackPrimaryWebhookName : personalSlackPrimaryWebhookName);
     setSlackWebhookDraft(isGestao ? slackWebhookUrl : personalSlackWebhookUrl);
     setSlackTestWebhookDraft(isGestao ? slackTestWebhookUrl : personalSlackTestWebhookUrl);
+    setSlackResultWebhookDraft((slackWebhooks || []).find((entry) => entry.purpose === "testResult")?.url || "");
+    setSlackCreationWebhookDraft((slackWebhooks || []).find((entry) => entry.purpose === "workItemCreation")?.url || "");
+    setSlackCustomWebhookDraft((slackWebhooks || []).find((entry) => entry.purpose === "custom")?.url || "");
+  }
+
+  function buildSlackWebhookEntries() {
+    return [
+      { purpose: "testResult", name: "Resultado de testes", url: slackResultWebhookDraft, enabled: Boolean(slackResultWebhookDraft) },
+      { purpose: "workItemCreation", name: "QA Demand Notification", url: slackCreationWebhookDraft, enabled: Boolean(slackCreationWebhookDraft) },
+      { purpose: "custom", name: "Custom", url: slackCustomWebhookDraft, enabled: Boolean(slackCustomWebhookDraft) }
+    ].filter((entry) => entry.url);
+  }
+
+  async function testSlackWebhook(url, label) {
+    if (!url) {
+      pushToast({ title: "Slack", body: `Preencha o webhook de ${label} antes de testar.`, tone: "warning" });
+      return;
+    }
+    await supabase.functions.invoke("slackNotify", { body: { webhooks: [url], text: `:test-tag: Teste Stark Hub - ${label}` } });
+    pushToast({ title: "Slack", body: `Mensagem de teste enviada para ${label}.`, tone: "success" });
   }
 
   async function applyGovernanceSection() {
@@ -2285,6 +2344,7 @@ export function SettingsWorkbench() {
       setPersonalSlackWebhookUrl(slackWebhookDraft);
       setPersonalSlackTestWebhookUrl(slackTestWebhookDraft);
     }
+    setSlackWebhooks(buildSlackWebhookEntries());
     setGoalHours(Number(goalHoursDraft) || defaultGoalHours);
     setNotificationSoundsMuted(notificationSoundsMutedDraft);
     setNotificationSoundPrefs(notificationSoundPrefsDraft);
@@ -2374,12 +2434,13 @@ export function SettingsWorkbench() {
     // salva e Gestao.
     try {
       writePersonalSettings(isGestao
-        ? { slackWebhookUrl, slackTestWebhookUrl, updatedAt: new Date().toISOString() }
+        ? { slackWebhookUrl, slackTestWebhookUrl, slackWebhooks: buildSlackWebhookEntries(), updatedAt: new Date().toISOString() }
         : {
           pipelineQaName,
           pipelineBetaName,
           slackWebhookUrl: personalSlackWebhookUrl,
           slackTestWebhookUrl: personalSlackTestWebhookUrl,
+          slackWebhooks: buildSlackWebhookEntries(),
           slackTestMode: personalSlackTestMode,
           slackPrimaryWebhookName: personalSlackPrimaryWebhookName,
           updatedAt: new Date().toISOString()
@@ -2728,12 +2789,21 @@ export function SettingsWorkbench() {
               <label className="mb-form-row"><span>Nome do canal principal</span><input value={slackPrimaryNameDraft} onChange={(event) => setSlackPrimaryNameDraft(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
               <label className="mb-form-row"><span>Webhook principal</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={slackWebhookDraft} onChange={(event) => setSlackWebhookDraft(event.target.value)} placeholder="Cole o webhook nas configuracoes" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /><button type="button" className={`mb-secret-toggle ${showSecrets ? "is-revealed" : ""}`} onClick={() => setShowSecrets((value) => !value)} /></div></label>
               <label className="mb-form-row"><span>Webhook de teste</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={slackTestWebhookDraft} onChange={(event) => setSlackTestWebhookDraft(event.target.value)} placeholder="Cole o webhook de teste nas configuracoes" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /><button type="button" className={`mb-secret-toggle ${showSecrets ? "is-revealed" : ""}`} onClick={() => setShowSecrets((value) => !value)} /></div></label>
+              <div className="mb-settings-webhook-grid">
+                <label className="mb-form-row"><span>Resultado de testes</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={slackResultWebhookDraft} onChange={(event) => setSlackResultWebhookDraft(event.target.value)} placeholder="Webhook para resultados QA" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /><button type="button" onClick={() => testSlackWebhook(slackResultWebhookDraft, "resultado de testes")}>Testar</button></div></label>
+                <label className="mb-form-row"><span>Criação de Work Items</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={slackCreationWebhookDraft} onChange={(event) => setSlackCreationWebhookDraft(event.target.value)} placeholder="Webhook qa-demand-notification" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /><button type="button" onClick={() => testSlackWebhook(slackCreationWebhookDraft, "criacao de Work Items")}>Testar</button></div></label>
+                <label className="mb-form-row"><span>Custom</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={slackCustomWebhookDraft} onChange={(event) => setSlackCustomWebhookDraft(event.target.value)} placeholder="Webhook opcional" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /><button type="button" onClick={() => testSlackWebhook(slackCustomWebhookDraft, "custom")}>Testar</button></div></label>
+              </div>
               {!isGestao && <small className="mb-settings-note">Webhooks pessoais ficam somente no localStorage deste navegador.</small>}
               {(() => {
+                const currentPurposeWebhooks = slackWebhooks || [];
                 const dirty = slackTestModeDraft !== (isGestao ? slackTestMode : personalSlackTestMode)
                   || slackPrimaryNameDraft !== (isGestao ? slackPrimaryWebhookName : personalSlackPrimaryWebhookName)
                   || slackWebhookDraft !== (isGestao ? slackWebhookUrl : personalSlackWebhookUrl)
-                  || slackTestWebhookDraft !== (isGestao ? slackTestWebhookUrl : personalSlackTestWebhookUrl);
+                  || slackTestWebhookDraft !== (isGestao ? slackTestWebhookUrl : personalSlackTestWebhookUrl)
+                  || slackResultWebhookDraft !== (currentPurposeWebhooks.find((entry) => entry.purpose === "testResult")?.url || "")
+                  || slackCreationWebhookDraft !== (currentPurposeWebhooks.find((entry) => entry.purpose === "workItemCreation")?.url || "")
+                  || slackCustomWebhookDraft !== (currentPurposeWebhooks.find((entry) => entry.purpose === "custom")?.url || "");
                 return dirty && (
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                     <Button tone="primary" onClick={applySlackSection}>Confirmar</Button>

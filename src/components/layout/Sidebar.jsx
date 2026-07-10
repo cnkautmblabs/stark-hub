@@ -12,6 +12,7 @@ import {
   FiHome,
   FiInfo,
   FiMoon,
+  FiPlusSquare,
   FiSettings,
   FiShield,
   FiSun,
@@ -26,11 +27,13 @@ import { accessLevels } from "../../utils/constants.js";
 const navByRole = {
   [accessLevels.dev]: [
     { to: "/dev", labelKey: "nav.myItems", icon: FiClipboard, flag: "showMyItems" },
+    { to: "/new-item", labelKey: "nav.newItem", icon: FiPlusSquare, flag: "showMyItems" },
     { to: "/management/collaborators", labelKey: "nav.profile", icon: FiUsers, flag: "showGovernance" }
   ],
   [accessLevels.qa]: [
     { to: "/qa", labelKey: "nav.qualityBoard", icon: FiCheckSquare, flag: "showQaBoard" },
     { to: "/dev", labelKey: "nav.myItems", icon: FiClipboard, flag: "showMyItems" },
+    { to: "/new-item", labelKey: "nav.newItem", icon: FiPlusSquare, flag: "showMyItems" },
     { to: "/management", labelKey: "nav.myMetrics", icon: FiShield, flag: "showGovernance" },
     { to: "/management/collaborators", labelKey: "nav.profile", icon: FiUsers, flag: "showGovernance" },
     { to: "/import", labelKey: "nav.importWorkItems", icon: FiGitBranch, flag: "showImportWorkItems" }
@@ -38,6 +41,7 @@ const navByRole = {
   [accessLevels.gestao]: [
     { to: "/qa", labelKey: "nav.qualityBoard", icon: FiCheckSquare, flag: "showQaBoard" },
     { to: "/dev", labelKey: "nav.myItems", icon: FiClipboard, flag: "showMyItems" },
+    { to: "/new-item", labelKey: "nav.newItem", icon: FiPlusSquare, flag: "showMyItems" },
     { to: "/management", labelKey: "nav.teamManagement", icon: FiShield, flag: "showGovernance" },
     { to: "/management/collaborators", labelKey: "nav.profile", icon: FiUsers, flag: "showGovernance" },
     { to: "/import", labelKey: "nav.importWorkItems", icon: FiGitBranch, flag: "showImportWorkItems" }
@@ -45,6 +49,7 @@ const navByRole = {
   [accessLevels.gerente]: [
     { to: "/qa", labelKey: "nav.qualityBoard", icon: FiCheckSquare, flag: "showQaBoard" },
     { to: "/dev", labelKey: "nav.myItems", icon: FiClipboard, flag: "showMyItems" },
+    { to: "/new-item", labelKey: "nav.newItem", icon: FiPlusSquare, flag: "showMyItems" },
     { to: "/management", labelKey: "nav.teamManagement", icon: FiShield, flag: "showGovernance" },
     { to: "/management/dashboard", labelKey: "nav.projectManagement", icon: FiBarChart2, flag: "showGovernance" },
     { to: "/management/collaborators", labelKey: "nav.profile", icon: FiUsers, flag: "showGovernance" },
@@ -108,4 +113,3 @@ export default function Sidebar({ collapsed, onToggle }) {
     </aside>
   );
 }
-

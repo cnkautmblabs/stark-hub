@@ -4,6 +4,7 @@ export default {
     myItems: "My items",
     profile: "Profile",
     qualityBoard: "Quality Board",
+    newItem: "New item",
     myMetrics: "My metrics",
     teamManagement: "Team management",
     projectManagement: "Project management",

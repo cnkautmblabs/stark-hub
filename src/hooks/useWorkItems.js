@@ -438,9 +438,9 @@ export function useWorkItems({ includeClosed = false } = {}) {
   async function addItem(newItem) {
     if (demoMode) {
       setItems(addDemoWorkItem(newItem));
-      return;
+      return { ok: true, id: newItem.id };
     }
-    if (!azureReady) return;
+    if (!azureReady) return { ok: false, error: "Conexao com Azure DevOps nao configurada." };
     const { data, error } = await supabase.functions.invoke("azureWorkItemAction", {
       body: {
         action: "create",
@@ -451,6 +451,7 @@ export function useWorkItems({ includeClosed = false } = {}) {
       }
     });
     if (!error && data?.ok) await loadItems();
+    return error ? { ok: false, error: error.message } : data;
   }
 
   return { items, loading, refreshing, error, updateItem, addItem, reload: () => loadItems({ force: true }), needsAzureIntegration: !demoMode && !azureReady };

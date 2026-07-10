@@ -22,9 +22,10 @@ import {
 } from "../../../utils/executiveReport.js";
 import { buildGovernanceSlackText, buildPersonalSummarySlackText } from "../../../utils/slackReport.js";
 import { resolveSlackWebhooks } from "../../../utils/slack.js";
+import { useToast } from "../../../contexts/ToastContext.jsx";
 import { Button, Kpi, KpiSkeleton, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
 
-const widgetIcons = { note: "bi-sticky", link: "bi-link-45deg", shortcut: "bi-rocket-takeoff" };
+const SHORTCUT_TITLE_MAX = 10;
 
 const HOME_SECTION_DEFAULT_ORDER = ["widgets", "devPanel", "qaPanel", "activity", "governance", "summary"];
 const HOME_SECTION_TITLES = {
@@ -40,13 +41,44 @@ function escapeHtml(text) {
   return String(text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-// Markdown minimo (negrito/italico/quebra de linha) sem depender de lib externa —
-// conteudo e sempre local (localStorage do proprio usuario), nunca compartilhado.
+// Markdown minimo (negrito/italico/quebra de linha), mantido so pra notas
+// antigas ja salvas no formato anterior (texto puro com ** e *) — o editor
+// novo grava HTML de verdade e nunca produz esse formato.
 function renderMiniMarkdown(text) {
   return escapeHtml(text)
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.+?)\*/g, "<em>$1</em>")
     .replace(/\n/g, "<br/>");
+}
+
+function looksLikeHtml(value) {
+  return /<[a-z][\s\S]*>/i.test(String(value || ""));
+}
+
+// Post-it grava HTML puro (contentEditable) agora; notas antigas salvas como
+// texto simples com marcadores ** / * ainda renderizam via renderMiniMarkdown.
+function renderNoteHtml(text) {
+  return looksLikeHtml(text) ? text : renderMiniMarkdown(text);
+}
+
+// Favicon publico do Google — nao precisa de backend nem CORS pra um <img>,
+// e cobre "link"/"atalho" sem exigir que o usuario cole uma URL de imagem.
+function faviconUrl(url) {
+  try {
+    const host = new URL(url).hostname;
+    return `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(host)}`;
+  } catch {
+    return "";
+  }
+}
+
+function isValidHttpUrl(value) {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function storageKey(prefix, userKey) {
@@ -98,47 +130,133 @@ function AddWidgetMenu({ onPick }) {
   );
 }
 
+// Um atalho importado invalido nao pode virar um card quebrado (sem link,
+// sem titulo, titulo estourando o layout do botao) — valida campo a campo
+// antes de aceitar, e reporta exatamente quais entradas foram rejeitadas.
+function validateShortcutEntry(entry) {
+  if (!entry || typeof entry !== "object") return "não é um objeto valido";
+  if (!entry.title || !String(entry.title).trim()) return "sem titulo";
+  if (String(entry.title).trim().length > SHORTCUT_TITLE_MAX) return `titulo com mais de ${SHORTCUT_TITLE_MAX} caracteres`;
+  if (!entry.url || !isValidHttpUrl(entry.url)) return "URL invalida";
+  return null;
+}
+
+function exportShortcutsTemplate(widgets) {
+  const shortcuts = widgets.filter((widget) => widget.type === "shortcut").map((widget) => ({ title: widget.title, url: widget.url, imageUrl: widget.imageUrl || "" }));
+  const blob = new Blob([JSON.stringify(shortcuts, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `stark-hub-atalhos-${dateStamp()}.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function ShortcutTemplateActions({ widgets, onImport }) {
+  const fileRef = useRef(null);
+
+  async function handleFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    let parsed;
+    try {
+      parsed = JSON.parse(await file.text());
+    } catch {
+      onImport({ accepted: [], rejected: [{ title: file.name, reason: "JSON invalido" }] });
+      return;
+    }
+    const list = Array.isArray(parsed) ? parsed : [parsed];
+    const accepted = [];
+    const rejected = [];
+    list.forEach((entry, index) => {
+      const reason = validateShortcutEntry(entry);
+      if (reason) rejected.push({ title: entry?.title || `item ${index + 1}`, reason });
+      else accepted.push({ id: Date.now() + index, type: "shortcut", title: String(entry.title).trim(), url: entry.url.trim(), text: "", imageUrl: entry.imageUrl || "", createdAt: new Date().toISOString() });
+    });
+    onImport({ accepted, rejected });
+  }
+
+  return (
+    <div className="mb-home-template-actions">
+      <input ref={fileRef} type="file" accept="application/json" hidden onChange={handleFile} />
+      <Button onClick={() => fileRef.current?.click()}><i className="bi bi-upload" /> Importar atalhos</Button>
+      <Button onClick={() => exportShortcutsTemplate(widgets)}><i className="bi bi-download" /> Exportar atalhos</Button>
+    </div>
+  );
+}
+
 const notePresetColors = ["#fde68a", "#fdba74", "#fbcfe8", "#bbf7d0", "#bfdbfe", "#ddd6fe", "#e5e7eb"];
 
-function WidgetModal({ type, initial, onClose, onSave }) {
+// Editor WYSIWYG minimo pro post-it: sem preview separada, sem markdown
+// visivel — o que o usuario ve digitando e exatamente o HTML salvo. Usa
+// document.execCommand (suportado em todos os navegadores evergreen pra
+// esse tipo de edicao simples) em vez de trazer uma lib de editor inteira.
+function RichNoteEditor({ initialValue, onChange, highlightColor = "#fff59d" }) {
+  const contentRef = useRef(null);
+  const [textColor, setTextColor] = useState("#111111");
+
+  useEffect(() => {
+    if (contentRef.current) contentRef.current.innerHTML = initialValue || "";
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function exec(command, value) {
+    contentRef.current?.focus();
+    document.execCommand(command, false, value);
+    onChange(contentRef.current?.innerHTML || "");
+  }
+
+  return (
+    <div className="mb-home-note-editor">
+      <div className="mb-home-note-toolbar">
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => exec("bold")} title="Negrito"><i className="bi bi-type-bold" /></button>
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => exec("italic")} title="Italico"><i className="bi bi-type-italic" /></button>
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => exec("underline")} title="Sublinhado"><i className="bi bi-type-underline" /></button>
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => exec("hiliteColor", highlightColor)} title="Marca-texto"><i className="bi bi-vector-pen" /></button>
+        <label className="mb-home-note-color" title="Cor do texto" onMouseDown={(event) => event.preventDefault()}>
+          <i className="bi bi-palette-fill" />
+          <input type="color" value={textColor} onChange={(event) => { setTextColor(event.target.value); exec("foreColor", event.target.value); }} />
+        </label>
+      </div>
+      <div
+        ref={contentRef}
+        className="mb-home-note-content"
+        contentEditable
+        suppressContentEditableWarning
+        onInput={() => onChange(contentRef.current?.innerHTML || "")}
+        data-placeholder="Escreva sua nota..."
+      />
+    </div>
+  );
+}
+
+function WidgetModal({ type, initial, onClose, onSave, onDelete }) {
   const isEdit = Boolean(initial);
   const [title, setTitle] = useState(initial?.title || "");
   const [url, setUrl] = useState(initial?.url || "");
   const [text, setText] = useState(initial?.text || "");
   const [imageUrl, setImageUrl] = useState(initial?.imageUrl || "");
   const [color, setColor] = useState(initial?.color || (type === "note" ? notePresetColors[0] : ""));
-  const [notePreview, setNotePreview] = useState(false);
-  const textareaRef = useRef(null);
+  const [error, setError] = useState("");
   const isNote = type === "note";
   const isShortcut = type === "shortcut";
+  const titleMax = isShortcut ? SHORTCUT_TITLE_MAX : undefined;
 
   function submit(event) {
     event.preventDefault();
-    if (!title.trim()) return;
-    if (!isNote && !url.trim()) return;
+    if (!title.trim()) { setError("Titulo e obrigatorio."); return; }
+    if (isShortcut && title.trim().length > SHORTCUT_TITLE_MAX) { setError(`Titulo do atalho deve ter ate ${SHORTCUT_TITLE_MAX} caracteres.`); return; }
+    if (!isNote && !isValidHttpUrl(url.trim())) { setError("Informe uma URL valida (http:// ou https://)."); return; }
     onSave({
       id: initial?.id ?? Date.now(),
       type,
       title: title.trim(),
       url: url.trim(),
-      text: text.trim(),
+      text,
       imageUrl: imageUrl.trim(),
       color: isShortcut ? undefined : (color || undefined),
       createdAt: initial?.createdAt || new Date().toISOString()
-    });
-  }
-
-  function wrapSelection(marker) {
-    const el = textareaRef.current;
-    if (!el) return;
-    const start = el.selectionStart ?? text.length;
-    const end = el.selectionEnd ?? text.length;
-    const selected = text.slice(start, end) || "texto";
-    const next = `${text.slice(0, start)}${marker}${selected}${marker}${text.slice(end)}`;
-    setText(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(start + marker.length, start + marker.length + selected.length);
     });
   }
 
@@ -150,33 +268,32 @@ function WidgetModal({ type, initial, onClose, onSave }) {
         onClick={(event) => event.stopPropagation()}
         onSubmit={submit}
       >
+        {isNote && <span className="mb-home-modal-note-fold" aria-hidden="true" />}
         <header>
           <strong>{isEdit ? `Editar ${widgetTitles[type].toLowerCase()}` : `Nova ${widgetTitles[type].toLowerCase()}`}</strong>
           <button type="button" onClick={onClose}><i className="bi bi-x-lg" /></button>
         </header>
         <div className="mb-home-modal-body">
-          <label><span>Titulo *</span><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Ex.: Board do time" autoFocus /></label>
+          <label>
+            <span>Titulo * {titleMax && <em className="mb-home-modal-counter">{title.length}/{titleMax}</em>}</span>
+            <input value={title} maxLength={titleMax} onChange={(event) => setTitle(event.target.value)} placeholder={isShortcut ? "Ex.: Board" : "Ex.: Board do time"} autoFocus />
+          </label>
           {!isNote && <label><span>URL *</span><input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://..." /></label>}
           {isNote && (
             <label>
-              <span className="mb-home-modal-note-label">
-                Nota
-                <button type="button" className="mb-home-modal-note-toggle" onClick={() => setNotePreview((value) => !value)}>
-                  {notePreview ? "Editar" : "Pre-visualizar"}
-                </button>
-              </span>
-              {!notePreview && (
-                <div className="mb-home-modal-note-toolbar">
-                  <button type="button" onClick={() => wrapSelection("**")} title="Negrito"><i className="bi bi-type-bold" /></button>
-                  <button type="button" onClick={() => wrapSelection("*")} title="Italico"><i className="bi bi-type-italic" /></button>
-                </div>
-              )}
-              {notePreview
-                ? <div className="mb-home-modal-note-preview" dangerouslySetInnerHTML={{ __html: renderMiniMarkdown(text) || "<em>Nada para mostrar</em>" }} />
-                : <textarea ref={textareaRef} value={text} onChange={(event) => setText(event.target.value)} rows={6} placeholder="Escreva sua nota..." />}
+              <span>Nota</span>
+              <RichNoteEditor initialValue={text} onChange={setText} />
             </label>
           )}
-          {!isNote && <label><span>Imagem {isShortcut ? "(ocupa o card inteiro)" : "(opcional)"}</span><input value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://... (URL de uma imagem)" /></label>}
+          {!isNote && (
+            <label>
+              <span>Icone {isShortcut ? "(centralizado no botao)" : "(opcional)"}</span>
+              <input value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://... (deixe vazio pra usar o favicon do site)" />
+              {!imageUrl && isValidHttpUrl(url) && (
+                <span className="mb-home-modal-favicon-preview"><img src={faviconUrl(url)} alt="" /> favicon detectado automaticamente</span>
+              )}
+            </label>
+          )}
           {isNote && (
             <label>
               <span>Cor do post-it</span>
@@ -193,8 +310,13 @@ function WidgetModal({ type, initial, onClose, onSave }) {
               <input type="color" value={color || "#64748b"} onChange={(event) => setColor(event.target.value)} />
             </label>
           )}
+          {error && <div className="mb-home-modal-error">{error}</div>}
         </div>
-        <footer><button type="button" className="secondary" onClick={onClose}>Cancelar</button><button type="submit" className="primary">Salvar</button></footer>
+        <footer>
+          {isEdit && <button type="button" className="danger" onClick={() => onDelete(initial.id)}><i className="bi bi-trash" /> Excluir</button>}
+          <button type="button" className="secondary" onClick={onClose}>Cancelar</button>
+          <button type="submit" className="primary">Salvar</button>
+        </footer>
       </form>
     </div>
   );
@@ -229,7 +351,6 @@ function WidgetToolbar({ onEdit, onRemove, widget }) {
 }
 
 function WidgetCard({ widget, onRemove, onEdit, onDragStart, onDragOver, onDrop, onDragEnd, dragging }) {
-  const icon = widgetIcons[widget.type] || "bi-star";
   const dragProps = { draggable: true, onDragStart, onDragOver, onDrop, onDragEnd };
 
   if (widget.type === "shortcut") {
@@ -237,7 +358,7 @@ function WidgetCard({ widget, onRemove, onEdit, onDragStart, onDragOver, onDrop,
       <article className={`mb-home-widget shortcut ${dragging ? "dragging" : ""}`} {...dragProps}>
         <WidgetToolbar widget={widget} onEdit={onEdit} onRemove={onRemove} />
         <a href={widget.url} target="_blank" rel="noreferrer" className="mb-home-widget-shortcut-body">
-          <WidgetImage src={widget.imageUrl} />
+          <WidgetImage src={widget.imageUrl || faviconUrl(widget.url)} />
           <span className="mb-home-widget-shortcut-caption">{widget.title}</span>
         </a>
       </article>
@@ -247,10 +368,11 @@ function WidgetCard({ widget, onRemove, onEdit, onDragStart, onDragOver, onDrop,
   if (widget.type === "note") {
     return (
       <article className={`mb-home-widget note ${dragging ? "dragging" : ""}`} style={{ background: widget.color || "#fde68a" }} {...dragProps}>
+        <span className="mb-home-widget-note-fold" aria-hidden="true" />
         <WidgetToolbar widget={widget} onEdit={onEdit} onRemove={onRemove} />
         <button type="button" className="mb-home-widget-note-body" onClick={() => onEdit(widget)} title="Clique para ver/editar a nota inteira">
           <strong>{widget.title}</strong>
-          {widget.text && <p dangerouslySetInnerHTML={{ __html: renderMiniMarkdown(widget.text) }} />}
+          {widget.text && <p dangerouslySetInnerHTML={{ __html: renderNoteHtml(widget.text) }} />}
         </button>
       </article>
     );
@@ -260,8 +382,8 @@ function WidgetCard({ widget, onRemove, onEdit, onDragStart, onDragOver, onDrop,
     <article className={`mb-home-widget ${dragging ? "dragging" : ""}`} style={widget.color ? { borderLeft: `4px solid ${widget.color}` } : undefined} {...dragProps}>
       <WidgetToolbar widget={widget} onEdit={onEdit} onRemove={onRemove} />
       <a href={widget.url} target="_blank" rel="noreferrer" className="mb-home-widget-body">
-        {widget.imageUrl ? <WidgetImage src={widget.imageUrl} /> : <span className="mb-home-widget-icon"><i className={`bi ${icon}`} /></span>}
-        <span className="mb-home-widget-text"><strong>{widget.title}</strong></span>
+        <WidgetImage src={widget.imageUrl || faviconUrl(widget.url)} alt="" />
+        <span className="mb-home-widget-text"><strong>{widget.title}</strong><small>{(() => { try { return new URL(widget.url).hostname; } catch { return widget.url; } })()}</small></span>
       </a>
     </article>
   );
@@ -434,6 +556,7 @@ export function WorkbenchHome() {
   const { evidence } = useTestEvidence();
   const { collaborators } = useCollaborators();
   const { getSetting } = useAppSettings();
+  const { pushToast } = useToast();
   const [now] = useState(() => new Date());
   const [widgetModalType, setWidgetModalType] = useState(null);
   const [editingWidget, setEditingWidget] = useState(null);
@@ -686,8 +809,19 @@ export function WorkbenchHome() {
   function removeWidget(id) {
     setWidgets((current) => current.filter((widget) => widget.id !== id));
   }
+  function deleteWidgetFromModal(id) {
+    removeWidget(id);
+    setWidgetModalType(null);
+    setEditingWidget(null);
+  }
   function reorderWidgets(next) {
     setWidgets(next);
+  }
+  function handleShortcutImport({ accepted, rejected }) {
+    if (accepted.length) setWidgets((current) => [...accepted, ...current]);
+    if (accepted.length && !rejected.length) pushToast({ title: "Atalhos importados", body: `${accepted.length} atalho(s) adicionado(s).`, tone: "success" });
+    else if (accepted.length && rejected.length) pushToast({ title: "Importado com ressalvas", body: `${accepted.length} adicionado(s), ${rejected.length} rejeitado(s): ${rejected.map((entry) => `${entry.title} (${entry.reason})`).join("; ")}`, tone: "warning" });
+    else pushToast({ title: "Nenhum atalho importado", body: rejected.map((entry) => `${entry.title} (${entry.reason})`).join("; ") || "Arquivo vazio ou invalido.", tone: "danger" });
   }
   function addSummaryEntry(entry) {
     setSummaryEntries((current) => [entry, ...current]);
@@ -755,7 +889,7 @@ export function WorkbenchHome() {
     widgets: {
       subtitle: "Notas, links e atalhos que voce fixar aqui ficam salvos neste navegador.",
       summary: `${widgets.length} item${widgets.length === 1 ? "" : "s"} fixado${widgets.length === 1 ? "" : "s"}`,
-      actions: <AddWidgetMenu onPick={setWidgetModalType} />,
+      actions: <><ShortcutTemplateActions widgets={widgets} onImport={handleShortcutImport} /><AddWidgetMenu onPick={setWidgetModalType} /></>,
       body: <WidgetsGrid widgets={widgets} onRemove={removeWidget} onReorder={reorderWidgets} onEdit={setEditingWidget} />
     },
     devPanel: {
@@ -889,6 +1023,7 @@ export function WorkbenchHome() {
           initial={editingWidget}
           onClose={() => { setWidgetModalType(null); setEditingWidget(null); }}
           onSave={saveWidget}
+          onDelete={deleteWidgetFromModal}
         />
       )}
     </section>
