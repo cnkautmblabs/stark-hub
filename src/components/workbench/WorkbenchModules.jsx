@@ -1708,6 +1708,11 @@ export function HoursWorkbench() {
     const testPassRate = dev.testMetrics.total ? Math.round((dev.testMetrics.pass / dev.testMetrics.total) * 100) : 0;
     const roleLevel = governanceRoleLevel(dev.person);
     const useTestMetrics = roleLevel === accessLevels.qa;
+    // Gestao/Gerente "puros" (sem Dev/QA acumulado) nao entregam nem testam
+    // cards de verdade — mostrar "Entrega"/"Qualidade" pra eles fingia um
+    // trabalho que nao existe. Pedido do usuario: metricas de Gestao podem
+    // ser genericas, so as de Dev/QA precisam provar o que cada um fez.
+    const isManagementOnly = (roleLevel === accessLevels.gestao || roleLevel === accessLevels.gerente) && !dev.person?.isDev && !dev.person?.isQa;
     const countryEntries = Object.entries(dev.countries).sort((a, b) => b[1] - a[1]);
     const visibleCountries = countryEntries.slice(0, 5);
     const hiddenCountryCount = Math.max(0, countryEntries.length - visibleCountries.length);
@@ -1735,18 +1740,27 @@ export function HoursWorkbench() {
           {hiddenCountryCount > 0 && <span className="mbdhc-country-pill more" title={hiddenCountryTitle}>+{hiddenCountryCount}</span>}
         </div>
         <div className="mbdhc-progress" title={`${Math.round(dev.progressPercent)}% da meta`}><span /></div>
+        {/* Cards de Dev/QA mostravam os MESMOS 3 clusters (com um rotulo
+            generico "Resultado" repetido nos dois), o que dava a impressao
+            de que QA desenvolve e Dev testa. Agora cada papel tem exatamente
+            2 clusters com rotulo proprio provando o que a pessoa fez de
+            verdade: Dev = entrega + taxa de aprovacao nos proprios itens;
+            QA = cobertura de teste + resultados que ela encontrou. Gestao
+            "pura" (sem Dev/QA acumulado) fica com um resumo generico —
+            ela nao entrega nem testa cards, entao fingir essas metricas so
+            confundia. */}
         <div className="mbdhc-dev-metric-clusters">
-          {useTestMetrics ? (
+          {isManagementOnly ? (
+            <div className="mbdhc-metric-cluster primary"><strong>Resumo</strong><span><b>{dev.items.length}</b><small>cards no periodo</small></span><span><b>{formatHours(dev.completed)}</b><small>horas</small></span></div>
+          ) : useTestMetrics ? (
             <>
-              <div className="mbdhc-metric-cluster primary"><strong>Testes</strong><span><b>{dev.testMetrics.total}</b><small>total</small></span><span><b>{dev.testedItems}</b><small>feitos</small></span></div>
-              <div className="mbdhc-metric-cluster quality"><strong>Resultado</strong><span className="approved"><b>{dev.testMetrics.pass}</b><small>pass</small></span><span className="fail"><b>{dev.testMetrics.fail}</b><small>fail</small></span><span className="limitation"><b>{dev.testMetrics.limitation}</b><small>lim.</small></span></div>
-              <div className="mbdhc-metric-cluster queue"><strong>Fila</strong><span><b>{dev.qaResponsibleCount}</b><small>QA resp.</small></span><span><b>{dev.pendingToTestCount}</b><small>pend.</small></span><span><b>{testPassRate}%</b><small>rate</small></span></div>
+              <div className="mbdhc-metric-cluster primary"><strong>Cobertura de teste</strong><span><b>{dev.testMetrics.total}</b><small>testados</small></span><span><b>{dev.pendingToTestCount}</b><small>na fila</small></span><span><b>{dev.qaResponsibleCount}</b><small>sob resp.</small></span></div>
+              <div className="mbdhc-metric-cluster quality"><strong>Resultados encontrados</strong><span className="approved"><b>{dev.testMetrics.pass}</b><small>aprovados</small></span><span className="fail"><b>{dev.testMetrics.fail}</b><small>bugs achados</small></span><span className="limitation"><b>{dev.testMetrics.limitation}</b><small>limitacao</small></span></div>
             </>
           ) : (
             <>
-              <div className="mbdhc-metric-cluster primary"><strong>Trabalho</strong><span><b>{dev.testableItems}</b><small>testaveis</small></span><span><b>{dev.nonTestableItems}</b><small>nao test.</small></span><span><b>{dev.testMetrics.total}</b><small>testes</small></span></div>
-              <div className="mbdhc-metric-cluster quality"><strong>Resultado</strong><span className="approved"><b>{dev.testMetrics.pass}</b><small>pass</small></span><span className="fail"><b>{dev.testMetrics.fail}</b><small>fail</small></span><span className="limitation"><b>{dev.testMetrics.limitation}</b><small>lim.</small></span></div>
-              <div className="mbdhc-metric-cluster queue"><strong>Entrega</strong><span><b>{dev.items.length}</b><small>cards</small></span><span><b>{dev.tasks}</b><small>tasks</small></span><span><b>{dev.bugs}</b><small>bugs</small></span><span><b>{dev.goalStatus === "above" ? `+${formatHours(dev.extraHours)}` : `-${formatHours(dev.missingHours)}`}</b><small>saldo</small></span></div>
+              <div className="mbdhc-metric-cluster primary"><strong>Entrega</strong><span><b>{dev.items.length}</b><small>cards</small></span><span><b>{dev.tasks}</b><small>tasks</small></span><span><b>{dev.bugs}</b><small>bugs</small></span></div>
+              <div className="mbdhc-metric-cluster quality"><strong>Qualidade · {testPassRate}% aprovacao</strong><span className="approved"><b>{dev.testMetrics.pass}</b><small>aprovados</small></span><span className="fail"><b>{dev.testMetrics.fail}</b><small>reprovados</small></span><span className="limitation"><b>{dev.testMetrics.limitation}</b><small>limitacao</small></span></div>
             </>
           )}
         </div>
