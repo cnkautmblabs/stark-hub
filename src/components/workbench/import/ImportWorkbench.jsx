@@ -15,6 +15,7 @@ import {
 import { csvCell } from "../../../utils/workbench/formatters.js";
 import { dateStamp, downloadCsv } from "../../../utils/csvExport.js";
 import { Button, EmptyState, InfoTooltip, Kpi, TextField, TypeBadge, WorkbenchHeader, typeIconSrc } from "../ui/WorkbenchPrimitives.jsx";
+import { CreateWorkItemWizard } from "./CreateWorkItemWizard.jsx";
 
 const manualTypeOptions = ["Epic", "Feature", "User Story", "Task", "Test Case", "Bug"];
 
@@ -339,6 +340,7 @@ export function ImportWorkbench() {
   const [manualDraft, setManualDraft] = useState({ type: "Epic", title: "", tags: [], tagInput: "", description: "", parentId: "" });
   const [manualEditItemId, setManualEditItemId] = useState(null);
   const [showManualModal, setShowManualModal] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
   const [draggingId, setDraggingId] = useState(null);
   const [dropTargetId, setDropTargetId] = useState(null);
   const [dragOverRoot, setDragOverRoot] = useState(false);
@@ -596,7 +598,9 @@ export function ImportWorkbench() {
         title="Import Work Items"
         subtitle="Monte a hierarquia manualmente ou cole um CSV, revise a previa e importe."
         demoMode={demoMode}
+        actions={<Button tone="primary" onClick={() => setShowWizard(true)}><i className="bi bi-magic" /> Criar Work Item</Button>}
       />
+      {showWizard && <CreateWorkItemWizard onClose={() => setShowWizard(false)} />}
       <input ref={fileRef} type="file" hidden accept=".csv,.tsv,.txt" onChange={handleFile} />
       <div className="mbwi-drawer-react">
         <nav className="mbwi-tabs-react">
