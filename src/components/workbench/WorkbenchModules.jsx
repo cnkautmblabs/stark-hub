@@ -324,6 +324,7 @@ export function QaBoardWorkbench() {
   const [iterationFrom, setIterationFrom] = usePersistentState("starkHubFilters:qaBoard:iterationFrom", "");
   const [iterationTo, setIterationTo] = usePersistentState("starkHubFilters:qaBoard:iterationTo", "");
   const [sort, setSort] = usePersistentState("starkHubFilters:qaBoard:sort", "changed_desc");
+  const [groupBy, setGroupBy] = usePersistentState("starkHubFilters:qaBoard:groupBy", "none");
   const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [chartsCollapsed, setChartsCollapsed] = usePersistentState("starkHubFilters:qaBoard:chartsCollapsed", false);
   const [newItem, setNewItem] = useState({ type: "Bug", country: "BR", title: "", state: "In QA" });
@@ -424,6 +425,34 @@ export function QaBoardWorkbench() {
   }, { pass: 0, fail: 0, limitation: 0, pending: 0 });
   const countriesInBoard = Array.from(new Set(filtered.flatMap((item) => item.countries || []))).sort();
 
+  // Agrupamento do board — pedido explicito do usuario ("filtros por
+  // agrupamento": ambiente, QA responsavel, assignee, pais). Mesmo padrao
+  // ja usado em Meus Itens (groupsForItems: hours/source), so troca as
+  // dimensoes. Um item pode pertencer a mais de um pais, entao aparece em
+  // mais de um grupo quando agrupado por pais — intencional.
+  function groupsForBoard(list) {
+    if (groupBy === "ambiente") {
+      return qaStatusOrder.map((key) => ({ key, label: qaStatusConfig[key].label, items: list.filter((item) => qaStatusInfo(item.state).key === key) }));
+    }
+    if (groupBy === "qa") {
+      return ["", ...qaPeople.map((person) => person.id)].map((id) => {
+        const person = byId.get(id);
+        return { key: id || "none", label: person?.azureName || "Nao definido", items: list.filter((item) => (item.qaCollaboratorId || "") === id) };
+      });
+    }
+    if (groupBy === "assignee") {
+      const ids = Array.from(new Set(list.map((item) => item.assigneeId).filter(Boolean)));
+      const groups = ids.map((id) => ({ key: id, label: byId.get(id)?.azureName || "Sem responsavel", items: list.filter((item) => item.assigneeId === id) }))
+        .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+      const unassigned = list.filter((item) => !item.assigneeId);
+      return unassigned.length ? [...groups, { key: "none", label: "Sem responsavel", items: unassigned }] : groups;
+    }
+    if (groupBy === "country") {
+      return countriesInBoard.map((country) => ({ key: country, label: country, items: list.filter((item) => (item.countries || []).includes(country)) }));
+    }
+    return [{ key: "all", label: "Todos", items: list }];
+  }
+
   useEffect(() => {
     const target = consumePendingWorkItemHighlight() || readWorkItemHash();
     if (target) window.setTimeout(() => highlightWorkItem(target), 250);
@@ -508,6 +537,15 @@ export function QaBoardWorkbench() {
 
     return (
       <article key={item.id} className={`mbaz-card ${expanded ? "expanded" : ""} ${age >= 7 ? "mbaz-critical-highlight" : ""}`} data-id={item.id} data-work-item-id={item.id} data-work-item-type={String(item.type || "work item").toLowerCase()} style={{ borderLeftColor: type.color, "--wi-type-color": type.color, "--wi-type-bg": type.bg }}>
+        <div className="mbaz-card-compact-row">
+          <div className="mbaz-card-compact-top">
+            <span className="mbaz-type-icon" title={item.type}><img src={type.image} alt={item.type} /></span>
+            <button className="mbaz-id" type="button" onClick={() => setActiveItem(item)}>{formatWorkItemCode(item.id, item.type)}</button>
+            <span className={`mbaz-pill state`} style={{ background: status.bg, color: status.color }}>{status.label}</span>
+            <AvatarDot person={assignee} name={item.assigneeName} compact />
+          </div>
+          <button type="button" className="mbaz-card-compact-title" onClick={() => setActiveItem(item)} title={item.title}>{item.title}</button>
+        </div>
         <div className="mbaz-card-row mbaz-card-topline">
           <div className="mbaz-card-left">
             <span className={`mbaz-pill state ${status.key?.startsWith("ready") ? "ready" : ""}`} style={{ background: status.bg, color: status.color }}><i className={`bi ${status.icon}`} />{status.label}</span>
@@ -578,7 +616,9 @@ export function QaBoardWorkbench() {
         <div className="mbaz-tabs">
           <div className="mbaz-search"><FiSearch /><input id="mbaz-search" className="mbaz-input" placeholder="Buscar por id, titulo, pessoa, pais..." value={search} onChange={(event) => setSearch(event.target.value)} /></div>
           <button id="mbaz-toggle-create" className="mbaz-btn" type="button" onClick={() => setShowCreate((value) => !value)}>Novo</button>
-          <button id="mbaz-view-toggle" className="mbaz-icon-btn" type="button" title="Alternar grid" onClick={() => setViewMode((value) => value === "grid" ? "list" : "grid")}><i className={`bi ${viewMode === "grid" ? "bi-view-list" : "bi-grid-3x3-gap"}`} /></button>
+          <button id="mbaz-view-toggle" className={`mbaz-icon-btn ${viewMode === "list" ? "active" : ""}`} type="button" title="Lista" onClick={() => setViewMode("list")}><i className="bi bi-view-list" /></button>
+          <button className={`mbaz-icon-btn ${viewMode === "grid" ? "active" : ""}`} type="button" title="Grid" onClick={() => setViewMode("grid")}><i className="bi bi-grid-3x3-gap" /></button>
+          <button className={`mbaz-icon-btn ${viewMode === "compact" ? "active" : ""}`} type="button" title="Compacto" onClick={() => setViewMode("compact")}><i className="bi bi-list" /></button>
           <button id="mbaz-refresh" className="mbaz-btn mbaz-primary" type="button" onClick={reload}><i className={`bi bi-arrow-clockwise ${refreshing ? "mbw-spin" : ""}`} /> Atualizar</button>
           <button id="mbaz-export" className="mbaz-icon-btn" type="button" title="Exportar CSV" onClick={() => exportQaCsv(filtered)}><i className="bi bi-download" /></button>
         </div>
@@ -593,6 +633,7 @@ export function QaBoardWorkbench() {
                   <FilterCombobox label="QA" options={qaOptions} values={qaFilter} onChange={setQaFilter} placeholder="Buscar QA" renderOption={(option) => option.person ? <AvatarDot person={option.person} name={option.label} /> : option.label} />
                   <FilterCombobox label="Status" options={statusOptions} values={statusFilter} onChange={setStatusFilter} placeholder="Buscar status" />
                   <FilterCombobox label="Resultado" options={resultOptions} values={resultFilter} onChange={setResultFilter} placeholder="Buscar resultado" />
+                  <FilterCombobox label="Agrupar" options={[{ value: "none", label: "Sem agrupamento" }, { value: "ambiente", label: "Por ambiente" }, { value: "qa", label: "Por QA responsavel" }, { value: "assignee", label: "Por assignee" }, { value: "country", label: "Por pais" }]} values={[groupBy]} multiple={false} onChange={(value) => setGroupBy(value || "none")} />
                   <div className="mbaz-sort-wrap"><label>Detalhes dos testes</label><button id="mbaz-toggle-all-tests" className="mbaz-btn" type="button" aria-pressed={expandedIds.size > 0} onClick={toggleAllTests}>{expandedIds.size === filtered.length && filtered.length ? "Recolher todos" : "Expandir todos"}</button></div>
                   <div className="mbaz-sort-wrap"><label>Ordenar</label><select id="mbaz-sort" className="mbaz-select" value={sort} onChange={(event) => setSort(event.target.value)}><option value="changed_desc">Mais recentes</option><option value="title_asc">A-Z</option><option value="title_desc">Z-A</option><option value="bug_first">Bug primeiro</option><option value="story_first">User Story primeiro</option></select></div>
                   <div id="mbaz-sprint-filter" ref={sprintFilterRef} className={`mbw-combobox ${sprintOpen ? "open" : ""}`} data-kind="sprint">
@@ -755,8 +796,13 @@ export function QaBoardWorkbench() {
                   <button className="mbaz-btn mbaz-primary" type="submit">Criar</button>
                 </div>
               </form>
-              <div id="mbaz-results" className={`mbaz-results ${viewMode === "grid" ? "grid" : ""}`}>
-                {loading ? <WorkbenchCardSkeleton rows={8} mode={viewMode === "grid" ? "grid" : "list"} /> : filtered.length ? filtered.map(renderCard) : <div className="mbaz-empty">Nenhum work item encontrado.</div>}
+              <div id="mbaz-results" className={`mbaz-results mode-${viewMode} ${viewMode === "grid" ? "grid" : ""} ${groupBy !== "none" ? "is-grouped" : ""}`}>
+                {loading ? <WorkbenchCardSkeleton rows={8} mode={viewMode === "grid" ? "grid" : viewMode} /> : filtered.length ? groupsForBoard(filtered).map((group) => groupBy === "none" ? group.items.map(renderCard) : (
+                  <details key={group.key} className="mb-my-group" open>
+                    <summary><span>{group.label}</span><b>{group.items.length}</b></summary>
+                    <div className="mb-my-group-body">{group.items.length ? group.items.map(renderCard) : <EmptyState title="Nenhum card neste grupo." />}</div>
+                  </details>
+                )) : <div className="mbaz-empty">Nenhum work item encontrado.</div>}
               </div>
             </div>
           </ConnectionGate>

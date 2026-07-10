@@ -4771,6 +4771,11 @@ body {
   width: 32px;
   padding: 0;
 }
+.mbaz-react-shell .mbaz-icon-btn.active {
+  background: #0078d4;
+  border-color: #0078d4;
+  color: #fff;
+}
 .mbaz-react-shell .mbaz-btn {
   padding: 0 10px;
 }
@@ -5201,6 +5206,65 @@ body {
   background: var(--starkSurfaceAlt);
   align-self: start;
 }
+
+/* Visualizacao compacta do board (max. 2 linhas por card, pedido do
+   usuario): esconde todo o resto do card e mostra so a linha compacta
+   (icone+id+status+avatar na linha 1, titulo truncado na linha 2). */
+.mbaz-card-compact-row { display: none; }
+.mbaz-react-shell .mbaz-results.mode-compact .mbaz-card > *:not(.mbaz-card-compact-row) {
+  display: none;
+}
+.mbaz-react-shell .mbaz-results.mode-compact .mbaz-card {
+  padding: 6px 9px;
+}
+.mbaz-react-shell .mbaz-results.mode-compact .mbaz-card-compact-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mbaz-card-compact-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.mbaz-card-compact-top .mbaz-id { flex: none; }
+.mbaz-card-compact-top .mbaz-pill.state { flex: none; font-size: 10px; padding: 1px 6px; }
+.mbaz-card-compact-top .mbw-avatar-row { margin-left: auto; flex: none; }
+.mbaz-card-compact-title {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 11px;
+  color: var(--starkMuted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.mbaz-react-shell .mbaz-results.mode-compact.grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+}
+/* Agrupado: cada grupo ocupa a largura toda (nao divide coluna com outro
+   grupo) — so os CARDS dentro de cada grupo usam grid/lista/compacto. */
+.mbaz-react-shell .mbaz-results.grid.is-grouped,
+.mbaz-react-shell .mbaz-results.mode-compact.is-grouped {
+  grid-template-columns: 1fr;
+  display: grid;
+}
+.mbaz-react-shell .mbaz-results.grid.is-grouped .mb-my-group-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(355px, 100%), 1fr));
+  gap: 10px;
+}
+.mbaz-react-shell .mbaz-results.mode-compact.is-grouped .mb-my-group-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+  gap: 8px;
+}
 .mbaz-react-shell .mbaz-legend-item {
   display: inline-flex;
   align-items: center;
@@ -5285,7 +5349,7 @@ body {
 }
 .mbaz-react-shell .mbaz-results.grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(355px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(355px, 100%), 1fr));
   gap: 10px;
 }
 .mbaz-react-shell .mbaz-card {
