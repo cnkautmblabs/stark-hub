@@ -271,17 +271,22 @@ function WidgetModal({ type, initial, onClose, onSave, onDelete }) {
           <button type="button" onClick={onClose}><i className="bi bi-x-lg" /></button>
         </header>
         <div className="mb-home-modal-body">
-          <label>
-            <span>{t("home.titleLabel")} {titleMax && <em className="mb-home-modal-counter">{title.length}/{titleMax}</em>}</span>
-            <input value={title} maxLength={titleMax} onChange={(event) => setTitle(event.target.value)} placeholder={isShortcut ? t("home.shortcutTitlePlaceholder") : t("home.genericTitlePlaceholder")} autoFocus />
-          </label>
-          {!isNote && <label><span>{t("home.urlLabel")}</span><input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://..." /></label>}
-          {isNote && (
+          {isNote ? (
+            <input
+              className="mb-home-note-title"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder={t("home.genericTitlePlaceholder")}
+              autoFocus
+            />
+          ) : (
             <label>
-              <span>{t("home.noteLabel")}</span>
-              <RichNoteEditor initialValue={text} onChange={setText} />
+              <span>{t("home.titleLabel")} {titleMax && <em className="mb-home-modal-counter">{title.length}/{titleMax}</em>}</span>
+              <input value={title} maxLength={titleMax} onChange={(event) => setTitle(event.target.value)} placeholder={isShortcut ? t("home.shortcutTitlePlaceholder") : t("home.genericTitlePlaceholder")} autoFocus />
             </label>
           )}
+          {!isNote && <label><span>{t("home.urlLabel")}</span><input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://..." /></label>}
+          {isNote && <RichNoteEditor initialValue={text} onChange={setText} />}
           {!isNote && (
             <label>
               <span>{isShortcut ? t("home.iconLabelCentered") : t("home.iconLabelOptional")}</span>
@@ -292,14 +297,11 @@ function WidgetModal({ type, initial, onClose, onSave, onDelete }) {
             </label>
           )}
           {isNote && (
-            <label>
-              <span>{t("home.noteColorLabel")}</span>
-              <div className="mb-home-modal-note-colors">
-                {notePresetColors.map((preset) => (
-                  <button key={preset} type="button" className={`mb-home-modal-note-swatch ${color === preset ? "active" : ""}`} style={{ background: preset }} onClick={() => setColor(preset)} title={preset} />
-                ))}
-              </div>
-            </label>
+            <div className="mb-home-modal-note-colors">
+              {notePresetColors.map((preset) => (
+                <button key={preset} type="button" className={`mb-home-modal-note-swatch ${color === preset ? "active" : ""}`} style={{ background: preset }} onClick={() => setColor(preset)} title={preset} />
+              ))}
+            </div>
           )}
           {!isNote && !isShortcut && (
             <label className="mb-home-modal-color-row">
@@ -310,9 +312,9 @@ function WidgetModal({ type, initial, onClose, onSave, onDelete }) {
           {error && <div className="mb-home-modal-error">{error}</div>}
         </div>
         <footer>
-          {isEdit && <button type="button" className="danger" onClick={() => onDelete(initial.id)}><i className="bi bi-trash" /> {t("home.deleteButton")}</button>}
-          <button type="button" className="secondary" onClick={onClose}>{t("home.cancelButton")}</button>
-          <button type="submit" className="primary">{t("home.saveButton")}</button>
+          {isEdit && <button type="button" className="danger" onMouseDown={(event) => event.preventDefault()} onClick={() => onDelete(initial.id)}><i className="bi bi-trash" /> {t("home.deleteButton")}</button>}
+          <button type="button" className="secondary" onMouseDown={(event) => event.preventDefault()} onClick={onClose}>{t("home.cancelButton")}</button>
+          <button type="submit" className="primary" onMouseDown={(event) => event.preventDefault()}>{t("home.saveButton")}</button>
         </footer>
       </form>
     </div>
@@ -370,15 +372,41 @@ function WidgetCard({ widget, onRemove, onEdit, onDragStart, onDragOver, onDrop,
       <article className={`mb-home-widget note ${dragging ? "dragging" : ""}`} style={{ background: widget.color || "#fde68a" }} {...dragProps}>
         <span className="mb-home-widget-note-fold" aria-hidden="true" />
         <WidgetToolbar widget={widget} onEdit={onEdit} onRemove={onRemove} />
-        <button type="button" className="mb-home-widget-note-body" onClick={() => onEdit(widget)} title={t("home.clickToEditNote")}>
-          <strong>{widget.title}</strong>
-          {widget.text && <p dangerouslySetInnerHTML={{ __html: renderNoteHtml(widget.text) }} />}
-        </button>
+        <NoteCardBody widget={widget} onEdit={onEdit} />
       </article>
     );
   }
 
   return null;
+}
+
+// Titulo sempre no topo, descricao logo abaixo — o texto e clampado (5
+// linhas) via CSS, mas sem nenhum sinal de que falta conteudo o usuario nao
+// sabe que ha mais pra ver. Mede o overflow real (scrollHeight vs
+// clientHeight) pra so mostrar "Ver mais" quando o texto de fato foi
+// cortado, em vez de um palpite por tamanho de string.
+function NoteCardBody({ widget, onEdit }) {
+  const { t } = useTranslation();
+  const textRef = useRef(null);
+  const [overflowing, setOverflowing] = useState(false);
+
+  useEffect(() => {
+    const el = textRef.current;
+    if (!el) { setOverflowing(false); return; }
+    setOverflowing(el.scrollHeight > el.clientHeight + 1);
+  }, [widget.text]);
+
+  return (
+    <button type="button" className="mb-home-widget-note-body" onClick={() => onEdit(widget)} title={t("home.clickToEditNote")}>
+      <strong>{widget.title}</strong>
+      {widget.text && (
+        <div className="mb-home-widget-note-text-wrap">
+          <p ref={textRef} dangerouslySetInnerHTML={{ __html: renderNoteHtml(widget.text) }} />
+          {overflowing && <span className="mb-home-widget-note-more">{t("home.seeMore")}</span>}
+        </div>
+      )}
+    </button>
+  );
 }
 
 function WidgetsGrid({ widgets, onRemove, onReorder, onEdit }) {
@@ -480,13 +508,30 @@ function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, dateFro
   const { t } = useTranslation();
   const [title, setTitle] = useState("");
   const [type, setType] = useState("temporaria");
+  const [recurrenceKind, setRecurrenceKind] = useState("daily");
+  const [recurrenceInterval, setRecurrenceInterval] = useState(2);
+  const [recurrenceWeekday, setRecurrenceWeekday] = useState("monday");
   const [showPreview, setShowPreview] = useState(true);
 
   function submit(event) {
     event.preventDefault();
     if (!title.trim()) return;
-    onAdd({ id: Date.now(), title: title.trim(), type, createdAt: new Date().toISOString() });
+    onAdd({
+      id: Date.now(),
+      title: title.trim(),
+      type,
+      recurrence: type === "recorrente"
+        ? { kind: recurrenceKind, intervalDays: Number(recurrenceInterval || 1), weekday: recurrenceWeekday }
+        : null,
+      createdAt: new Date().toISOString()
+    });
     setTitle("");
+  }
+
+  function recurrenceLabel(entry) {
+    if (entry.type !== "recorrente") return t("home.todayTag");
+    const recurrence = entry.recurrence || { kind: "always" };
+    return t(`home.recurrence.${recurrence.kind}`, { count: recurrence.intervalDays || 1, weekday: t(`home.weekdays.${recurrence.weekday || "monday"}`) });
   }
 
   return (
@@ -516,6 +561,25 @@ function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, dateFro
               <button type="button" className={type === "temporaria" ? "active" : ""} onClick={() => setType("temporaria")}>{t("home.todayButton")}</button>
               <button type="button" className={type === "recorrente" ? "active" : ""} onClick={() => setType("recorrente")}>{t("home.recurringButton")}</button>
             </div>
+            {type === "recorrente" && (
+              <div className="mb-home-summary-recurrence">
+                <select value={recurrenceKind} onChange={(event) => setRecurrenceKind(event.target.value)} aria-label={t("home.recurrenceLabel")}>
+                  <option value="daily">{t("home.recurrence.daily")}</option>
+                  <option value="weekly">{t("home.recurrence.weekly")}</option>
+                  <option value="monthly">{t("home.recurrence.monthly")}</option>
+                  <option value="weekday">{t("home.recurrence.weekday", { weekday: t(`home.weekdays.${recurrenceWeekday}`) })}</option>
+                  <option value="everyNDays">{t("home.recurrence.everyNDays", { count: recurrenceInterval })}</option>
+                </select>
+                {recurrenceKind === "weekday" && (
+                  <select value={recurrenceWeekday} onChange={(event) => setRecurrenceWeekday(event.target.value)} aria-label={t("home.weekdayLabel")}>
+                    {["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].map((day) => <option key={day} value={day}>{t(`home.weekdays.${day}`)}</option>)}
+                  </select>
+                )}
+                {recurrenceKind === "everyNDays" && (
+                  <input type="number" min="1" max="365" value={recurrenceInterval} onChange={(event) => setRecurrenceInterval(event.target.value)} aria-label={t("home.intervalDaysLabel")} />
+                )}
+              </div>
+            )}
             <button type="submit" className="mb-home-summary-submit"><FiPlus /> {t("home.addButton")}</button>
           </form>
           <div className="mb-home-summary-range">
@@ -526,7 +590,7 @@ function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, dateFro
           <div className="mb-home-summary-list">
             {entries.map((entry) => (
               <div key={entry.id} className={`mb-home-summary-item ${entry.type}`}>
-                <span className="mb-home-summary-tag">{entry.type === "recorrente" ? t("home.recurringTag") : t("home.todayTag")}</span>
+                <span className="mb-home-summary-tag">{recurrenceLabel(entry)}</span>
                 <span className="mb-home-summary-title">{entry.title}</span>
                 <button type="button" onClick={() => onRemove(entry.id)} title={t("home.removeButton")}><i className="bi bi-x" /></button>
               </div>
@@ -1059,5 +1123,4 @@ export function WorkbenchHome() {
     </section>
   );
 }
-
 

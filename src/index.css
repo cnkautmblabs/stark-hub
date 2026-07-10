@@ -989,6 +989,105 @@ body {
 .stark-login-footer .stark-brand-footer-logo { height: 1.15em; width: auto; opacity: .95; }
 .stark-login-footer .stark-brand-footer-text { color: rgba(255,255,255,.55); font-size: 11px; white-space: normal; text-align: center; }
 .stark-login-footer .stark-brand-footer-text a { color: var(--starkAccent); }
+.stark-login-terms-note {
+  max-width: 460px;
+  color: rgba(255,255,255,.58);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.stark-login-terms-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(2, 6, 23, .78);
+  backdrop-filter: blur(10px);
+}
+.stark-login-terms-modal {
+  width: min(720px, 100%);
+  max-height: min(760px, calc(100vh - 40px));
+  overflow: auto;
+  border: 1px solid rgba(148, 163, 184, .36);
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #0f172a;
+  box-shadow: 0 24px 80px rgba(0,0,0,.35);
+  text-align: left;
+}
+.stark-login-terms-modal header,
+.stark-login-terms-modal footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border-bottom: 1px solid #cbd5e1;
+}
+.stark-login-terms-modal footer {
+  border-top: 1px solid #cbd5e1;
+  border-bottom: 0;
+  justify-content: flex-end;
+}
+.stark-login-terms-modal h2 {
+  margin: 4px 0 0;
+  font-size: 20px;
+  letter-spacing: 0;
+}
+.stark-login-terms-modal header span {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.stark-login-terms-modal header button,
+.stark-login-terms-modal footer button {
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #fff;
+  color: #0f172a;
+  min-height: 38px;
+  padding: 0 14px;
+  font-weight: 900;
+}
+.stark-login-terms-modal header button {
+  width: 40px;
+  padding: 0;
+}
+.stark-login-terms-modal footer button.primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-color: #0ea5e9;
+  background: #0ea5e9;
+  color: #fff;
+}
+.stark-login-terms-modal footer button.secondary {
+  background: #f8fafc;
+}
+.stark-login-terms-body {
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.stark-login-terms-body p,
+.stark-login-terms-body ul {
+  margin: 0;
+}
+.stark-login-terms-body ul {
+  padding-left: 20px;
+}
+.stark-login-terms-body li + li {
+  margin-top: 10px;
+}
 
 /* ---------- Dashboard de status do QA Board (cards clicáveis) ---------- */
 .stark-stat-card {
@@ -1512,6 +1611,7 @@ body {
   opacity: .4;
 }
 .mb-home-widget.note {
+  border-radius: 0;
   border-color: rgba(0,0,0,.08);
   box-shadow: 0 6px 16px rgba(0,0,0,.18);
   transform: rotate(-1deg);
@@ -1664,6 +1764,9 @@ body {
   font-weight: 900;
   margin-bottom: 4px;
 }
+.mb-home-widget-note-text-wrap {
+  position: relative;
+}
 .mb-home-widget-note-body p {
   margin: 0;
   font-size: 11.5px;
@@ -1672,6 +1775,14 @@ body {
   -webkit-line-clamp: 5;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+.mb-home-widget-note-more {
+  display: inline-block;
+  margin-top: 3px;
+  color: rgba(31,41,55,.6);
+  font-size: 10.5px;
+  font-weight: 800;
+  text-decoration: underline;
 }
 /* Atalho e link usam o mesmo visual: a imagem (favicon do site, em
    resolucao maior pra nao borrar ao esticar) preenche o card inteiro,
@@ -1784,6 +1895,7 @@ body {
   cursor: pointer;
 }
 .mb-home-modal.note {
+  border-radius: 0;
   box-shadow: 0 12px 30px rgba(0,0,0,.28);
 }
 .mb-home-modal.note header {
@@ -1801,6 +1913,14 @@ body {
   background: rgba(255,255,255,.55);
   border-color: rgba(0,0,0,.15);
   color: #1f2937;
+}
+.mb-home-modal.note .mb-home-modal-body input.mb-home-note-title {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid transparent;
+}
+.mb-home-modal.note .mb-home-modal-body input.mb-home-note-title:focus {
+  border-bottom-color: rgba(0,0,0,.3);
 }
 .mb-home-modal.note footer {
   border-top-color: rgba(0,0,0,.12);
@@ -1907,16 +2027,17 @@ body {
   margin-right: auto;
 }
 /* Dobra no canto do post-it — card e modal — pra parecer papel de verdade,
-   nao so um retangulo colorido. */
+   nao so um retangulo colorido. Post-it de verdade tem canto reto (sem
+   arredondar) e a dobra fica no canto INFERIOR direito, nao no superior. */
 .mb-home-widget-note-fold,
 .mb-home-modal-note-fold {
   position: absolute;
-  top: 0;
+  bottom: 0;
   right: 0;
   width: 22px;
   height: 22px;
   z-index: 1;
-  background: linear-gradient(135deg, transparent 50%, rgba(0,0,0,.16) 50%);
+  background: linear-gradient(315deg, transparent 50%, rgba(0,0,0,.16) 50%);
   pointer-events: none;
 }
 .mb-home-modal-note-fold {
@@ -1963,20 +2084,51 @@ body {
   flex-wrap: wrap;
   justify-content: flex-end;
 }
+/* Post-it sem cara de formulario: titulo e nota ficam como texto puro sobre
+   o papel colorido, sem caixa/borda visivel. Underline e a barra de
+   formatacao (B/I/U/marca-texto/cor) so aparecem ao focar o campo (:focus /
+   :focus-within) — pedido explicito do usuario pra parecer um post-it de
+   verdade em repouso, nao um form. */
+.mb-home-note-title {
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  color: #1f2937;
+  font-size: 16px;
+  font-weight: 800;
+  padding: 2px 0 4px;
+  font-family: inherit;
+}
+.mb-home-note-title::placeholder {
+  color: rgba(31,41,55,.45);
+  font-weight: 700;
+}
+.mb-home-note-title:focus {
+  outline: none;
+  border-bottom-color: rgba(0,0,0,.3);
+}
 /* Editor WYSIWYG do post-it: sem markdown visivel, formata em tempo real. */
 .mb-home-note-editor {
-  border: 1px solid rgba(0,0,0,.15);
+  border: 0;
   border-radius: 8px;
-  background: rgba(255,255,255,.55);
+  background: transparent;
   overflow: hidden;
 }
 .mb-home-note-toolbar {
-  display: flex;
+  display: none;
   align-items: center;
   gap: 4px;
   padding: 5px 6px;
+  margin-bottom: 4px;
   border-bottom: 1px solid rgba(0,0,0,.12);
   background: rgba(255,255,255,.4);
+  border-radius: 6px;
+}
+.mb-home-note-editor:focus-within .mb-home-note-toolbar {
+  display: flex;
+}
+.mb-home-note-editor:focus-within .mb-home-note-content {
+  border-bottom: 1px solid rgba(0,0,0,.3);
 }
 .mb-home-note-toolbar button,
 .mb-home-note-color {
@@ -2009,10 +2161,11 @@ body {
   min-height: 120px;
   max-height: 280px;
   overflow-y: auto;
-  padding: 10px;
+  padding: 2px 0;
   color: #1f2937;
   font-size: 12.5px;
   line-height: 1.6;
+  border-bottom: 1px solid transparent;
 }
 .mb-home-note-content:empty::before {
   content: attr(data-placeholder);
@@ -2107,6 +2260,25 @@ body {
 .mb-home-summary-type button.active {
   background: var(--starkAccent);
   color: #fff;
+}
+.mb-home-summary-recurrence {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(112px, auto);
+  gap: 8px;
+  align-items: center;
+}
+.mb-home-summary-recurrence select,
+.mb-home-summary-recurrence input {
+  min-height: 34px;
+  border: 1px solid var(--starkBorder);
+  border-radius: 7px;
+  background: var(--starkSurfaceAlt);
+  color: var(--starkText);
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
 }
 .mb-home-summary-submit {
   min-height: 34px;
