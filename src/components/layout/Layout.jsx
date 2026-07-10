@@ -75,23 +75,25 @@ export default function Layout() {
               </select>
             </label>
           )}
-          <NotificationBell />
-          <div className="stark-user-menu-wrap">
-            <button type="button" className="stark-user-menu-trigger" onClick={() => setUserMenuOpen((value) => !value)} aria-expanded={userMenuOpen}>
-              <IdentityAvatar name={displayName} imageUrl={avatarUrl} color={avatarColor} accessLevel={profile?.accessLevel} size={36} />
-              <span className="stark-user-menu-text">
-                <strong>{displayName}</strong>
-                <small>{email}</small>
-              </span>
-            </button>
-            {userMenuOpen && (
-              <div className="stark-user-menu">
-                <div className="stark-user-menu-level">{t("topbar.accessLevelPrefix")}: <b>{accessLabel}</b></div>
-                <Link to="/management/collaborators" onClick={() => setUserMenuOpen(false)}><FiUser /> {t("nav.profile")}</Link>
-                <LanguageSwitcher />
-                <button type="button" onClick={handleSignOut}><FiLogOut /> {demoMode ? t("topbar.signOutDemo") : t("topbar.signOut")}</button>
-              </div>
-            )}
+          <div className="stark-topbar-user-group">
+            <NotificationBell />
+            <div className="stark-user-menu-wrap">
+              <button type="button" className="stark-user-menu-trigger" onClick={() => setUserMenuOpen((value) => !value)} aria-expanded={userMenuOpen}>
+                <IdentityAvatar name={displayName} imageUrl={avatarUrl} color={avatarColor} accessLevel={profile?.accessLevel} size={36} />
+                <span className="stark-user-menu-text">
+                  <strong>{displayName}</strong>
+                  <small>{email}</small>
+                </span>
+              </button>
+              {userMenuOpen && (
+                <div className="stark-user-menu">
+                  <div className="stark-user-menu-level">{t("topbar.accessLevelPrefix")}: <b>{accessLabel}</b></div>
+                  <Link to="/management/collaborators" onClick={() => setUserMenuOpen(false)}><FiUser /> {t("nav.profile")}</Link>
+                  <LanguageSwitcher />
+                  <button type="button" onClick={handleSignOut}><FiLogOut /> {demoMode ? t("topbar.signOutDemo") : t("topbar.signOut")}</button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
         <main id="mb-workbench-content" className="workbench-content" aria-label="Conteudo do Stark Hub" onClick={() => userMenuOpen && setUserMenuOpen(false)}>

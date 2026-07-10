@@ -307,7 +307,7 @@ export function useWorkItems({ includeClosed = false } = {}) {
           continue;
         }
         if (!attachment?.dataUrl) continue;
-        const { data } = await supabase.functions.invoke("azureWorkItemAction", {
+        const { data: attachmentData, error: attachmentError } = await supabase.functions.invoke("azureWorkItemAction", {
           body: {
             action: "attachment",
             orgUrl: profile.azureOrgUrl,
@@ -318,7 +318,11 @@ export function useWorkItems({ includeClosed = false } = {}) {
             dataUrl: attachment.dataUrl
           }
         });
-        if (data?.ok && data.url) attachmentUrls.push(data.url);
+        if (attachmentData?.ok && attachmentData.url) {
+          attachmentUrls.push(attachmentData.url);
+        } else {
+          pushToast({ title: "Resultado de teste", body: `Falha ao anexar evidencia "${attachment.name || "imagem"}": ${attachmentData?.error || attachmentError?.message || ""}`, tone: "danger" });
+        }
       }
       // Dois tipos de FYI fixo: sempre (fixedMention) e so quando o
       // resultado e Fail/Limitation (fixedMentionOnFailure) — pedido
@@ -349,16 +353,26 @@ export function useWorkItems({ includeClosed = false } = {}) {
         attachments: attachmentUrls
       });
       if (patch.lastTestResult) {
-        await supabase.from("test_evidence").insert(environments.map((environment) => ({
+        // `environment` tem CHECK constraint no banco exigindo minusculo
+        // ('dev'/'qa'/'beta'/'prod'), mas o app usa mai­usculo em toda parte
+        // (environmentOptions em AzureWorkItemModal.jsx). Sem o
+        // toLowerCase(), TODO insert com ambiente selecionado violava a
+        // constraint e falhava em silencio (o await nunca checava o error) —
+        // a evidencia nunca era salva, mas a tela agia como se tivesse dado
+        // certo (bug real reportado pelo usuario em producao).
+        const { error: evidenceError } = await supabase.from("test_evidence").insert(environments.map((environment) => ({
           workItemId: id,
           result: patch.lastTestResult,
-          environment,
+          environment: String(environment || "").toLowerCase() || null,
           note: context || null,
           authorId: profile.id
         })));
+        if (evidenceError) {
+          pushToast({ title: "Resultado de teste", body: `Falha ao salvar evidencia: ${evidenceError.message}`, tone: "danger" });
+        }
       }
       if (!demoMode && azureReady && commentText) {
-        await supabase.functions.invoke("azureWorkItemAction", {
+        const { data: commentData, error: commentError } = await supabase.functions.invoke("azureWorkItemAction", {
           body: {
             action: "comment",
             orgUrl: profile.azureOrgUrl,
@@ -368,6 +382,9 @@ export function useWorkItems({ includeClosed = false } = {}) {
             text: commentText
           }
         });
+        if (commentError || commentData?.ok === false) {
+          pushToast({ title: "Resultado de teste", body: `Falha ao publicar no Azure DevOps: ${commentData?.error || commentError?.message || ""}`, tone: "danger" });
+        }
       }
       if (!demoMode && azureReady && patch.state) {
         await supabase.functions.invoke("azureWorkItemAction", {

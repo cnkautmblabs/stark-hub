@@ -222,6 +222,12 @@ body {
   font-weight: 800;
   cursor: pointer;
 }
+.stark-topbar-user-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
 .stark-user-menu-wrap {
   position: relative;
   min-width: 0;
