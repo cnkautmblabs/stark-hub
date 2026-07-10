@@ -10,6 +10,7 @@ import { normalize } from "../../utils/workbench/formatters.js";
 import { IdentityAvatar } from "../workbench/ui/WorkbenchPrimitives.jsx";
 import { BrowserNotificationWatcher } from "../common/BrowserNotificationWatcher.jsx";
 import { LanguageSwitcher } from "../common/LanguageSwitcher.jsx";
+import { NotificationBell } from "../common/NotificationBell.jsx";
 
 function MBLabsMark() {
   const base = import.meta.env.BASE_URL;
@@ -74,6 +75,7 @@ export default function Layout() {
               </select>
             </label>
           )}
+          <NotificationBell />
           <div className="stark-user-menu-wrap">
             <button type="button" className="stark-user-menu-trigger" onClick={() => setUserMenuOpen((value) => !value)} aria-expanded={userMenuOpen}>
               <IdentityAvatar name={displayName} imageUrl={avatarUrl} color={avatarColor} accessLevel={profile?.accessLevel} size={36} />

@@ -29,6 +29,7 @@ function AboutContent() {
   const { t } = useTranslation();
   const modules = t("faqAbout.modules", { returnObjects: true });
   const accessLevelRows = t("faqAbout.accessLevelRows", { returnObjects: true });
+  const securityPoints = t("faqAbout.aboutSecurityPoints", { returnObjects: true });
   return (
     <>
       <section className="mbw-about-section">
@@ -58,8 +59,16 @@ function AboutContent() {
         </table>
       </section>
       <section className="mbw-about-section">
-        <h3>{t("faqAbout.aboutSecurityTitle")}</h3>
-        <p>{t("faqAbout.aboutSecurityP1Prefix")} <code>docs/security-hardening.md</code>.</p>
+        <div className="mbw-about-security-card">
+          <div className="mbw-about-security-header">
+            <i className="bi bi-shield-check" />
+            <h3>{t("faqAbout.aboutSecurityTitle")}</h3>
+          </div>
+          <p>{t("faqAbout.aboutSecurityIntro")}</p>
+          <ul>
+            {securityPoints.map((point) => <li key={point}>{point}</li>)}
+          </ul>
+        </div>
       </section>
       <section className="mbw-about-section">
         <h3>{t("faqAbout.aboutCreditsTitle")}</h3>
@@ -80,10 +89,11 @@ export function AboutWorkbench({ kind = "about" }) {
     }
     const modules = t("faqAbout.modules", { returnObjects: true });
     const accessLevelRows = t("faqAbout.accessLevelRows", { returnObjects: true });
+    const securityPoints = t("faqAbout.aboutSecurityPoints", { returnObjects: true });
     downloadCsv(`sobre-${dateStamp()}.csv`, [t("faqAbout.csvSection"), t("faqAbout.csvContent")], [
       [t("faqAbout.csvModules"), modules.map((item) => `${item.title}: ${item.text}`).join("\n")],
       [t("faqAbout.csvAccessLevels"), accessLevelRows.map((row) => `${row.level}: ${row.scope}`).join("\n")],
-      [t("faqAbout.csvSecurity"), t("faqAbout.csvSecurityContent")],
+      [t("faqAbout.csvSecurity"), securityPoints.join("\n")],
       [t("faqAbout.csvCredits"), t("faqAbout.csvCreditsContent")]
     ]);
   }

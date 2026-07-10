@@ -29,6 +29,11 @@ export default {
     signOut: "Cerrar sesion",
     signOutDemo: "Salir del demo"
   },
+  notificationHistory: {
+    title: "Notificaciones",
+    clear: "Limpiar historial",
+    empty: "Todavia no hay notificaciones."
+  },
   login: {
     title: "Stark Hub",
     subtitle: "Gobernanza, QA y productividad del equipo.",
@@ -942,7 +947,6 @@ export default {
     csvModules: "Modulos",
     csvAccessLevels: "Niveles de acceso",
     csvSecurity: "Seguridad",
-    csvSecurityContent: "Azure vía backend, conexiones personales locales y configuraciones globales protegidas por policy.",
     csvCredits: "Creditos",
     csvCreditsContent: "Desarrollado por Matheus Bonotto, QA en mblabs.",
     faqItems: [
@@ -982,7 +986,14 @@ export default {
     aboutModulesTitle: "Modulos",
     aboutAccessTitle: "Niveles de acceso",
     aboutSecurityTitle: "Seguridad y privacidad",
-    aboutSecurityP1Prefix: "Azure DevOps siempre se accede vía backend (Edge Functions); ningun PAT queda hardcodeado ni expuesto en el bundle del frontend. Las conexiones personales (Dev/QA) quedan en localStorage, aisladas por usuario y navegador. Las configuraciones globales (Gestion) quedan en Supabase, protegidas por policy. Detalles completos en",
+    aboutSecurityIntro: "Resumen de como Stark Hub protege credenciales y datos de acceso:",
+    aboutSecurityPoints: [
+      "Azure DevOps siempre se accede via backend (Edge Functions de Supabase); el token personal (PAT) nunca queda hardcodeado ni expuesto en el bundle del frontend.",
+      "Las conexiones personales de Dev/QA (PAT, webhooks, pipelines) quedan solo en el localStorage del propio navegador, aisladas por usuario — nunca se envian a otro lugar mas alla del backend al hacer una llamada.",
+      "Las configuraciones globales (metas, feature flags, Slack/pipeline compartido) quedan en Supabase, protegidas por policy — Dev/QA no pueden ver ni editar ese alcance.",
+      "Las exportaciones de datos respetan el nivel de acceso de quien exporta y nunca incluyen el PAT ni un secreto compartido, ni siquiera en exports de Gestion.",
+      "El modo demostracion usa datos totalmente ficticios, guardados solo en tu navegador — ninguna credencial o conexion real se usa alli."
+    ],
     aboutCreditsTitle: "Creditos",
     aboutCreditsPrefix: "Desarrollado por",
     aboutCreditsSuffix: ", QA en mblabs."

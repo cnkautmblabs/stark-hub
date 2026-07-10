@@ -450,6 +450,23 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
     return typeof attachment === "string" ? attachment : attachment.id || attachment.dataUrl || attachment.name;
   }
 
+  function serializeDraftAttachments(list = []) {
+    return list.map((attachment) => {
+      if (typeof attachment === "string") return attachment;
+      return {
+        id: attachment.id,
+        name: attachment.name,
+        type: attachment.type,
+        size: attachment.size,
+        persisted: Boolean(attachment.persisted)
+      };
+    });
+  }
+
+  function restoreDraftAttachments(list = []) {
+    return list.filter((attachment) => typeof attachment === "string" || attachment?.persisted);
+  }
+
   function removeAttachment(target) {
     const key = attachmentKey(target);
     setAttachments((current) => current.filter((entry) => attachmentKey(entry) !== key));
@@ -465,7 +482,7 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
       setSelectedCountries(Array.isArray(draft?.countries) ? draft.countries : []);
       setSelectedEnvironments(Array.isArray(draft?.environments) && draft.environments.length ? draft.environments : ["QA"]);
       setSelectedBreakpoints(Array.isArray(draft?.breakpoints) && draft.breakpoints.length ? draft.breakpoints : ["desktop"]);
-      setAttachments(Array.isArray(draft?.attachments) ? draft.attachments : []);
+      setAttachments(Array.isArray(draft?.attachments) ? restoreDraftAttachments(draft.attachments) : []);
     } catch {
       setResult("");
       setState("Ready to Beta");
@@ -485,15 +502,31 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
       localStorage.removeItem(key);
       return;
     }
-    localStorage.setItem(key, JSON.stringify({
-      result,
-      state,
-      context,
-      countries: selectedCountries,
-      environments: selectedEnvironments,
-      breakpoints: selectedBreakpoints,
-      attachments
-    }));
+    try {
+      localStorage.setItem(key, JSON.stringify({
+        result,
+        state,
+        context,
+        countries: selectedCountries,
+        environments: selectedEnvironments,
+        breakpoints: selectedBreakpoints,
+        attachments: serializeDraftAttachments(attachments)
+      }));
+    } catch (err) {
+      if (err?.name === "QuotaExceededError") {
+        localStorage.setItem(key, JSON.stringify({
+          result,
+          state,
+          context,
+          countries: selectedCountries,
+          environments: selectedEnvironments,
+          breakpoints: selectedBreakpoints,
+          attachments: []
+        }));
+      } else {
+        throw err;
+      }
+    }
   }, [item?.id, result, state, context, selectedCountries, selectedEnvironments, selectedBreakpoints, attachments]);
 
   function readEvidenceFiles(fileList) {

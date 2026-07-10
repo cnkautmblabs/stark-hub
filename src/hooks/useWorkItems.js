@@ -11,22 +11,37 @@ import { getDemoWorkItems, updateDemoWorkItem, addDemoWorkItem } from "../utils/
 import { playNotificationSound } from "../utils/notificationSounds.js";
 import { azureWorkItemUrl } from "../utils/azure.js";
 import { buildApiCacheKey, readApiCache, stableSignature, withInflight, writeApiCache } from "../utils/localApiCache.js";
-import { buildCollaboratorNameIndex, findCollaboratorByName } from "../utils/workbench/formatters.js";
+import { buildCollaboratorNameIndex, findCollaboratorByName, qaStatusInfo } from "../utils/workbench/formatters.js";
 
 const MAX_TOASTS_PER_GROUP = 4;
 const WORK_ITEMS_CACHE_TTL_MS = 60 * 1000;
 
+// `useWorkItems()` e chamado por varias telas ao mesmo tempo (Home, tela
+// atual, BrowserNotificationWatcher no Layout) — cada uma com seu proprio
+// polling e seu proprio `previousStateByIdRef`. Sem isso, a MESMA transicao
+// real (ex.: item entrou em QA) dispara um toast/som por instancia montada,
+// duplicando a notificacao. Chave = tipo+item+estado-alvo, escopo modulo
+// (compartilhado por todas as instancias do hook na mesma aba).
+const notifiedTransitionKeys = new Set();
+
 // Compara o estado anterior (por id) com a lista fresca e dispara toast +
-// som pros 3 eventos que o usuario pediu: item novo no board, item que
-// entrou em QA, item que entrou em BETA. So roda a partir da SEGUNDA carga
-// bem-sucedida (previousStateById != null) — na primeira carga tudo "e
-// novo", o que so criaria uma enxurrada de toasts sem sentido.
-function notifyTransitions({ previousStateById, previousUpdatedById, freshItems, pushToast, profile, user }) {
+// som pros eventos relevantes: item novo no board, item que entrou em QA,
+// item que entrou em BETA, e item que mudou pra outro status que tambem
+// aparece em "Atualizacoes recentes" (HMG CNK, Ready Prod etc.). So roda a
+// partir da SEGUNDA carga bem-sucedida (previousStateById != null) — na
+// primeira carga tudo "e novo", o que so criaria uma enxurrada de toasts
+// sem sentido.
+//
+// Importante: o gatilho e MUDANCA DE ESTADO, nao "qualquer campo mudou"
+// (era assim antes — usava updatedAt, que muda pra qualquer edicao no Azure,
+// incluindo itens sem nenhuma relevancia de QA, gerando toast pra coisa que
+// nunca aparecia em "Atualizacoes recentes").
+function notifyTransitions({ previousStateById, freshItems, pushToast, profile, user }) {
   if (!previousStateById) return;
   const newItems = [];
   const enteredQa = [];
   const enteredBeta = [];
-  const updatedItems = [];
+  const otherStatusChanges = [];
   freshItems.forEach((item) => {
     const state = String(item.state || "").toLowerCase();
     const prevState = previousStateById.get(item.id);
@@ -34,35 +49,45 @@ function notifyTransitions({ previousStateById, previousUpdatedById, freshItems,
       newItems.push(item);
       return;
     }
-    const updatedAt = String(item.updatedAt || item.changedDate || item.changedAt || "");
-    const prevUpdatedAt = previousUpdatedById?.get(item.id);
-    if (updatedAt && prevUpdatedAt && updatedAt !== prevUpdatedAt) updatedItems.push(item);
     if (prevState === state) return;
-    if (state.includes("qa") && !prevState.includes("qa")) enteredQa.push(item);
-    if (state.includes("beta") && !prevState.includes("beta")) enteredBeta.push(item);
+    if (state.includes("qa") && !prevState.includes("qa")) { enteredQa.push(item); return; }
+    if (state.includes("beta") && !prevState.includes("beta")) { enteredBeta.push(item); return; }
+    if (qaStatusInfo(item.state).key) otherStatusChanges.push(item);
   });
 
-  function notifyGroup(list, { type, title, tone }) {
+  function notifyGroup(list, { type, title, tone, bodyFor }) {
     if (!list.length) return;
-    const shown = list.slice(0, MAX_TOASTS_PER_GROUP);
+    const fresh = list.filter((item) => {
+      const dedupeKey = `${type}:${item.id}:${item.state}`;
+      if (notifiedTransitionKeys.has(dedupeKey)) return false;
+      notifiedTransitionKeys.add(dedupeKey);
+      return true;
+    });
+    if (!fresh.length) return;
+    const shown = fresh.slice(0, MAX_TOASTS_PER_GROUP);
     shown.forEach((item) => {
       pushToast({
         title,
-        body: `${item.id} - ${item.title || "Sem titulo"}`,
+        body: bodyFor ? bodyFor(item) : `${item.id} - ${item.title || "Sem titulo"}`,
         tone,
         href: item.url || azureWorkItemUrl(profile?.azureOrgUrl, profile?.azureProject, item.id),
         workItemId: item.id,
         route: `${import.meta.env.BASE_URL}qa`
       });
     });
-    if (list.length > shown.length) pushToast({ title, body: `+${list.length - shown.length} outro(s) item(ns)`, tone });
+    if (fresh.length > shown.length) pushToast({ title, body: `+${fresh.length - shown.length} outro(s) item(ns)`, tone });
     playNotificationSound(type, profile, user);
   }
 
   notifyGroup(newItems, { type: "newItem", title: "Novo item no board", tone: "info" });
-  notifyGroup(updatedItems.filter((item) => !newItems.includes(item)).slice(0, 3), { type: "updatedItem", title: "Work item atualizado", tone: "info" });
   notifyGroup(enteredQa, { type: "itemEnteredQaBeta", title: "Item entrou em QA", tone: "warning" });
   notifyGroup(enteredBeta, { type: "itemEnteredQaBeta", title: "Item entrou em BETA", tone: "success" });
+  notifyGroup(otherStatusChanges, {
+    type: "updatedItem",
+    title: "Item mudou de status",
+    tone: "info",
+    bodyFor: (item) => `${item.id} - ${item.title || "Sem titulo"} · ${qaStatusInfo(item.state).label || item.state}`
+  });
 }
 
 // Fiel ao userscript legado: sem member ID real do Slack nao existe fallback
@@ -123,7 +148,6 @@ export function useWorkItems({ includeClosed = false } = {}) {
   // busca ampla do Dash executivo (includeClosed) e historica/multi-sprint,
   // notificar a cada refresh dela seria ruido, nao sinal.
   const previousStateByIdRef = useRef(null);
-  const previousUpdatedByIdRef = useRef(null);
 
   const persistItems = useCallback((nextItems) => {
     writeApiCache(cacheKey, nextItems);
@@ -148,7 +172,6 @@ export function useWorkItems({ includeClosed = false } = {}) {
       if (!hasLoadedRef.current) setItems(cached.data);
       if (!includeClosed && Array.isArray(cached.data) && !previousStateByIdRef.current) {
         previousStateByIdRef.current = new Map(cached.data.map((item) => [item.id, String(item.state || "").toLowerCase()]));
-        previousUpdatedByIdRef.current = new Map(cached.data.map((item) => [item.id, String(item.updatedAt || item.changedDate || item.changedAt || "")]));
       }
       hasLoadedRef.current = true;
       setLoading(false);
@@ -192,9 +215,8 @@ export function useWorkItems({ includeClosed = false } = {}) {
       setError(data?.error || invokeError?.message || "Falha ao consultar o Azure DevOps.");
     } else {
       if (!includeClosed) {
-        notifyTransitions({ previousStateById: previousStateByIdRef.current, previousUpdatedById: previousUpdatedByIdRef.current, freshItems: data.items, pushToast, profile, user });
+        notifyTransitions({ previousStateById: previousStateByIdRef.current, freshItems: data.items, pushToast, profile, user });
         previousStateByIdRef.current = new Map(data.items.map((item) => [item.id, String(item.state || "").toLowerCase()]));
-        previousUpdatedByIdRef.current = new Map(data.items.map((item) => [item.id, String(item.updatedAt || item.changedDate || item.changedAt || "")]));
       }
       const nextItems = data.items || [];
       const nextSignature = stableSignature(nextItems);

@@ -330,6 +330,150 @@ body {
   font-weight: 700;
   padding: 3px 4px;
 }
+.stark-bell-wrap {
+  position: relative;
+  flex: none;
+}
+.stark-bell-trigger {
+  position: relative;
+  min-width: 42px;
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--starkBorder);
+  border-radius: 999px;
+  background: var(--starkSurface);
+  color: var(--starkText);
+  font-size: 16px;
+  cursor: pointer;
+}
+.stark-bell-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 17px;
+  height: 17px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--starkSurface);
+}
+.stark-bell-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, .28);
+  z-index: 5990;
+}
+.stark-bell-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(360px, 100vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--starkSurface);
+  border-left: 1px solid var(--starkBorder);
+  box-shadow: -14px 0 34px rgba(15, 23, 42, .22);
+  z-index: 6000;
+  animation: mbToastIn .18s ease-out;
+}
+.stark-bell-panel-header {
+  min-height: 52px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--starkBorder);
+}
+.stark-bell-panel-header strong {
+  color: var(--starkText);
+  font-size: 13px;
+  font-weight: 900;
+}
+.stark-bell-panel-header button {
+  border: 0;
+  background: transparent;
+  color: var(--starkMuted);
+  cursor: pointer;
+  display: inline-flex;
+  padding: 4px;
+}
+.stark-bell-panel-actions {
+  flex: none;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--starkBorder);
+}
+.stark-bell-panel-actions button {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--starkBorder);
+  border-radius: 6px;
+  background: var(--starkSurfaceAlt);
+  color: var(--starkText);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.stark-bell-panel-actions button:disabled {
+  opacity: .5;
+  cursor: default;
+}
+.stark-bell-panel-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+}
+.stark-bell-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--starkBorder);
+  border-left: 4px solid #0b74de;
+  border-radius: 10px;
+  background: var(--starkSurfaceAlt);
+  cursor: pointer;
+}
+.stark-bell-entry.success { border-left-color: #16a34a; }
+.stark-bell-entry.warning { border-left-color: #d97706; }
+.stark-bell-entry.danger { border-left-color: #dc2626; }
+.stark-bell-entry strong {
+  color: var(--starkText);
+  font-size: 12px;
+}
+.stark-bell-entry span {
+  color: var(--starkMuted);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+.stark-bell-entry small {
+  color: var(--starkMuted);
+  font-size: 10px;
+  margin-top: 2px;
+}
+.stark-bell-empty {
+  color: var(--starkMuted);
+  font-size: 12px;
+  text-align: center;
+  padding: 24px 0;
+}
 .stark-app-footer {
   min-width: 0;
   height: 34px;
@@ -4644,6 +4788,44 @@ body {
 }
 .mbw-about-table tr:last-child td {
   border-bottom: 0;
+}
+.mbw-about-security-card {
+  border: 1px solid #16a34a;
+  border-radius: 10px;
+  background: color-mix(in srgb, #16a34a 8%, var(--starkSurfaceAlt));
+  padding: 14px 16px;
+}
+.mbw-about-security-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.mbw-about-security-header i {
+  color: #16a34a;
+  font-size: 18px;
+}
+.mbw-about-security-header h3 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--starkText);
+}
+.mbw-about-security-card p {
+  margin: 0 0 8px;
+  color: var(--starkMuted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.mbw-about-security-card ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+.mbw-about-security-card li {
+  color: var(--starkText);
+  font-size: 12.5px;
+  line-height: 1.55;
 }
 .mb-settings-switches,
 .mb-collaborators-list-react {

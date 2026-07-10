@@ -29,6 +29,11 @@ export default {
     signOut: "Sign out",
     signOutDemo: "Exit demo"
   },
+  notificationHistory: {
+    title: "Notifications",
+    clear: "Clear history",
+    empty: "No notifications yet."
+  },
   login: {
     title: "Stark Hub",
     subtitle: "Team governance, QA and productivity.",
@@ -942,7 +947,6 @@ export default {
     csvModules: "Modules",
     csvAccessLevels: "Access levels",
     csvSecurity: "Security",
-    csvSecurityContent: "Azure accessed via backend, local personal connections and global settings protected by policy.",
     csvCredits: "Credits",
     csvCreditsContent: "Built by Matheus Bonotto, QA at mblabs.",
     faqItems: [
@@ -982,7 +986,14 @@ export default {
     aboutModulesTitle: "Modules",
     aboutAccessTitle: "Access levels",
     aboutSecurityTitle: "Security and privacy",
-    aboutSecurityP1Prefix: "Azure DevOps is always accessed via backend (Edge Functions); no PAT is hardcoded or exposed in the frontend bundle. Personal connections (Dev/QA) live in localStorage, isolated per user and browser. Global settings (Management) live in Supabase, protected by policy. Full details in",
+    aboutSecurityIntro: "How Stark Hub protects credentials and access data:",
+    aboutSecurityPoints: [
+      "Azure DevOps is always accessed via backend (Supabase Edge Functions); the personal token (PAT) is never hardcoded or exposed in the frontend bundle.",
+      "Personal Dev/QA connections (PAT, webhooks, pipelines) live only in your own browser's localStorage, isolated per user — they are never sent anywhere besides the backend when making a call.",
+      "Global settings (goals, feature flags, shared Slack/pipeline) live in Supabase, protected by policy — Dev/QA cannot view or edit that scope.",
+      "Data exports respect the exporter's access level and never include a PAT or shared secret, even in Management exports.",
+      "Demo mode uses fully fictitious data, kept only in your browser — no real credential or connection is ever used there."
+    ],
     aboutCreditsTitle: "Credits",
     aboutCreditsPrefix: "Built by",
     aboutCreditsSuffix: ", QA at mblabs."

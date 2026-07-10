@@ -29,6 +29,11 @@ export default {
     signOut: "Sair",
     signOutDemo: "Sair do demo"
   },
+  notificationHistory: {
+    title: "Notificacoes",
+    clear: "Limpar historico",
+    empty: "Nenhuma notificacao ainda."
+  },
   login: {
     title: "Stark Hub",
     subtitle: "Governanca, QA e produtividade da equipe",
@@ -942,7 +947,6 @@ export default {
     csvModules: "Modulos",
     csvAccessLevels: "Niveis de acesso",
     csvSecurity: "Seguranca",
-    csvSecurityContent: "Azure via backend, conexoes pessoais locais e configuracoes globais protegidas por policy.",
     csvCredits: "Creditos",
     csvCreditsContent: "Desenvolvido por Matheus Bonotto, QA na mblabs.",
     faqItems: [
@@ -982,7 +986,14 @@ export default {
     aboutModulesTitle: "Modulos",
     aboutAccessTitle: "Niveis de acesso",
     aboutSecurityTitle: "Seguranca e privacidade",
-    aboutSecurityP1Prefix: "Azure DevOps e sempre acessado via backend (Edge Functions); nenhum PAT fica hardcoded ou exposto no bundle do frontend. Conexoes pessoais (Dev/QA) ficam em localStorage, isoladas por usuario e navegador. Configuracoes globais (Gestao) ficam no Supabase, protegidas por policy. Detalhes completos em",
+    aboutSecurityIntro: "Resumo de como o Stark Hub protege credenciais e dados de acesso:",
+    aboutSecurityPoints: [
+      "O Azure DevOps e sempre acessado via backend (Edge Functions do Supabase); o token pessoal (PAT) nunca fica hardcoded nem exposto no bundle do frontend.",
+      "Conexoes pessoais de Dev/QA (PAT, webhooks, pipelines) ficam so no localStorage do proprio navegador, isoladas por usuario — nunca sao enviadas para outro lugar alem do backend na hora de uma chamada.",
+      "Configuracoes globais (metas, feature flags, Slack/pipeline compartilhado) ficam no Supabase, protegidas por policy — Dev/QA nao conseguem ver nem editar esse escopo.",
+      "Exportacoes de dados respeitam o nivel de acesso de quem exporta e nunca incluem PAT ou segredo compartilhado, mesmo em exports de Gestao.",
+      "O modo demonstracao usa dados totalmente ficticios, guardados so no seu navegador — nenhuma credencial ou conexao real e usada nele."
+    ],
     aboutCreditsTitle: "Creditos",
     aboutCreditsPrefix: "Desenvolvido por",
     aboutCreditsSuffix: ", QA na mblabs."
