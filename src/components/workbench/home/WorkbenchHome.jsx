@@ -853,13 +853,13 @@ export function WorkbenchHome() {
   // Relatorios especializados de QA/Gestao continuam disponiveis nas
   // proprias telas de Testes/Governanca.
   function copySummary() {
-    return copyPersonalSummaryText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel });
+    return copyPersonalSummaryText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel, dateFrom: summaryRangeFrom, dateTo: summaryRangeTo });
   }
   function pdfSummary() {
-    return downloadPersonalSummaryPdf({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel, filename: `stark-hub-resumo-${displayName.split(" ")[0].toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf` });
+    return downloadPersonalSummaryPdf({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel, dateFrom: summaryRangeFrom, dateTo: summaryRangeTo, filename: `stark-hub-resumo-${displayName.split(" ")[0].toLowerCase()}-${new Date().toISOString().slice(0, 10)}.pdf` });
   }
   function printSummary() {
-    const text = buildPersonalSummaryText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel });
+    const text = buildPersonalSummaryText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel, dateFrom: summaryRangeFrom, dateTo: summaryRangeTo });
     const printWindow = window.open("", "_blank", "width=640,height=800");
     if (!printWindow) return;
     const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -881,13 +881,13 @@ export function WorkbenchHome() {
     if (error || !data?.ok) alert(`Nao foi possivel enviar ao Slack: ${error?.message || "verifique o webhook configurado."}`);
   }
   function slackSummary() {
-    sendSlack(buildPersonalSummarySlackText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel }));
+    sendSlack(buildPersonalSummarySlackText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel, dateFrom: summaryRangeFrom, dateTo: summaryRangeTo }));
   }
   function slackGovernance() {
     sendSlack(buildGovernanceSlackText({ totals: governanceTotals, rows: developerRows }));
   }
 
-  const summaryPreviewText = buildPersonalSummaryText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel });
+  const summaryPreviewText = buildPersonalSummaryText({ name: displayName, role: accessLabel, entries: summaryEntries, autoEntries, autoLabel, dateFrom: summaryRangeFrom, dateTo: summaryRangeTo });
 
   function exportHomeCsv() {
     downloadCsv(`home-${dateStamp()}.csv`, ["Secao", "Tipo", "Titulo", "Detalhe"], [

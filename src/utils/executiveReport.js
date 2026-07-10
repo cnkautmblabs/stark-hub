@@ -140,16 +140,34 @@ export async function downloadExecutiveReportPdf({ title, period, totals, rows, 
   doc.save(filename || `relatorio-executivo-${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
+// Data "YYYY-MM-DD" -> "dd/mm/aaaa" sem depender de fuso (new Date() em
+// string sem hora vira meia-noite UTC e pode voltar um dia em fusos
+// negativos) — o relatorio precisa mostrar exatamente a data escolhida.
+function formatIsoDatePt(value) {
+  const [year, month, day] = String(value || "").split("-");
+  return year && month && day ? `${day}/${month}/${year}` : String(value || "");
+}
+
+// "Periodo: 10/07/2026" quando de==ate, "Periodo: 10/07/2026 a 15/07/2026"
+// quando o usuario escolheu um intervalo de verdade.
+export function formatSummaryPeriod(dateFrom, dateTo) {
+  if (!dateFrom && !dateTo) return "";
+  if (!dateFrom || !dateTo || dateFrom === dateTo) return formatIsoDatePt(dateFrom || dateTo);
+  return `${formatIsoDatePt(dateFrom)} a ${formatIsoDatePt(dateTo)}`;
+}
+
 // Resumo executivo pessoal (Home) — lista livre de itens recorrentes
 // (sempre presentes, ex. "Daily") e temporários (só no resumo do dia,
 // ex. "1:1 com Nat"), com as mesmas ações de copiar/baixar do relatório
 // de equipe, mas sem a tabela por colaborador.
-export function buildPersonalSummaryText({ name, role, entries = [], autoEntries = [], autoLabel = "Hoje (automatico)" }) {
+export function buildPersonalSummaryText({ name, role, entries = [], autoEntries = [], autoLabel = "Hoje (automatico)", dateFrom, dateTo }) {
   const recurring = entries.filter((entry) => entry.type === "recorrente");
   const temporary = entries.filter((entry) => entry.type !== "recorrente");
+  const period = formatSummaryPeriod(dateFrom, dateTo);
   return [
     `Resumo executivo - ${name}${role ? ` (${role})` : ""}`,
     `Gerado em ${new Date().toLocaleString("pt-BR")}`,
+    period ? `Periodo dos itens automaticos: ${period}` : null,
     "",
     "Recorrentes:",
     ...(recurring.length ? recurring.map((entry) => `• ${entry.title}`) : ["• Nenhum"]),
@@ -157,7 +175,7 @@ export function buildPersonalSummaryText({ name, role, entries = [], autoEntries
     "Hoje:",
     ...(temporary.length ? temporary.map((entry) => `• ${entry.title}`) : ["• Nenhum"]),
     ...(autoEntries.length ? ["", `${autoLabel}:`, ...autoEntries.map((entry) => `• ${entry.title}`)] : [])
-  ].join("\n");
+  ].filter((line) => line !== null).join("\n");
 }
 
 export async function copyPersonalSummaryText(payload) {
@@ -238,11 +256,12 @@ export async function copyQaTestEvidenceReportText(payload) {
   return text;
 }
 
-export async function downloadPersonalSummaryPdf({ name, role, entries = [], autoEntries = [], autoLabel = "Hoje (automatico)", filename }) {
+export async function downloadPersonalSummaryPdf({ name, role, entries = [], autoEntries = [], autoLabel = "Hoje (automatico)", dateFrom, dateTo, filename }) {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 40;
+  const period = formatSummaryPeriod(dateFrom, dateTo);
   let y = 96;
 
   doc.setFillColor(...COLORS.header);
@@ -253,7 +272,7 @@ export async function downloadPersonalSummaryPdf({ name, role, entries = [], aut
   doc.text(`Resumo executivo - ${name}`, margin, 32);
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
-  doc.text(`${role || ""} — Gerado em ${new Date().toLocaleString("pt-BR")}`, margin, 50);
+  doc.text(`${role || ""} — Gerado em ${new Date().toLocaleString("pt-BR")}${period ? ` — Periodo: ${period}` : ""}`, margin, 50);
 
   function section(title, rows) {
     doc.setTextColor(...COLORS.header);

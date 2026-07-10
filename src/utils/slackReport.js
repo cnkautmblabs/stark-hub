@@ -1,4 +1,5 @@
 import { countries as countryCatalog, environments as environmentCatalog, formatWorkItemCode } from "./constants.js";
+import { formatSummaryPeriod } from "./executiveReport.js";
 
 // Mensagens no formato usado pelo stark-hub-script (referencia visual/textual
 // enviada pelo usuario): tags de emoji por tipo de work item (:bug-tag:,
@@ -231,12 +232,14 @@ export function buildGovernanceSlackText({ totals, rows }) {
 }
 
 // Resumo executivo pessoal (Home) formatado para Slack mrkdwn.
-export function buildPersonalSummarySlackText({ name, role, entries = [], autoEntries = [], autoLabel = "Hoje (automatico)" }) {
+export function buildPersonalSummarySlackText({ name, role, entries = [], autoEntries = [], autoLabel = "Hoje (automatico)", dateFrom, dateTo }) {
   const recurring = entries.filter((entry) => entry.type === "recorrente");
   const temporary = entries.filter((entry) => entry.type !== "recorrente");
+  const period = formatSummaryPeriod(dateFrom, dateTo);
   return [
     `*Resumo executivo — ${name}*${role ? ` (${role})` : ""}`,
     `Gerado em ${new Date().toLocaleString("pt-BR")}`,
+    period ? `Periodo dos itens automaticos: ${period}` : null,
     "",
     "*Recorrentes:*",
     ...(recurring.length ? recurring.map((entry) => `• ${entry.title}`) : ["• Nenhum"]),
@@ -244,7 +247,7 @@ export function buildPersonalSummarySlackText({ name, role, entries = [], autoEn
     "*Hoje:*",
     ...(temporary.length ? temporary.map((entry) => `• ${entry.title}`) : ["• Nenhum"]),
     ...(autoEntries.length ? ["", `*${autoLabel}:*`, ...autoEntries.map((entry) => `• ${entry.title}`)] : [])
-  ].join("\n");
+  ].filter((line) => line !== null).join("\n");
 }
 
 // Incoming Webhook do Slack aceita POST simples (sem headers de auth), entao
