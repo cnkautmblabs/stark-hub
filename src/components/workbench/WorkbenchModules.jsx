@@ -1231,6 +1231,7 @@ export function MyItemsWorkbench() {
             onClose={closeActiveItem}
             onTestResult={(item, patch) => updateItem(item.id, patch)}
             onUpdateItem={(patch) => updateItem(activeItem.id, patch)}
+            onRequestHours={(item) => { closeActiveItem(); openHours(item); }}
           />
         </ErrorBoundary>
       )}

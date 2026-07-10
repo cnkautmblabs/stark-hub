@@ -403,6 +403,7 @@ export function useWorkItems({ includeClosed = false } = {}) {
     if (patch.state) azureUpdate.state = patch.state;
     if (patch.assigneeAlias) azureUpdate.assigneeAlias = patch.assigneeAlias;
     if (patch.assigneeName) azureUpdate.assigneeName = patch.assigneeName;
+    if (Array.isArray(patch.tags)) azureUpdate.tags = patch.tags;
     const { data, error } = await supabase.functions.invoke("azureWorkItemAction", {
       body: {
         action: "update",

@@ -5,7 +5,7 @@
 // diretas do navegador.
 //
 // Body esperado:
-//   { action: "update", orgUrl, project, pat, updates: [{ id, completedHours, state, assigneeAlias }] }
+//   { action: "update", orgUrl, project, pat, updates: [{ id, completedHours, state, assigneeAlias, tags }] }
 //   { action: "create", orgUrl, project, pat, item: { type, title, sprint, countries } }
 //   { action: "attachment", orgUrl, project, pat, fileName, contentType, dataUrl }
 //
@@ -42,6 +42,9 @@ async function updateWorkItem(baseUrl, authHeader, update) {
   if (update.state) patchOps.push({ op: "add", path: "/fields/System.State", value: update.state });
   if (update.assigneeAlias || update.assigneeName) {
     patchOps.push({ op: "add", path: "/fields/System.AssignedTo", value: update.assigneeAlias || update.assigneeName });
+  }
+  if (Array.isArray(update.tags)) {
+    patchOps.push({ op: "add", path: "/fields/System.Tags", value: update.tags.join("; ") });
   }
   if (!patchOps.length) return { id: update.id, ok: true };
 

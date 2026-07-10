@@ -7408,6 +7408,98 @@ body {
 .mbaz-new-modal-inline-tags > span.country-tag {
   padding: 0 5px;
 }
+.mbaz-new-modal-tag-editable {
+  gap: 4px;
+  padding-right: 4px !important;
+}
+.mbaz-new-modal-tag-editable button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border: none;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+  cursor: pointer;
+  padding: 0;
+}
+.mbaz-new-modal-tag-editable button:hover {
+  background: #cbd5e1;
+  color: #0f172a;
+}
+.mbaz-new-modal-tag-add {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.mbaz-new-modal-tag-add input {
+  flex: 1;
+  min-width: 0;
+  min-height: 28px;
+  border: 1px solid #dbe4ef;
+  border-radius: 6px;
+  padding: 0 8px;
+  font-size: 12px;
+  background: #fff;
+  color: #0f172a;
+}
+.mbaz-new-modal-tag-add button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid #94a3b8;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #0f172a;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.mbaz-new-modal-tag-add button:hover {
+  background: #e2e8f0;
+}
+.mbaz-new-modal-status-gated {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+.mbaz-new-modal-status-hours-btn,
+.mbaz-new-modal-assume-task-btn {
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid #2563eb;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1.3;
+}
+.mbaz-new-modal-status-hours-btn {
+  white-space: normal;
+  text-align: left;
+}
+.mbaz-new-modal-assume-task-btn {
+  white-space: nowrap;
+  align-self: flex-start;
+}
+.mbaz-new-modal-status-hours-btn:hover,
+.mbaz-new-modal-assume-task-btn:hover {
+  background: #dbeafe;
+}
+.mbaz-new-modal-assume-task-btn {
+  margin-top: 6px;
+}
+.mbaz-new-modal-assume-task-btn:disabled {
+  opacity: .6;
+  cursor: default;
+}
 .mbaz-new-modal-country-row > span:not(.mbw-country-visual),
 .mbaz-new-modal-tags span {
   min-height: 24px;

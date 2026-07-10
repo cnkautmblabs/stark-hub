@@ -611,7 +611,17 @@ export default {
     savingButton: "Saving...",
     registerResultButton: "Record result",
     codePreview: "Code view",
-    livePreview: "Preview"
+    livePreview: "Preview",
+    changeStatusHoursButton: "Log hours to advance",
+    addTagPlaceholder: "New tag",
+    addTagButton: "Add",
+    removeTagTitle: "Remove tag",
+    assumeTaskButton: "Assume task",
+    assumingTaskButton: "Assuming...",
+    taskCreatedTitle: "Task created",
+    taskCreatedBody: "Task #{{id}} created and linked to this {{type}}.",
+    taskCreateFailedTitle: "Failed to create Task",
+    cannotIdentifyUser: "Could not identify your user to assume the task."
   },
   wizard: {
     newItemTitle: "New {{type}}",

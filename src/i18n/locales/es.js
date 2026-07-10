@@ -611,7 +611,17 @@ export default {
     savingButton: "Guardando...",
     registerResultButton: "Registrar resultado",
     codePreview: "Vista del codigo",
-    livePreview: "Vista previa"
+    livePreview: "Vista previa",
+    changeStatusHoursButton: "Registrar horas para avanzar",
+    addTagPlaceholder: "Nueva tag",
+    addTagButton: "Agregar",
+    removeTagTitle: "Quitar tag",
+    assumeTaskButton: "Asumir tarea",
+    assumingTaskButton: "Asumiendo...",
+    taskCreatedTitle: "Task creada",
+    taskCreatedBody: "Task #{{id}} creada y vinculada a este {{type}}.",
+    taskCreateFailedTitle: "Error al crear la Task",
+    cannotIdentifyUser: "No se pudo identificar tu usuario para asumir la tarea."
   },
   wizard: {
     newItemTitle: "Nuevo {{type}}",

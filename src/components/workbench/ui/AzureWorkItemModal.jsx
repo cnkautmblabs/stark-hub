@@ -7,8 +7,16 @@ import { compactSprintLabel } from "../../../utils/sprints.js";
 import { buildLegacyQaResultSlackText, buildQaResultDiscussionHtml, legacyMention, limitationContextTemplate } from "../../../utils/slackReport.js";
 import { buildCollaboratorNameIndex, evidenceDedupeKey, evidenceEnvironmentOrder, evidenceEnvironments, evidenceResultInfo, findCollaboratorByName, isQaEvidenceEntry } from "../../../utils/workbench/formatters.js";
 import { useCollaborators } from "../../../hooks/useCollaborators.js";
+import { useAuth } from "../../../contexts/AuthContext.jsx";
+import { useToast } from "../../../contexts/ToastContext.jsx";
 import { CountryVisual, EnvBadge, IdentityAvatar, QaPicker, ResultBadge, TypeBadge, envIconSrc, typeIconSrc } from "./WorkbenchPrimitives.jsx";
 import { buildApiCacheKey, readApiCache, stableSignature, withInflight, writeApiCache } from "../../../utils/localApiCache.js";
+
+const TASK_BEARING_TYPES = ["Bug", "User Story"];
+
+function isCountryTag(tag) {
+  return /^0-([A-Z]{2})$/i.test(String(tag || "").trim());
+}
 
 const WORK_ITEM_DETAIL_CACHE_TTL_MS = 2 * 60 * 1000;
 
@@ -211,8 +219,10 @@ function EnhancedSlackPreview({ text, item, attachments = [], collaborators = []
   );
 }
 
-export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpdateItem, evidence = [] }) {
+export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpdateItem, onRequestHours, evidence = [] }) {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const { pushToast } = useToast();
   const { collaborators = [] } = useCollaborators();
   const fileInputRef = useRef(null);
   const [result, setResult] = useState("");
@@ -227,6 +237,8 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
   const [liveDiscussions, setLiveDiscussions] = useState(null);
   const [liveDiscussionEvidence, setLiveDiscussionEvidence] = useState(null);
   const [discussionsLoading, setDiscussionsLoading] = useState(false);
+  const [newTagDraft, setNewTagDraft] = useState("");
+  const [assumingTask, setAssumingTask] = useState(false);
   const azureReady = Boolean(profile?.azureOrgUrl && profile?.azureProject && profile?.azurePat);
   const detailCacheKey = buildApiCacheKey("workItemDetail", profile?.id || profile?.email || "anonymous", profile?.azureOrgUrl, profile?.azureProject, item?.id);
 
@@ -290,6 +302,10 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
   const creatorAvatarUrl = item.createdByImageUrl || item.createdByAvatarUrl || creatorPerson?.imageUrl || creatorPerson?.avatarUrl || "";
   const devPeople = collaborators.filter((person) => person.isDev || person.dev);
   const qaPeople = collaborators.filter((person) => person.isQa || person.qa);
+  const myCollaborator = collaborators.find((person) => String(person.id) === String(profile?.id))
+    || findCollaboratorByName(collaboratorNameIndex, profile?.displayName || profile?.fullName || user?.email);
+  const isTaskBearingType = TASK_BEARING_TYPES.includes(item.type);
+  const isAlreadyAssignedToMe = Boolean(myCollaborator?.id) && String(item.assigneeId || "") === String(myCollaborator.id);
   // Dois tipos de FYI fixo: sempre (fixedMention) e so quando o resultado e
   // Fail/Limitation (fixedMentionOnFailure) — mesma regra usada no envio
   // real (useWorkItems.js), pra previa e envio nunca divergirem.
@@ -351,6 +367,74 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
 
   function toggleValue(value, setter) {
     setter((current) => current.includes(value) ? current.filter((entry) => entry !== value) : [...current, value]);
+  }
+
+  // Bug/US atribuido a um Dev (seja por auto-atribuicao via "Assumir tarefa"
+  // ou pela Gestao escolhendo o assignee) ganha uma Task copia, vinculada
+  // como filha, ja atribuida a mesma pessoa — a Task e a unidade que carrega
+  // horas neste app, o Bug/US em si nunca registra Completed Work. Mesmo
+  // padrao do fluxo "Nova tarefa" do stark-hub-script legado.
+  async function createLinkedTask(assigneeAlias) {
+    if (!profile?.azureOrgUrl || !profile?.azureProject || !profile?.azurePat) return;
+    const tags = (item.tags || []).filter((tag) => !isCountryTag(tag));
+    const { data, error } = await supabase.functions.invoke("azureWorkItemAction", {
+      body: {
+        action: "create",
+        orgUrl: profile.azureOrgUrl,
+        project: profile.azureProject,
+        pat: profile.azurePat,
+        item: {
+          type: "Task",
+          title: item.title,
+          description: item.description || "",
+          areaPath: item.areaPath || profile?.azureProject,
+          sprint: item.sprint || item.iteration,
+          tags,
+          priority: item.priority,
+          assigneeAlias,
+          parentId: item.id
+        }
+      }
+    });
+    if (!error && data?.ok) {
+      pushToast({ title: t("workItemModal.taskCreatedTitle"), body: t("workItemModal.taskCreatedBody", { id: data.id, type: item.type }), tone: "success" });
+    } else {
+      pushToast({ title: t("workItemModal.taskCreateFailedTitle"), body: data?.error || error?.message || "", tone: "danger" });
+    }
+  }
+
+  async function assumeTask() {
+    if (!myCollaborator?.azureName && !profile?.azureName) {
+      pushToast({ title: t("workItemModal.taskCreateFailedTitle"), body: t("workItemModal.cannotIdentifyUser"), tone: "danger" });
+      return;
+    }
+    const assigneeAlias = myCollaborator?.azureName || profile?.azureName;
+    setAssumingTask(true);
+    try {
+      await onUpdateItem({ assigneeId: myCollaborator?.id, assigneeName: assigneeAlias, assigneeAlias });
+      await createLinkedTask(assigneeAlias);
+    } finally {
+      setAssumingTask(false);
+    }
+  }
+
+  function addTag(event) {
+    event.preventDefault();
+    const value = newTagDraft.trim();
+    if (!value || !onUpdateItem) return;
+    const current = item.tags || [];
+    if (current.some((tag) => normalizeTagValue(tag) === normalizeTagValue(value))) { setNewTagDraft(""); return; }
+    onUpdateItem({ tags: [...current, value] });
+    setNewTagDraft("");
+  }
+
+  function removeTag(tag) {
+    if (!onUpdateItem) return;
+    onUpdateItem({ tags: (item.tags || []).filter((entry) => entry !== tag) });
+  }
+
+  function normalizeTagValue(value) {
+    return String(value || "").trim().toLowerCase();
   }
 
   function setResultAndState(nextResult) {
@@ -511,26 +595,39 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
               <div className="mbaz-new-modal-essential">
                 <div>
                   <span>{t("workItemModal.statusLabel")}</span>
-                  {onUpdateItem ? (
+                  {onUpdateItem && (!isTaskBearingType || !onRequestHours) ? (
                     <select value={item.state || ""} onChange={(event) => onUpdateItem({ state: event.target.value })}>
                       {["New", "Active", "In QA", "HMG CNK", "Ready to Beta", "In BETA", "Ready to Prod", "Closed"].map((value) => <option key={value} value={value}>{value}</option>)}
                     </select>
+                  ) : onUpdateItem ? (
+                    <div className="mbaz-new-modal-status-gated">
+                      <strong>{item.state || t("workItemModal.noStatus")}</strong>
+                      <button type="button" className="mbaz-new-modal-status-hours-btn" onClick={() => onRequestHours(item)}>{t("workItemModal.changeStatusHoursButton")}</button>
+                    </div>
                   ) : <strong>{item.state || t("workItemModal.noStatus")}</strong>}
                 </div>
                 <div>
                   <span>{t("workItemModal.assignedToLabel")}</span>
                   {onUpdateItem ? (
-                    <QaPicker
-                      value={item.assigneeId || ""}
-                      emptyLabel={item.assigneeName || item.assignedTo || t("workItemModal.notAssigned")}
-                      showEmptyAvatar={Boolean(item.assigneeName || item.assignedTo)}
-                      emptyImageUrl={item.assigneeImageUrl}
-                      people={devPeople}
-                      onChange={(assigneeId) => {
-                        const person = devPeople.find((entry) => String(entry.id) === String(assigneeId));
-                        onUpdateItem({ assigneeId, assigneeName: person?.azureName || "", assigneeAlias: person?.azureName || "" });
-                      }}
-                    />
+                    <>
+                      <QaPicker
+                        value={item.assigneeId || ""}
+                        emptyLabel={item.assigneeName || item.assignedTo || t("workItemModal.notAssigned")}
+                        showEmptyAvatar={Boolean(item.assigneeName || item.assignedTo)}
+                        emptyImageUrl={item.assigneeImageUrl}
+                        people={devPeople}
+                        onChange={(assigneeId) => {
+                          const person = devPeople.find((entry) => String(entry.id) === String(assigneeId));
+                          onUpdateItem({ assigneeId, assigneeName: person?.azureName || "", assigneeAlias: person?.azureName || "" });
+                          if (isTaskBearingType && person?.azureName) createLinkedTask(person.azureName);
+                        }}
+                      />
+                      {isTaskBearingType && !isAlreadyAssignedToMe && (
+                        <button type="button" className="mbaz-new-modal-assume-task-btn" onClick={assumeTask} disabled={assumingTask}>
+                          <i className="bi bi-person-check" /> {assumingTask ? t("workItemModal.assumingTaskButton") : t("workItemModal.assumeTaskButton")}
+                        </button>
+                      )}
+                    </>
                   ) : <p><IdentityAvatar name={assigneeDisplayName} imageUrl={item.assigneeImageUrl} size={28} /> <strong>{assigneeDisplayName}</strong></p>}
                 </div>
                 <div>
@@ -539,7 +636,22 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
                 </div>
                 <div>
                   <span>{t("workItemModal.tagsLabel")}</span>
-                  <p className="mbaz-new-modal-inline-tags">{tagList.length ? tagList.map(renderTag) : <em>{t("workItemModal.noTags")}</em>}</p>
+                  <p className="mbaz-new-modal-inline-tags">
+                    {tagList.length ? tagList.map((tag) => (
+                      onUpdateItem && !isCountryTag(tag) ? (
+                        <span key={tag} className="mbaz-new-modal-tag-editable">
+                          {renderTag(tag)}
+                          <button type="button" title={t("workItemModal.removeTagTitle")} onClick={() => removeTag(tag)}><i className="bi bi-x" /></button>
+                        </span>
+                      ) : renderTag(tag)
+                    )) : <em>{t("workItemModal.noTags")}</em>}
+                  </p>
+                  {onUpdateItem && (
+                    <form className="mbaz-new-modal-tag-add" onSubmit={addTag}>
+                      <input value={newTagDraft} onChange={(event) => setNewTagDraft(event.target.value)} placeholder={t("workItemModal.addTagPlaceholder")} />
+                      <button type="submit">{t("workItemModal.addTagButton")}</button>
+                    </form>
+                  )}
                 </div>
               </div>
             </div>
