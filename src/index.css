@@ -6720,6 +6720,7 @@ body {
 .mbwiz-form > .mbwiz-link-picker,
 .mbwiz-form > .mbwiz-field-full,
 .mbwiz-form > .mbwiz-confirm-panel,
+.mbwiz-form > .mbwiz-switch-row,
 .mbwiz-form > .mbwiz-submit-row {
   grid-column: 1 / -1;
 }
