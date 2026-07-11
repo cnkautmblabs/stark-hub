@@ -1,5 +1,5 @@
 import { countries as countryCatalog, environments as environmentCatalog, formatWorkItemCode } from "./constants.js";
-import { formatSummaryPeriod } from "./executiveReport.js";
+import { formatSummaryPeriod, isRecurrenceActiveToday } from "./executiveReport.js";
 
 // Mensagens no formato usado pelo stark-hub-script (referencia visual/textual
 // enviada pelo usuario): tags de emoji por tipo de work item (:bug-tag:,
@@ -11,7 +11,7 @@ export function workItemSlackTag(type) {
   if (normalized === "bug" || normalized === "defect") return ":bug-tag:";
   if (normalized === "task") return ":task-tag:";
   if (normalized === "user story" || normalized === "userstory" || normalized === "us") return ":us-tag:";
-  if (normalized === "feature") return ":feat-tag:";
+  if (normalized === "feature") return ":feature-tag:";
   if (normalized === "epic") return ":epic-tag:";
   if (normalized === "test case" || normalized === "testcase") return ":test-tag:";
   return ":task-tag:";
@@ -178,6 +178,23 @@ export function buildLegacyQaResultSlackText({ item, resultKey, resultLabel, env
   ].filter(Boolean).join("\n");
 }
 
+// Mensagem do canal Tests_QA quando um bug reprova um item que "faz parte
+// da entrega" (especificacao de fluxo enviada pelo usuario, secao 6.4):
+// "TEST FAILED IN QA/BETA", Parent (item original) + Child (item corretivo
+// criado), responsavel pelo dev e FYI fixo (ex.: @natalia, @furtado).
+export function buildTestFailedTestsQaMessage({ item, correctiveItem, environmentLabel = "QA", assignee, fyi = [] }) {
+  const assigneeMention = legacyMention(assignee);
+  const fixedMentions = fyi.map(legacyMention).filter(Boolean);
+  const fyiMentions = Array.from(new Set([...fixedMentions, assigneeMention].filter(Boolean))).join(", ");
+  return [
+    `:x: *TEST FAILED IN ${String(environmentLabel).toUpperCase()}*`,
+    `Parent: ${slackWorkItemLine(item, true)}`,
+    correctiveItem ? `Child: ${slackWorkItemLine(correctiveItem, true)}` : null,
+    assigneeMention ? `Responsavel: ${assigneeMention}` : null,
+    fyiMentions ? `FYI ${fyiMentions}` : null
+  ].filter(Boolean).join("\n");
+}
+
 function formatBalance(dev) {
   if (dev.goalStatus === "above") return `+${dev.extraHours}h`;
   if (dev.goalStatus === "below") return `-${dev.missingHours}h`;
@@ -233,7 +250,7 @@ export function buildGovernanceSlackText({ totals, rows }) {
 
 // Resumo executivo pessoal (Home) formatado para Slack mrkdwn.
 export function buildPersonalSummarySlackText({ name, role, entries = [], autoEntries = [], autoLabel = "Hoje (automatico)", dateFrom, dateTo }) {
-  const recurring = entries.filter((entry) => entry.type === "recorrente");
+  const recurring = entries.filter((entry) => entry.type === "recorrente" && isRecurrenceActiveToday(entry));
   const temporary = entries.filter((entry) => entry.type !== "recorrente");
   const period = formatSummaryPeriod(dateFrom, dateTo);
   return [

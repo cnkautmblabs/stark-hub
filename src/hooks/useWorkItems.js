@@ -50,9 +50,19 @@ function notifyTransitions({ previousStateById, freshItems, pushToast, profile, 
       return;
     }
     if (prevState === state) return;
-    if (state.includes("qa") && !prevState.includes("qa")) { enteredQa.push(item); return; }
-    if (state.includes("beta") && !prevState.includes("beta")) { enteredBeta.push(item); return; }
-    if (qaStatusInfo(item.state).key) otherStatusChanges.push(item);
+    // Estagio CANONICO (mesmo mapeamento usado no Quality Board/Home via
+    // qaStatusInfo), nao substring cru do nome do status — "Ready to Beta"
+    // contem a substring "beta" mas NAO e "In BETA"; a checagem antiga
+    // (`state.includes("beta")`) confundia os dois, disparando toast+som de
+    // "entrou em BETA" pra uma mudanca de status que na verdade e "Ready
+    // Beta" (bug real relatado pelo usuario: mudou pra Ready to Beta e foi
+    // notificado como se o item tivesse entrado em BETA).
+    const currentKey = qaStatusInfo(item.state).key;
+    const prevKey = qaStatusInfo(prevState).key;
+    if (currentKey === prevKey) return;
+    if (currentKey === "inQa" && prevKey !== "inQa") { enteredQa.push(item); return; }
+    if (currentKey === "inBeta" && prevKey !== "inBeta") { enteredBeta.push(item); return; }
+    if (currentKey) otherStatusChanges.push(item);
   });
 
   function notifyGroup(list, { type, title, tone, bodyFor }) {
@@ -182,9 +192,16 @@ export function useWorkItems({ includeClosed = false } = {}) {
     setError(null);
     let data = null;
     let invokeError = null;
+    // `Promise.race` nao cancela a promise perdedora — se a chamada ao
+    // Supabase vencer (caso comum, resposta rapida), o timer de 45s
+    // continuava rodando e disparava um reject() sem handler la na frente,
+    // virando "Uncaught (in promise)" no console minutos depois de toda
+    // busca bem-sucedida. `clearTimeout` no fim garante que o timer nunca
+    // dispara quando ja nao importa mais.
+    let timeoutId;
     try {
       const timeoutPromise = new Promise((_, reject) => {
-        window.setTimeout(() => reject(new Error("Tempo limite ao consultar o Azure DevOps. Tente atualizar novamente.")), 45000);
+        timeoutId = window.setTimeout(() => reject(new Error("Tempo limite ao consultar o Azure DevOps. Tente atualizar novamente.")), 45000);
       });
       ({ data, error: invokeError } = await withInflight(cacheKey, () => Promise.race([
         supabase.functions.invoke("azureWorkItems", {
@@ -203,6 +220,8 @@ export function useWorkItems({ includeClosed = false } = {}) {
       ])));
     } catch (err) {
       invokeError = err;
+    } finally {
+      clearTimeout(timeoutId);
     }
     // Uma falha aqui NUNCA pode virar silenciosamente "lista vazia" — foi
     // exatamente esse silêncio que escondeu o vazamento de dados de outro
@@ -241,7 +260,13 @@ export function useWorkItems({ includeClosed = false } = {}) {
   // configurável em Configurações > Consulta Azure DevOps. 0 desativa.
   useEffect(() => {
     if (demoMode || !azureReady || !autoRefreshSeconds) return;
-    const id = setInterval(() => loadItems({ force: true }), autoRefreshSeconds * 1000);
+    // So atualiza com a aba visivel — antes rodava mesmo em segundo plano
+    // (aba minimizada/outra aba em foco o dia inteiro), gerando egress do
+    // Supabase (Edge Function + subconsultas) sem ninguem olhando o board.
+    const id = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      loadItems({ force: true });
+    }, autoRefreshSeconds * 1000);
     return () => clearInterval(id);
   }, [demoMode, azureReady, autoRefreshSeconds, loadItems]);
 

@@ -156,12 +156,51 @@ export function formatSummaryPeriod(dateFrom, dateTo) {
   return `${formatIsoDatePt(dateFrom)} a ${formatIsoDatePt(dateTo)}`;
 }
 
+const WEEKDAY_KEYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
+// Um item recorrente so aparece de verdade no resumo/PDF/Slack do dia
+// quando o tipo de recorrencia escolhido bate com `referenceDate` — antes o
+// seletor (diaria/semanal/mensal/dia da semana/a cada N dias) era so um
+// rotulo decorativo, e QUALQUER item "recorrente" aparecia todo santo dia,
+// tornando os tipos indistinguiveis na pratica (pedido explicito do
+// usuario pra corrigir isso). "weekly"/"monthly"/"everyNDays" usam
+// `entry.createdAt` como data-ancora; "weekday" usa o dia da semana
+// escolhido explicitamente, independente de quando foi criado.
+export function isRecurrenceActiveToday(entry, referenceDate = new Date()) {
+  if (entry?.type !== "recorrente") return true;
+  const recurrence = entry?.recurrence;
+  if (!recurrence?.kind || recurrence.kind === "daily" || recurrence.kind === "always") return true;
+  const anchor = entry.createdAt ? new Date(entry.createdAt) : null;
+  const hasValidAnchor = anchor && !Number.isNaN(anchor.getTime());
+  if (recurrence.kind === "weekly") {
+    return !hasValidAnchor || anchor.getDay() === referenceDate.getDay();
+  }
+  if (recurrence.kind === "monthly") {
+    if (!hasValidAnchor) return true;
+    const lastDayOfRefMonth = new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 0).getDate();
+    const targetDay = Math.min(anchor.getDate(), lastDayOfRefMonth);
+    return referenceDate.getDate() === targetDay;
+  }
+  if (recurrence.kind === "weekday") {
+    return WEEKDAY_KEYS[referenceDate.getDay()] === (recurrence.weekday || "monday");
+  }
+  if (recurrence.kind === "everyNDays") {
+    if (!hasValidAnchor) return true;
+    const intervalDays = Math.max(1, Number(recurrence.intervalDays) || 1);
+    const anchorStart = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
+    const refStart = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
+    const diffDays = Math.round((refStart - anchorStart) / 86400000);
+    return diffDays >= 0 && diffDays % intervalDays === 0;
+  }
+  return true;
+}
+
 // Resumo executivo pessoal (Home) — lista livre de itens recorrentes
 // (sempre presentes, ex. "Daily") e temporários (só no resumo do dia,
 // ex. "1:1 com Nat"), com as mesmas ações de copiar/baixar do relatório
 // de equipe, mas sem a tabela por colaborador.
 export function buildPersonalSummaryText({ name, role, entries = [], autoEntries = [], autoLabel = "Hoje (automatico)", dateFrom, dateTo }) {
-  const recurring = entries.filter((entry) => entry.type === "recorrente");
+  const recurring = entries.filter((entry) => entry.type === "recorrente" && isRecurrenceActiveToday(entry));
   const temporary = entries.filter((entry) => entry.type !== "recorrente");
   const period = formatSummaryPeriod(dateFrom, dateTo);
   return [
@@ -295,7 +334,7 @@ export async function downloadPersonalSummaryPdf({ name, role, entries = [], aut
     y += 12;
   }
 
-  section("Recorrentes", entries.filter((entry) => entry.type === "recorrente"));
+  section("Recorrentes", entries.filter((entry) => entry.type === "recorrente" && isRecurrenceActiveToday(entry)));
   section("Hoje", entries.filter((entry) => entry.type !== "recorrente"));
   if (autoEntries.length) section(autoLabel, autoEntries);
 

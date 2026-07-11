@@ -11,6 +11,7 @@ import { IdentityAvatar } from "../workbench/ui/WorkbenchPrimitives.jsx";
 import { BrowserNotificationWatcher } from "../common/BrowserNotificationWatcher.jsx";
 import { LanguageSwitcher } from "../common/LanguageSwitcher.jsx";
 import { NotificationBell } from "../common/NotificationBell.jsx";
+import { FloatingWidgetsLayer } from "../common/FloatingWidgetsLayer.jsx";
 
 function MBLabsMark() {
   const base = import.meta.env.BASE_URL;
@@ -56,6 +57,7 @@ export default function Layout() {
   return (
     <div className={`workbench-app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
       <BrowserNotificationWatcher />
+      <FloatingWidgetsLayer />
       <Sidebar collapsed={collapsed} onToggle={handleToggle} />
       <div className="workbench-main-area">
         <header className="stark-app-topbar">

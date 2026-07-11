@@ -1,7 +1,7 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useAuth } from "../contexts/AuthContext.jsx";
+import { TERMS_ACCEPTANCE_KEY, TERMS_VERSION, useAuth } from "../contexts/AuthContext.jsx";
 import ReactorLogo from "../components/layout/ReactorLogo.jsx";
 import BrandFooter from "../components/layout/BrandFooter.jsx";
 import { FiAlertTriangle } from "react-icons/fi";
@@ -25,6 +25,7 @@ export default function Login() {
   const { t } = useTranslation();
   const { signInWithGoogle, enterDemoMode, demoMode, user, oauthError } = useAuth();
   const navigate = useNavigate();
+  const [showTerms, setShowTerms] = useState(false);
 
   useEffect(() => {
     if (demoMode || user) navigate("/", { replace: true });
@@ -33,6 +34,12 @@ export default function Login() {
   function handleDemoSelect(e) {
     const role = e.target.value;
     if (role) enterDemoMode(role);
+  }
+
+  function acceptTermsAndSignIn() {
+    sessionStorage.setItem(TERMS_ACCEPTANCE_KEY, TERMS_VERSION);
+    setShowTerms(false);
+    signInWithGoogle();
   }
 
   return (
@@ -72,9 +79,12 @@ export default function Login() {
           </div>
         )}
 
-        <button className="btn btn-dark btn-lg d-flex align-items-center gap-2" onClick={signInWithGoogle} disabled={!isSupabaseConfigured}>
+        <button className="btn btn-dark btn-lg d-flex align-items-center gap-2" onClick={() => setShowTerms(true)} disabled={!isSupabaseConfigured}>
           <i className="bi bi-google" /> {t("login.signInGoogle")}
         </button>
+        <p className="stark-login-terms-note mb-0">
+          {t("login.termsBeforeLogin")}
+        </p>
         <p className="text-white-50 small mb-0" style={{ maxWidth: 420 }}>
           {allowedEmailDomains.length ? t("login.domainRestriction", { domains: allowedEmailDomains.join(" e ") }) : t("login.domainRestrictionMissing")}
           {" "}{t("login.waitForApproval")}
@@ -101,6 +111,35 @@ export default function Login() {
           <BrandFooter />
         </div>
       </div>
+      {showTerms && (
+        <div className="stark-login-terms-overlay" role="dialog" aria-modal="true" aria-labelledby="stark-login-terms-title">
+          <section className="stark-login-terms-modal">
+            <header>
+              <div>
+                <span>{t("login.termsDraftBadge")}</span>
+                <h2 id="stark-login-terms-title">{t("login.termsTitle")}</h2>
+              </div>
+              <button type="button" onClick={() => setShowTerms(false)} aria-label={t("common.close")}><i className="bi bi-x-lg" /></button>
+            </header>
+            <div className="stark-login-terms-body">
+              <p>{t("login.termsIntro")}</p>
+              <ul>
+                <li>{t("login.termsDataWhere")}</li>
+                <li>{t("login.termsController")}</li>
+                <li>{t("login.termsPurpose")}</li>
+                <li>{t("login.termsLocalStorage")}</li>
+                <li>{t("login.termsIntegrations")}</li>
+                <li>{t("login.termsDraft")}</li>
+              </ul>
+              <strong>{t("login.termsContinue")}</strong>
+            </div>
+            <footer>
+              <button type="button" className="secondary" onClick={() => setShowTerms(false)}>{t("login.termsCancel")}</button>
+              <button type="button" className="primary" onClick={acceptTermsAndSignIn}><i className="bi bi-google" /> {t("login.termsAccept")}</button>
+            </footer>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

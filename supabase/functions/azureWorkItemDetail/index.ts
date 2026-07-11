@@ -30,8 +30,17 @@ function json(body, status = 200) {
 function normalizeOrgUrl(rawUrl) {
   const trimmed = String(rawUrl || "").trim().replace(/\/+$/, "");
   if (!trimmed) return "";
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  return `https://dev.azure.com/${trimmed}`;
+  const url = /^https?:\/\//i.test(trimmed) ? trimmed : `https://dev.azure.com/${trimmed}`;
+  return isAllowedAzureUrl(url) ? url : "";
+}
+
+function isAllowedAzureUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    return url.protocol === "https:" && (url.hostname === "dev.azure.com" || url.hostname.endsWith(".visualstudio.com"));
+  } catch {
+    return false;
+  }
 }
 
 function stripHtmlText(value) {
@@ -193,6 +202,56 @@ function discussionDedupeKey(comment) {
   return [result, envs, author, normalizedEvidenceSignatureText(comment), images].join("::");
 }
 
+const KNOWN_CONTENT_FIELDS = new Set([
+  "system.description",
+  "microsoft.vsts.tcm.reprosteps",
+  "microsoft.vsts.common.acceptancecriteria"
+]);
+
+// Processos customizados as vezes renomeiam/substituem os campos padrao de
+// conteudo (ex.: Bug sem System.Description usando um campo proprio tipo
+// "Custom.Descricao"). Mesma heuristica usada no fetch em lote de
+// azureWorkItems — mantida aqui pra nao perder esse fallback ao mover a
+// busca de conteudo pra sob demanda (ver comentario mais abaixo).
+function findFallbackDescription(fields: Record<string, unknown>) {
+  for (const [key, value] of Object.entries(fields || {})) {
+    const lowerKey = key.toLowerCase();
+    if (KNOWN_CONTENT_FIELDS.has(lowerKey)) continue;
+    if (!/description|reprosteps|repro_steps|symptom|findingandrootcause|root.?cause/i.test(key)) continue;
+    if (typeof value !== "string") continue;
+    const text = value.trim();
+    if (text.length > 10) return text;
+  }
+  return "";
+}
+
+// Conteudo (Description/Acceptance Criteria/Repro Steps) buscado sob
+// demanda, junto com as discussions — antes ia embutido pra CADA item no
+// fetch em lote de azureWorkItems, mas so e exibido quando o modal de UM
+// item especifico abre. Campos ricos do Azure podem ter imagens coladas
+// direto no HTML (base64), entao multiplicar isso por centenas de itens a
+// cada load/auto-refresh do board pesava muito no egress do Supabase —
+// mesmo motivo de discussions ja ser sob demanda aqui.
+async function fetchItemContent(itemId: string | number, projectPath: string, authHeader: string) {
+  try {
+    const response = await fetch(
+      `${projectPath}/_apis/wit/workitems/${encodeURIComponent(String(itemId))}?api-version=7.1`,
+      { headers: { Authorization: authHeader } }
+    );
+    if (!response.ok) return { description: "", acceptanceCriteria: "", reproSteps: "" };
+    const data = await response.json();
+    const fields = data?.fields || {};
+    const acceptanceCriteria = fields["Microsoft.VSTS.Common.AcceptanceCriteria"] || "";
+    const reproSteps = fields["Microsoft.VSTS.TCM.ReproSteps"] || "";
+    const description = fields["System.Description"]
+      || (!reproSteps && !acceptanceCriteria ? findFallbackDescription(fields) : "")
+      || "";
+    return { description, acceptanceCriteria, reproSteps };
+  } catch {
+    return { description: "", acceptanceCriteria: "", reproSteps: "" };
+  }
+}
+
 // Pagina ate acabar (sem limite artificial de paginas) — a lista de
 // comentarios de UM item nunca chega perto de ser grande o bastante para
 // isso virar um problema de performance, diferente de buscar isso para
@@ -250,6 +309,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ ok: false, error: "Método não suportado." }, 405);
 
+  const contentLength = Number(req.headers.get("content-length") || 0);
+  if (contentLength > 128_000) return json({ ok: false, error: "Payload muito grande para buscar discussions." }, 413);
+
   let payload;
   try {
     payload = await req.json();
@@ -263,13 +325,17 @@ Deno.serve(async (req) => {
   }
 
   const baseUrl = normalizeOrgUrl(orgUrl);
+  if (!baseUrl) return json({ ok: false, error: "URL do Azure DevOps invalida. Use dev.azure.com ou *.visualstudio.com." }, 400);
   const authHeader = `Basic ${btoa(`:${pat}`)}`;
   const projectPath = `${baseUrl}/${encodeURIComponent(project)}`;
 
-  const discussions = await fetchAllDiscussions(id, projectPath, authHeader, env);
+  const [discussions, content] = await Promise.all([
+    fetchAllDiscussions(id, projectPath, authHeader, env),
+    fetchItemContent(id, projectPath, authHeader)
+  ]);
   const discussionEvidence = discussions
     .filter((comment) => comment.result)
     .map((comment) => normalizeEvidenceComment(comment, id, env));
 
-  return json({ ok: true, discussions, discussionEvidence });
+  return json({ ok: true, discussions, discussionEvidence, content });
 });

@@ -26,8 +26,17 @@ function json(body, status = 200) {
 
 function normalizeOrgUrl(rawUrl) {
   const trimmed = String(rawUrl || "").trim().replace(/\/+$/, "");
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  return `https://dev.azure.com/${trimmed}`;
+  const url = /^https?:\/\//i.test(trimmed) ? trimmed : `https://dev.azure.com/${trimmed}`;
+  return isAllowedAzureUrl(url) ? url : "";
+}
+
+function isAllowedAzureUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    return url.protocol === "https:" && (url.hostname === "dev.azure.com" || url.hostname.endsWith(".visualstudio.com"));
+  } catch {
+    return false;
+  }
 }
 
 // Estado do work item (System.State) -> ambiente exibido no board. Segue o
@@ -349,29 +358,10 @@ function pullRequestFromRelations(relations, projectPath) {
   return {};
 }
 
-const KNOWN_CONTENT_FIELDS = new Set([
-  "system.description",
-  "microsoft.vsts.tcm.reprosteps",
-  "microsoft.vsts.common.acceptancecriteria"
-]);
-
-// Processos customizados (comum em orgs grandes) as vezes renomeiam ou
-// substituem os campos padrao de conteudo por um campo proprio (ex.: Bug sem
-// System.Description usando um campo tipo "Custom.Descricao"). Quando os 3
-// campos padrao vem todos vazios, procura o primeiro campo HTML-like cujo
-// nome sugira ser o conteudo principal, em vez de mostrar "sem conteudo"
-// para um item que na verdade tem descricao só que em outro campo.
-function findFallbackDescription(fields) {
-  for (const [key, value] of Object.entries(fields || {})) {
-    const lowerKey = key.toLowerCase();
-    if (KNOWN_CONTENT_FIELDS.has(lowerKey)) continue;
-    if (!/description|reprosteps|repro_steps|symptom|findingandrootcause|root.?cause/i.test(key)) continue;
-    if (typeof value !== "string") continue;
-    const text = value.trim();
-    if (text.length > 10) return text;
-  }
-  return "";
-}
+// Description/AcceptanceCriteria/ReproSteps (e o fallback de campo de
+// conteudo customizado que existia aqui) saíram do fetch em lote — ver
+// `fetchItemContent`/`findFallbackDescription` em azureWorkItemDetail, que
+// busca isso sob demanda so pro item aberto no modal.
 
 const WORK_ITEM_FIELDS = [
   "System.Id",
@@ -382,7 +372,6 @@ const WORK_ITEM_FIELDS = [
   "System.AssignedTo",
   "System.IterationPath",
   "System.AreaPath",
-  "System.Description",
   "System.CreatedDate",
   "System.CreatedBy",
   "System.ChangedDate",
@@ -394,14 +383,15 @@ const WORK_ITEM_FIELDS = [
   "Microsoft.VSTS.Common.ValueArea",
   "Microsoft.VSTS.Scheduling.OriginalEstimate",
   "Microsoft.VSTS.Scheduling.CompletedWork",
-  "Microsoft.VSTS.Scheduling.RemainingWork",
-  "Microsoft.VSTS.Common.AcceptanceCriteria",
-  "Microsoft.VSTS.TCM.ReproSteps"
+  "Microsoft.VSTS.Scheduling.RemainingWork"
 ];
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ ok: false, error: "Método não suportado." }, 405);
+
+  const contentLength = Number(req.headers.get("content-length") || 0);
+  if (contentLength > 256_000) return json({ ok: false, error: "Payload muito grande para consulta do Azure." }, 413);
 
   let payload;
   try {
@@ -416,6 +406,7 @@ Deno.serve(async (req) => {
   }
 
   const baseUrl = normalizeOrgUrl(orgUrl);
+  if (!baseUrl) return json({ ok: false, error: "URL do Azure DevOps invalida. Use dev.azure.com ou *.visualstudio.com." }, 400);
   const authHeader = `Basic ${btoa(`:${pat}`)}`;
   const projectPath = `${baseUrl}/${encodeURIComponent(project)}`;
 
@@ -533,24 +524,19 @@ Deno.serve(async (req) => {
   const rawWorkItems = [];
   for (let offset = 0; offset < ids.length; offset += 200) {
     const chunk = ids.slice(offset, offset + 200);
-    // Sem restringir a uma lista fixa de campos: processos customizados (ex.:
-    // Bug sem System.Description, com um campo proprio renomeado para o
-    // conteudo principal) fariam a UI mostrar "sem conteudo" mesmo com a
-    // descricao preenchida no Azure. $expand "All" traz todos os campos +
-    // relations, e o mapeamento abaixo ainda usa os nomes padrao quando
-    // existem, com fallback generico para os demais processos.
-    let batchResponse = await fetch(`${baseUrl}/_apis/wit/workitemsbatch?api-version=7.1`, {
+    // Restringe aos campos realmente usados na lista (fields: WORK_ITEM_FIELDS)
+    // em vez de $expand "All" (todos os campos do processo, inclusive os
+    // customizados e o texto rico de descricao/criterios/repro) — o board
+    // inteiro nunca usou mais que esses campos nomeados, e o fallback de
+    // "campo de conteudo renomeado" que justificava buscar tudo foi movido
+    // pro fetch sob demanda de 1 item (azureWorkItemDetail), que roda so
+    // quando o modal daquele item abre. $expand "Relations" ainda traz o
+    // link de Pull Request usado no pill de PR/Pipeline.
+    const batchResponse = await fetch(`${baseUrl}/_apis/wit/workitemsbatch?api-version=7.1`, {
       method: "POST",
       headers: { Authorization: authHeader, "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: chunk, errorPolicy: "Omit", $expand: "All" })
+      body: JSON.stringify({ ids: chunk, fields: WORK_ITEM_FIELDS, errorPolicy: "Omit", $expand: "Relations" })
     });
-    if (!batchResponse.ok) {
-      batchResponse = await fetch(`${baseUrl}/_apis/wit/workitemsbatch?api-version=7.1`, {
-        method: "POST",
-        headers: { Authorization: authHeader, "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: chunk, fields: WORK_ITEM_FIELDS, errorPolicy: "Omit", $expand: "Relations" })
-      });
-    }
     if (!batchResponse.ok) continue;
     const batchData = await batchResponse.json();
     rawWorkItems.push(...(batchData.value || []));
@@ -569,7 +555,7 @@ Deno.serve(async (req) => {
 
   const workItemIds = rawWorkItems.map((wi) => wi.id);
   const [collaboratorsResult, assignmentsResult, evidenceResult] = await Promise.all([
-    callerClient.from("collaborators").select("id, azureName"),
+    callerClient.from("collaborators_profile").select("id, azureName"),
     callerClient.from("work_item_assignments").select("workItemId, qaCollaboratorId, lastKnownState"),
     workItemIds.length
       ? callerClient.from("test_evidence").select("workItemId, result, createdAt").in("workItemId", workItemIds).order("createdAt", { ascending: false })
@@ -611,7 +597,6 @@ Deno.serve(async (req) => {
       tags: tagsList(fields["System.Tags"]),
       sprint: sprintFromIterationPath(fields["System.IterationPath"]),
       areaPath: fields["System.AreaPath"] || null,
-      description: fields["System.Description"] || (!fields["Microsoft.VSTS.TCM.ReproSteps"] && !fields["Microsoft.VSTS.Common.AcceptanceCriteria"] ? findFallbackDescription(fields) : "") || "",
       createdAt: fields["System.CreatedDate"] || null,
       createdBy: fields["System.CreatedBy"]?.displayName || null,
       changedBy: fields["System.ChangedBy"]?.displayName || null,
@@ -622,9 +607,10 @@ Deno.serve(async (req) => {
       originalEstimate: fields["Microsoft.VSTS.Scheduling.OriginalEstimate"] ?? null,
       completedHours: fields["Microsoft.VSTS.Scheduling.CompletedWork"] ?? null,
       remainingHours: fields["Microsoft.VSTS.Scheduling.RemainingWork"] ?? null,
-      acceptanceCriteria: fields["Microsoft.VSTS.Common.AcceptanceCriteria"] || "",
-      reproSteps: fields["Microsoft.VSTS.TCM.ReproSteps"] || "",
-      azureFields: Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, typeof value === "object" && value?.displayName ? value.displayName : value])),
+      // Description/AcceptanceCriteria/ReproSteps saíram daqui (podem ter
+      // imagens coladas em base64 no HTML, multiplicado por centenas de
+      // itens isso pesava muito no egress) — agora só vêm sob demanda pelo
+      // fetch de 1 item (azureWorkItemDetail), quando o modal abre.
       // O nome bruto do Azure SEMPRE vai junto, mesmo sem colaborador
       // cadastrado — o userscript legado nunca escondia o "Assigned To" só
       // porque a pessoa não tinha avatar/cor configurados; ele mostrava o
@@ -670,21 +656,38 @@ Deno.serve(async (req) => {
     }
   }
 
-  const discussionLimit = includeClosed ? 0 : Math.min(items.length, 20);
-  const discussionItems = items.slice(0, discussionLimit);
+  // Pass rate/result rate dependem de discussionEvidence para enxergar
+  // resultados que os QAs postam direto como comentario no Azure (fluxo
+  // legado do tampermonkey), nao so os gravados via test_evidence pelo
+  // proprio Stark Hub. Antes, `includeClosed` (usado pelo Dash executivo/
+  // Governanca) zerava esse fetch por completo (discussionLimit = 0) e o
+  // board normal so buscava os 20 primeiros itens da lista bruta — que
+  // raramente sao os testaveis (Bug/User Story), entao a metrica caia pra
+  // test_evidence vazio e aparecia 0% mesmo com muitos testes registrados
+  // em discussion. Agora sempre prioriza Bug/User Story (unicos tipos que
+  // entram em pass rate) dentro do teto de itens buscados.
+  const testableTypes = new Set(["Bug", "User Story"]);
+  const discussionCap = includeClosed ? Math.min(items.length, 80) : Math.min(items.length, 40);
+  const prioritizedItems = [
+    ...items.filter((item) => testableTypes.has(item.type)),
+    ...items.filter((item) => !testableTypes.has(item.type))
+  ].slice(0, discussionCap);
+  const itemById = new Map(items.map((item) => [item.id, item]));
   const discussionsPromise = mapWithConcurrency(
-    discussionItems,
-    10,
-    (item) => fetchDiscussionsForItem(item, projectPath, authHeader)
+    prioritizedItems,
+    12,
+    async (item) => ({ id: item.id, discussions: await fetchDiscussionsForItem(item, projectPath, authHeader) })
   );
-  const discussionsByIndex = discussionLimit
+  const discussionResults = discussionCap
     ? await Promise.race([
         discussionsPromise,
-        new Promise((resolve) => setTimeout(() => resolve([]), 9000))
+        new Promise((resolve) => setTimeout(() => resolve([]), 12000))
       ])
     : [];
-  for (let index = 0; index < discussionsByIndex.length; index += 1) {
-    const discussions = discussionsByIndex[index] || [];
+  for (const result of discussionResults) {
+    const item = result && itemById.get(result.id);
+    if (!item) continue;
+    const discussions = result.discussions || [];
     const records = discussions
       .filter((comment) => comment.result)
       .map((comment) => normalizeEvidenceComment({
@@ -694,11 +697,17 @@ Deno.serve(async (req) => {
         createdBy: { displayName: comment.authorName, uniqueName: comment.authorEmail, imageUrl: comment.avatarUrl },
         createdDate: comment.createdAt,
         modifiedDate: comment.modifiedAt
-      }, items[index]))
+      }, item))
       .filter(Boolean);
-    items[index].discussions = discussions;
-    items[index].discussionEvidence = records;
-    if (records[0]?.result) items[index].lastTestResult = records[0].result;
+    // So `discussionEvidence` (recorte pequeno, so os comentarios que batem
+    // com o padrao TEST APPROVED/FAILED/LIMITATION) vai pro board inteiro —
+    // precisa dele pra pass rate/result rate. Os comentarios crus completos
+    // (`discussions`, todo o historico de conversa do item) NAO sao mais
+    // embutidos aqui: pesavam muito multiplicado por ate 80 itens a cada
+    // load/auto-refresh, e so eram usados como fallback temporario no modal
+    // de 1 item, que ja busca isso sozinho via `azureWorkItemDetail`.
+    item.discussionEvidence = records;
+    if (records[0]?.result) item.lastTestResult = records[0].result;
   }
 
   if (staleAssignmentIds.length && serviceRoleKey) {

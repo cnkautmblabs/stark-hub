@@ -1,10 +1,7 @@
 // Edge Function: slackNotify
-// Objetivo: enviar mensagens para webhooks do Slack (notificação de item
-// pronto para BETA, equivalente ao "Envio para o Slack" do userscript legado).
-// Roda no servidor porque webhooks do Slack não respondem preflight CORS
-// para requisições com Content-Type: application/json vindas do navegador.
-//
-// Deploy: supabase functions deploy slackNotify
+// Sends messages to Slack webhooks without exposing the browser to Slack CORS.
+// Security guardrails: only official Slack webhook URLs are accepted, responses
+// never echo full secrets, and payload size is bounded.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,21 +16,51 @@ function json(body, status = 200) {
   });
 }
 
+function isAllowedSlackWebhook(rawUrl) {
+  try {
+    const url = new URL(String(rawUrl || "").trim());
+    return url.protocol === "https:" && url.hostname === "hooks.slack.com" && url.pathname.startsWith("/services/");
+  } catch {
+    return false;
+  }
+}
+
+function redactWebhook(rawUrl) {
+  try {
+    const url = new URL(String(rawUrl || ""));
+    const parts = url.pathname.split("/").filter(Boolean);
+    return `${url.origin}/${parts.slice(0, 2).join("/")}/***`;
+  } catch {
+    return "invalid-webhook";
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  if (req.method !== "POST") return json({ ok: false, error: "Método não suportado." }, 405);
+  if (req.method !== "POST") return json({ ok: false, error: "Metodo nao suportado." }, 405);
+
+  const contentLength = Number(req.headers.get("content-length") || 0);
+  if (contentLength > 128_000) return json({ ok: false, error: "Payload do Slack muito grande." }, 413);
 
   let payload;
   try {
     payload = await req.json();
   } catch {
-    return json({ ok: false, error: "Corpo da requisição inválido." }, 400);
+    return json({ ok: false, error: "Corpo da requisicao invalido." }, 400);
   }
 
   const { webhooks, text } = payload || {};
-  const targets = Array.isArray(webhooks) ? webhooks.filter((url) => typeof url === "string" && url.trim()) : [];
+  const targets = Array.isArray(webhooks)
+    ? Array.from(new Set(webhooks.filter((url) => typeof url === "string" && url.trim()).map((url) => url.trim())))
+    : [];
+
   if (!targets.length) return json({ ok: false, error: "Nenhum webhook do Slack configurado." }, 400);
+  if (targets.length > 5) return json({ ok: false, error: "Limite de 5 webhooks por envio." }, 400);
   if (!text || !String(text).trim()) return json({ ok: false, error: "Mensagem vazia." }, 400);
+  if (String(text).length > 40_000) return json({ ok: false, error: "Mensagem do Slack muito grande." }, 400);
+  if (targets.some((url) => !isAllowedSlackWebhook(url))) {
+    return json({ ok: false, error: "Webhook invalido. Apenas https://hooks.slack.com/services/... e permitido." }, 400);
+  }
 
   const results = await Promise.all(
     targets.map(async (url) => {
@@ -44,13 +71,12 @@ Deno.serve(async (req) => {
           body: JSON.stringify({ text })
         });
         const body = await response.text();
-        return { url, ok: response.ok, status: response.status, body: response.ok ? undefined : body.slice(0, 300) };
+        return { url: redactWebhook(url), ok: response.ok, status: response.status, body: response.ok ? undefined : body.slice(0, 300) };
       } catch (err) {
-        return { url, ok: false, error: err.message };
+        return { url: redactWebhook(url), ok: false, error: err.message };
       }
     })
   );
 
-  const anyOk = results.some((r) => r.ok);
-  return json({ ok: anyOk, results });
+  return json({ ok: results.some((result) => result.ok), results });
 });

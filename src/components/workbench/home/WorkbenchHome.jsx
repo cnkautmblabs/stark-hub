@@ -8,6 +8,7 @@ import { useWorkItems } from "../../../hooks/useWorkItems.js";
 import { useTestEvidence } from "../../../hooks/useTestEvidence.js";
 import { useCollaborators } from "../../../hooks/useCollaborators.js";
 import { useAppSettings } from "../../../hooks/useAppSettings.js";
+import { useHomeWidgets } from "../../../hooks/useHomeWidgets.js";
 import { accessLevelLabels, accessLevels, defaultGoalHours, hasManagementAccess } from "../../../utils/constants.js";
 import { buildCollaboratorNameIndex, findCollaboratorByName, formatHours, qaStatusInfo } from "../../../utils/workbench/formatters.js";
 import { compactSprintLabel, findCurrentSprint } from "../../../utils/sprints.js";
@@ -18,60 +19,16 @@ import {
   copyExecutiveReportText,
   copyPersonalSummaryText,
   downloadExecutiveReportPdf,
-  downloadPersonalSummaryPdf
+  downloadPersonalSummaryPdf,
+  isRecurrenceActiveToday
 } from "../../../utils/executiveReport.js";
 import { buildGovernanceSlackText, buildPersonalSummarySlackText } from "../../../utils/slackReport.js";
 import { resolveSlackWebhooks } from "../../../utils/slack.js";
 import { useToast } from "../../../contexts/ToastContext.jsx";
 import { Button, Kpi, KpiSkeleton, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
-
-const SHORTCUT_TITLE_MAX = 10;
+import { SHORTCUT_TITLE_MAX, WidgetBody, WidgetModal, WidgetToolbar, isValidHttpUrl } from "./widgetShared.jsx";
 
 const HOME_SECTION_DEFAULT_ORDER = ["widgets", "devPanel", "qaPanel", "activity", "governance", "summary"];
-
-function escapeHtml(text) {
-  return String(text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-// Markdown minimo (negrito/italico/quebra de linha), mantido so pra notas
-// antigas ja salvas no formato anterior (texto puro com ** e *) — o editor
-// novo grava HTML de verdade e nunca produz esse formato.
-function renderMiniMarkdown(text) {
-  return escapeHtml(text)
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/\n/g, "<br/>");
-}
-
-function looksLikeHtml(value) {
-  return /<[a-z][\s\S]*>/i.test(String(value || ""));
-}
-
-// Post-it grava HTML puro (contentEditable) agora; notas antigas salvas como
-// texto simples com marcadores ** / * ainda renderizam via renderMiniMarkdown.
-function renderNoteHtml(text) {
-  return looksLikeHtml(text) ? text : renderMiniMarkdown(text);
-}
-
-// Favicon publico do Google — nao precisa de backend nem CORS pra um <img>,
-// e cobre "link"/"atalho" sem exigir que o usuario cole uma URL de imagem.
-function faviconUrl(url) {
-  try {
-    const host = new URL(url).hostname;
-    return `https://www.google.com/s2/favicons?sz=128&domain=${encodeURIComponent(host)}`;
-  } catch {
-    return "";
-  }
-}
-
-function isValidHttpUrl(value) {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
 
 function storageKey(prefix, userKey) {
   return `starkHub${prefix}:${userKey || "anonymous"}`;
@@ -180,238 +137,26 @@ function ShortcutTemplateActions({ widgets, onImport }) {
   );
 }
 
-const notePresetColors = ["#fde68a", "#fdba74", "#fbcfe8", "#bbf7d0", "#bfdbfe", "#ddd6fe", "#e5e7eb"];
 
-// Editor WYSIWYG minimo pro post-it: sem preview separada, sem markdown
-// visivel — o que o usuario ve digitando e exatamente o HTML salvo. Usa
-// document.execCommand (suportado em todos os navegadores evergreen pra
-// esse tipo de edicao simples) em vez de trazer uma lib de editor inteira.
-function RichNoteEditor({ initialValue, onChange, highlightColor = "#fff59d" }) {
-  const { t } = useTranslation();
-  const contentRef = useRef(null);
-  const [textColor, setTextColor] = useState("#111111");
-
-  useEffect(() => {
-    if (contentRef.current) contentRef.current.innerHTML = initialValue || "";
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function exec(command, value) {
-    contentRef.current?.focus();
-    document.execCommand(command, false, value);
-    onChange(contentRef.current?.innerHTML || "");
-  }
-
-  return (
-    <div className="mb-home-note-editor">
-      <div className="mb-home-note-toolbar">
-        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => exec("bold")} title={t("home.boldTitle")}><i className="bi bi-type-bold" /></button>
-        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => exec("italic")} title={t("home.italicTitle")}><i className="bi bi-type-italic" /></button>
-        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => exec("underline")} title={t("home.underlineTitle")}><i className="bi bi-type-underline" /></button>
-        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => exec("hiliteColor", highlightColor)} title={t("home.highlightTitle")}><i className="bi bi-vector-pen" /></button>
-        <label className="mb-home-note-color" title={t("home.textColorTitle")} onMouseDown={(event) => event.preventDefault()}>
-          <i className="bi bi-palette-fill" />
-          <input type="color" value={textColor} onChange={(event) => { setTextColor(event.target.value); exec("foreColor", event.target.value); }} />
-        </label>
-      </div>
-      <div
-        ref={contentRef}
-        className="mb-home-note-content"
-        contentEditable
-        suppressContentEditableWarning
-        onInput={() => onChange(contentRef.current?.innerHTML || "")}
-        data-placeholder={t("home.notePlaceholder")}
-      />
-    </div>
-  );
-}
-
-function WidgetModal({ type, initial, onClose, onSave, onDelete }) {
-  const { t } = useTranslation();
-  const widgetTypeLabels = { note: t("home.widgetTypeNote"), link: t("home.widgetTypeLink"), shortcut: t("home.widgetTypeShortcut") };
-  const isEdit = Boolean(initial);
-  const [title, setTitle] = useState(initial?.title || "");
-  const [url, setUrl] = useState(initial?.url || "");
-  const [text, setText] = useState(initial?.text || "");
-  const [imageUrl, setImageUrl] = useState(initial?.imageUrl || "");
-  const [color, setColor] = useState(initial?.color || (type === "note" ? notePresetColors[0] : ""));
-  const [error, setError] = useState("");
-  const isNote = type === "note";
-  const isShortcut = type === "shortcut";
-  const titleMax = isShortcut ? SHORTCUT_TITLE_MAX : undefined;
-
-  function submit(event) {
-    event.preventDefault();
-    if (!title.trim()) { setError(t("home.titleRequired")); return; }
-    if (isShortcut && title.trim().length > SHORTCUT_TITLE_MAX) { setError(t("home.shortcutTitleTooLongError", { max: SHORTCUT_TITLE_MAX })); return; }
-    if (!isNote && !isValidHttpUrl(url.trim())) { setError(t("home.invalidUrlError")); return; }
-    onSave({
-      id: initial?.id ?? Date.now(),
-      type,
-      title: title.trim(),
-      url: url.trim(),
-      text,
-      imageUrl: imageUrl.trim(),
-      color: isShortcut ? undefined : (color || undefined),
-      createdAt: initial?.createdAt || new Date().toISOString()
-    });
-  }
-
-  return (
-    <div className="mb-home-modal-overlay" onClick={onClose}>
-      <form data-allow-submit="true"
-        className={`mb-home-modal ${isNote ? "note" : ""}`}
-        style={isNote ? { background: color || notePresetColors[0] } : undefined}
-        onClick={(event) => event.stopPropagation()}
-        onSubmit={submit}
-      >
-        {isNote && <span className="mb-home-modal-note-fold" aria-hidden="true" />}
-        <header>
-          <strong>{isEdit ? t("home.editWidgetTitle", { type: widgetTypeLabels[type].toLowerCase() }) : t("home.newWidgetTitle", { type: widgetTypeLabels[type].toLowerCase() })}</strong>
-          <button type="button" onClick={onClose}><i className="bi bi-x-lg" /></button>
-        </header>
-        <div className="mb-home-modal-body">
-          {isNote ? (
-            <input
-              className="mb-home-note-title"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder={t("home.genericTitlePlaceholder")}
-              autoFocus
-            />
-          ) : (
-            <label>
-              <span>{t("home.titleLabel")} {titleMax && <em className="mb-home-modal-counter">{title.length}/{titleMax}</em>}</span>
-              <input value={title} maxLength={titleMax} onChange={(event) => setTitle(event.target.value)} placeholder={isShortcut ? t("home.shortcutTitlePlaceholder") : t("home.genericTitlePlaceholder")} autoFocus />
-            </label>
-          )}
-          {!isNote && <label><span>{t("home.urlLabel")}</span><input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://..." /></label>}
-          {isNote && <RichNoteEditor initialValue={text} onChange={setText} />}
-          {!isNote && (
-            <label>
-              <span>{isShortcut ? t("home.iconLabelCentered") : t("home.iconLabelOptional")}</span>
-              <input value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder={t("home.iconPlaceholder")} />
-              {!imageUrl && isValidHttpUrl(url) && (
-                <span className="mb-home-modal-favicon-preview"><img src={faviconUrl(url)} alt="" /> {t("home.faviconDetected")}</span>
-              )}
-            </label>
-          )}
-          {isNote && (
-            <div className="mb-home-modal-note-colors">
-              {notePresetColors.map((preset) => (
-                <button key={preset} type="button" className={`mb-home-modal-note-swatch ${color === preset ? "active" : ""}`} style={{ background: preset }} onClick={() => setColor(preset)} title={preset} />
-              ))}
-            </div>
-          )}
-          {!isNote && !isShortcut && (
-            <label className="mb-home-modal-color-row">
-              <span>{t("home.cardColorLabel")}</span>
-              <input type="color" value={color || "#64748b"} onChange={(event) => setColor(event.target.value)} />
-            </label>
-          )}
-          {error && <div className="mb-home-modal-error">{error}</div>}
-        </div>
-        <footer>
-          {isEdit && <button type="button" className="danger" onMouseDown={(event) => event.preventDefault()} onClick={() => onDelete(initial.id)}><i className="bi bi-trash" /> {t("home.deleteButton")}</button>}
-          <button type="button" className="secondary" onMouseDown={(event) => event.preventDefault()} onClick={onClose}>{t("home.cancelButton")}</button>
-          <button type="submit" className="primary" onMouseDown={(event) => event.preventDefault()}>{t("home.saveButton")}</button>
-        </footer>
-      </form>
-    </div>
-  );
-}
-
-function ImagePlaceholder() {
-  return (
-    <svg className="mb-home-widget-placeholder-svg" viewBox="0 0 64 64" role="img" aria-label="Sem imagem">
-      <rect x="3" y="3" width="58" height="58" rx="10" fill="none" stroke="currentColor" strokeOpacity=".3" strokeWidth="2.5" />
-      <circle cx="23" cy="23" r="6" fill="currentColor" fillOpacity=".28" />
-      <path d="M8 46 24 30 36 42 46 28 58 44" fill="none" stroke="currentColor" strokeOpacity=".4" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function WidgetImage({ src, alt = "" }) {
-  const [failed, setFailed] = useState(false);
-  if (!src || failed) {
-    return <div className="mb-home-widget-placeholder"><ImagePlaceholder /></div>;
-  }
-  return <img src={src} alt={alt} onError={() => setFailed(true)} />;
-}
-
-function WidgetToolbar({ onEdit, onRemove, widget }) {
-  const { t } = useTranslation();
-  return (
-    <div className="mb-home-widget-toolbar">
-      <span className="mb-home-widget-drag" title={t("home.dragReorder")}><i className="bi bi-grip-vertical" /></span>
-      <button type="button" className="mb-home-widget-edit" onClick={() => onEdit(widget)} title={t("home.editTitle")}><i className="bi bi-pencil" /></button>
-      <button type="button" className="mb-home-widget-remove" onClick={() => onRemove(widget.id)} title={t("home.removeTitle")}><i className="bi bi-x" /></button>
-    </div>
-  );
-}
-
-function WidgetCard({ widget, onRemove, onEdit, onDragStart, onDragOver, onDrop, onDragEnd, dragging }) {
-  const { t } = useTranslation();
+function WidgetCard({ widget, onRemove, onEdit, onPin, onDragStart, onDragOver, onDrop, onDragEnd, dragging }) {
   const dragProps = { draggable: true, onDragStart, onDragOver, onDrop, onDragEnd };
-
-  if (widget.type === "shortcut" || widget.type === "link") {
-    const hostname = (() => { try { return new URL(widget.url).hostname; } catch { return widget.url; } })();
-    return (
-      <article className={`mb-home-widget shortcut ${dragging ? "dragging" : ""}`} {...dragProps}>
-        <WidgetToolbar widget={widget} onEdit={onEdit} onRemove={onRemove} />
-        <a href={widget.url} target="_blank" rel="noreferrer" className="mb-home-widget-shortcut-body">
-          <WidgetImage src={widget.imageUrl || faviconUrl(widget.url)} />
-          <span className="mb-home-widget-shortcut-caption"><strong>{widget.title}</strong>{widget.type === "link" && <small>{hostname}</small>}</span>
-        </a>
-      </article>
-    );
-  }
-
-  if (widget.type === "note") {
-    return (
-      <article className={`mb-home-widget note ${dragging ? "dragging" : ""}`} style={{ background: widget.color || "#fde68a" }} {...dragProps}>
-        <span className="mb-home-widget-note-fold" aria-hidden="true" />
-        <WidgetToolbar widget={widget} onEdit={onEdit} onRemove={onRemove} />
-        <NoteCardBody widget={widget} onEdit={onEdit} />
-      </article>
-    );
-  }
-
-  return null;
-}
-
-// Titulo sempre no topo, descricao logo abaixo — o texto e clampado (5
-// linhas) via CSS, mas sem nenhum sinal de que falta conteudo o usuario nao
-// sabe que ha mais pra ver. Mede o overflow real (scrollHeight vs
-// clientHeight) pra so mostrar "Ver mais" quando o texto de fato foi
-// cortado, em vez de um palpite por tamanho de string.
-function NoteCardBody({ widget, onEdit }) {
-  const { t } = useTranslation();
-  const textRef = useRef(null);
-  const [overflowing, setOverflowing] = useState(false);
-
-  useEffect(() => {
-    const el = textRef.current;
-    if (!el) { setOverflowing(false); return; }
-    setOverflowing(el.scrollHeight > el.clientHeight + 1);
-  }, [widget.text]);
-
+  const className = widget.type === "note" ? "note" : "shortcut";
   return (
-    <button type="button" className="mb-home-widget-note-body" onClick={() => onEdit(widget)} title={t("home.clickToEditNote")}>
-      <strong>{widget.title}</strong>
-      {widget.text && (
-        <div className="mb-home-widget-note-text-wrap">
-          <p ref={textRef} dangerouslySetInnerHTML={{ __html: renderNoteHtml(widget.text) }} />
-          {overflowing && <span className="mb-home-widget-note-more">{t("home.seeMore")}</span>}
-        </div>
-      )}
-    </button>
+    <article className={`mb-home-widget ${className} ${dragging ? "dragging" : ""}`} style={widget.type === "note" ? { background: widget.color || "#fde68a" } : undefined} {...dragProps}>
+      {widget.type === "note" && <span className="mb-home-widget-note-fold" aria-hidden="true" />}
+      <WidgetToolbar widget={widget} onEdit={onEdit} onRemove={onRemove} onPin={onPin} />
+      <WidgetBody widget={widget} onEdit={onEdit} />
+    </article>
   );
 }
 
-function WidgetsGrid({ widgets, onRemove, onReorder, onEdit }) {
+function WidgetsGrid({ widgets, onRemove, onReorder, onEdit, onPin }) {
   const { t } = useTranslation();
   const [dragId, setDragId] = useState(null);
+  // Widgets pinados (flutuante ou no menu lateral) saem da grade — quem
+  // renderiza eles agora e a FloatingWidgetsLayer/Sidebar; fechar o card
+  // pinado devolve pra ca (pinned volta a null).
+  const visibleWidgets = widgets.filter((widget) => !widget.pinned);
 
   function handleDrop(targetId) {
     if (dragId === null || dragId === targetId) return;
@@ -427,12 +172,13 @@ function WidgetsGrid({ widgets, onRemove, onReorder, onEdit }) {
 
   return (
     <div className="mb-home-widgets">
-      {widgets.map((widget) => (
+      {visibleWidgets.map((widget) => (
         <WidgetCard
           key={widget.id}
           widget={widget}
           onRemove={onRemove}
           onEdit={onEdit}
+          onPin={(mode) => onPin(widget.id, mode)}
           dragging={dragId === widget.id}
           onDragStart={() => setDragId(widget.id)}
           onDragOver={(event) => event.preventDefault()}
@@ -440,7 +186,7 @@ function WidgetsGrid({ widgets, onRemove, onReorder, onEdit }) {
           onDragEnd={() => setDragId(null)}
         />
       ))}
-      {!widgets.length && <span className="mb-home-empty">{t("home.noWidgetsYet")}</span>}
+      {!visibleWidgets.length && <span className="mb-home-empty">{t("home.noWidgetsYet")}</span>}
     </div>
   );
 }
@@ -557,29 +303,31 @@ function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, dateFro
         <>
           <form data-allow-submit="true" className="mb-home-summary-form" onSubmit={submit}>
             <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={t("home.summaryTitlePlaceholder")} />
-            <div className="mb-home-summary-type">
-              <button type="button" className={type === "temporaria" ? "active" : ""} onClick={() => setType("temporaria")}>{t("home.todayButton")}</button>
-              <button type="button" className={type === "recorrente" ? "active" : ""} onClick={() => setType("recorrente")}>{t("home.recurringButton")}</button>
-            </div>
-            {type === "recorrente" && (
-              <div className="mb-home-summary-recurrence">
-                <select value={recurrenceKind} onChange={(event) => setRecurrenceKind(event.target.value)} aria-label={t("home.recurrenceLabel")}>
-                  <option value="daily">{t("home.recurrence.daily")}</option>
-                  <option value="weekly">{t("home.recurrence.weekly")}</option>
-                  <option value="monthly">{t("home.recurrence.monthly")}</option>
-                  <option value="weekday">{t("home.recurrence.weekday", { weekday: t(`home.weekdays.${recurrenceWeekday}`) })}</option>
-                  <option value="everyNDays">{t("home.recurrence.everyNDays", { count: recurrenceInterval })}</option>
-                </select>
-                {recurrenceKind === "weekday" && (
-                  <select value={recurrenceWeekday} onChange={(event) => setRecurrenceWeekday(event.target.value)} aria-label={t("home.weekdayLabel")}>
-                    {["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].map((day) => <option key={day} value={day}>{t(`home.weekdays.${day}`)}</option>)}
-                  </select>
-                )}
-                {recurrenceKind === "everyNDays" && (
-                  <input type="number" min="1" max="365" value={recurrenceInterval} onChange={(event) => setRecurrenceInterval(event.target.value)} aria-label={t("home.intervalDaysLabel")} />
-                )}
+            <div className="mb-home-summary-controls">
+              <div className="mb-home-summary-type">
+                <button type="button" className={type === "temporaria" ? "active" : ""} onClick={() => setType("temporaria")}>{t("home.todayButton")}</button>
+                <button type="button" className={type === "recorrente" ? "active" : ""} onClick={() => setType("recorrente")}>{t("home.recurringButton")}</button>
               </div>
-            )}
+              {type === "recorrente" && (
+                <div className="mb-home-summary-recurrence">
+                  <select value={recurrenceKind} onChange={(event) => setRecurrenceKind(event.target.value)} aria-label={t("home.recurrenceLabel")}>
+                    <option value="daily">{t("home.recurrence.daily")}</option>
+                    <option value="weekly">{t("home.recurrence.weekly")}</option>
+                    <option value="monthly">{t("home.recurrence.monthly")}</option>
+                    <option value="weekday">{t("home.recurrence.weekday", { weekday: t(`home.weekdays.${recurrenceWeekday}`) })}</option>
+                    <option value="everyNDays">{t("home.recurrence.everyNDays", { count: recurrenceInterval })}</option>
+                  </select>
+                  {recurrenceKind === "weekday" && (
+                    <select value={recurrenceWeekday} onChange={(event) => setRecurrenceWeekday(event.target.value)} aria-label={t("home.weekdayLabel")}>
+                      {["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"].map((day) => <option key={day} value={day}>{t(`home.weekdays.${day}`)}</option>)}
+                    </select>
+                  )}
+                  {recurrenceKind === "everyNDays" && (
+                    <input type="number" min="1" max="365" value={recurrenceInterval} onChange={(event) => setRecurrenceInterval(event.target.value)} aria-label={t("home.intervalDaysLabel")} />
+                  )}
+                </div>
+              )}
+            </div>
             <button type="submit" className="mb-home-summary-submit"><FiPlus /> {t("home.addButton")}</button>
           </form>
           <div className="mb-home-summary-range">
@@ -588,13 +336,16 @@ function ExecutiveSummary({ entries, name, role, autoEntries, autoLabel, dateFro
             <label>{t("home.toLabel")}<input type="date" value={dateTo} min={dateFrom} onChange={(event) => onDateToChange(event.target.value)} /></label>
           </div>
           <div className="mb-home-summary-list">
-            {entries.map((entry) => (
-              <div key={entry.id} className={`mb-home-summary-item ${entry.type}`}>
-                <span className="mb-home-summary-tag">{recurrenceLabel(entry)}</span>
-                <span className="mb-home-summary-title">{entry.title}</span>
-                <button type="button" onClick={() => onRemove(entry.id)} title={t("home.removeButton")}><i className="bi bi-x" /></button>
-              </div>
-            ))}
+            {entries.map((entry) => {
+              const activeToday = isRecurrenceActiveToday(entry);
+              return (
+                <div key={entry.id} className={`mb-home-summary-item ${entry.type} ${activeToday ? "" : "inactive-today"}`} title={activeToday ? undefined : t("home.recurrenceInactiveToday")}>
+                  <span className="mb-home-summary-tag">{recurrenceLabel(entry)}</span>
+                  <span className="mb-home-summary-title">{entry.title}</span>
+                  <button type="button" onClick={() => onRemove(entry.id)} title={t("home.removeButton")}><i className="bi bi-x" /></button>
+                </div>
+              );
+            })}
             {autoEntries.map((entry, index) => (
               <div key={`auto-${index}`} className="mb-home-summary-item auto">
                 <span className="mb-home-summary-tag">{autoLabel}</span>
@@ -643,15 +394,20 @@ export function WorkbenchHome() {
   const reportType = isDev ? "dev" : isQa ? "qa" : isGestao ? "gestao" : "dev";
   const today = now.toISOString().slice(0, 10);
 
-  const [widgets, setWidgets] = useState(() => readLocal(storageKey("HomeWidgets", userKey), []));
+  const { widgets, setWidgets } = useHomeWidgets(userKey);
   const [summaryEntries, setSummaryEntries] = useState(() => readLocal(storageKey("HomeSummary", userKey), []));
   const [summaryDateFrom, setSummaryDateFrom] = useState(() => readLocal(storageKey("HomeSummaryFrom", userKey), today));
   const [summaryDateTo, setSummaryDateTo] = useState(() => readLocal(storageKey("HomeSummaryTo", userKey), today));
   const [rawSectionOrder, setRawSectionOrder] = useState(() => readLocal(storageKey("HomeSectionOrder", userKey), HOME_SECTION_DEFAULT_ORDER));
-  const [collapsedSections, setCollapsedSections] = useState(() => readLocal(storageKey("HomeSectionsCollapsed", userKey), {}));
+  // Time reportou a Home cheia de informacao logo de cara — todas as
+  // secoes comecavam abertas simultaneamente. "Atualizacoes recentes" e
+  // "Resumo executivo" (as duas mais longas/detalhadas) agora comecam
+  // fechadas por padrao, a 1 clique de distancia; Painel/Minhas horas/
+  // Governanca continuam abertos por serem mais curtos e acionaveis. So
+  // afeta quem nunca mexeu no accordion — preferencia ja salva continua.
+  const [collapsedSections, setCollapsedSections] = useState(() => readLocal(storageKey("HomeSectionsCollapsed", userKey), { activity: true, summary: true }));
   const [dragSectionId, setDragSectionId] = useState(null);
 
-  useEffect(() => { writeLocal(storageKey("HomeWidgets", userKey), widgets); }, [widgets, userKey]);
   useEffect(() => { writeLocal(storageKey("HomeSummary", userKey), summaryEntries); }, [summaryEntries, userKey]);
   useEffect(() => { writeLocal(storageKey("HomeSummaryFrom", userKey), summaryDateFrom); }, [summaryDateFrom, userKey]);
   useEffect(() => { writeLocal(storageKey("HomeSummaryTo", userKey), summaryDateTo); }, [summaryDateTo, userKey]);
@@ -900,6 +656,13 @@ export function WorkbenchHome() {
   function reorderWidgets(next) {
     setWidgets(next);
   }
+  // "mode" e "float" (flutua na camada mais alta, em qualquer tela) ou
+  // "sidebar" (fixado como item compacto no menu lateral) — nos dois casos
+  // o widget some da grade normal do Painel ate o usuario fechar (volta
+  // pinned:null). A propria FloatingWidgetsLayer/Sidebar cuidam do resto.
+  function pinWidget(id, mode) {
+    setWidgets((current) => current.map((widget) => (widget.id === id ? { ...widget, pinned: mode, floatOpacity: widget.floatOpacity ?? 1 } : widget)));
+  }
   function handleShortcutImport({ accepted, rejected }) {
     if (accepted.length) setWidgets((current) => [...accepted, ...current]);
     if (accepted.length && !rejected.length) pushToast({ title: t("home.shortcutsImportedTitle"), body: t("home.shortcutsImportedBody", { count: accepted.length }), tone: "success" });
@@ -980,7 +743,7 @@ export function WorkbenchHome() {
       subtitle: t("home.widgetsSubtitle"),
       summary: t("home.widgetsSummary", { count: widgets.length }),
       actions: <div className="mb-home-panel-actions"><ShortcutTemplateActions widgets={widgets} onImport={handleShortcutImport} /><AddWidgetMenu onPick={setWidgetModalType} /></div>,
-      body: <WidgetsGrid widgets={widgets} onRemove={removeWidget} onReorder={reorderWidgets} onEdit={setEditingWidget} />
+      body: <WidgetsGrid widgets={widgets} onRemove={removeWidget} onReorder={reorderWidgets} onEdit={setEditingWidget} onPin={pinWidget} />
     },
     devPanel: {
       subtitle: t("home.devPanelSubtitle"),

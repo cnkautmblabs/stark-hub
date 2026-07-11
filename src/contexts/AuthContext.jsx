@@ -50,6 +50,8 @@ const AuthContext = createContext(null);
 const SESSION_PENDING = undefined;
 
 const OAUTH_PENDING_KEY = "stark-hub-oauth-pending";
+export const TERMS_VERSION = "draft-2026-07-10";
+export const TERMS_ACCEPTANCE_KEY = "stark-hub-terms-accepted-before-login";
 
 function getAuthRedirectUrl() {
   const configuredUrl = import.meta.env.VITE_AUTH_REDIRECT_URL;
@@ -166,7 +168,24 @@ export function AuthProvider({ children }) {
     // — o id da linha não é mais o auth.users.id (pode já existir antes do
     // primeiro login, cadastrado pela Gestão), então busca por "authUserId".
     const { data, error } = await supabase.from("collaborators_profile").select("*").eq("authUserId", userId).maybeSingle();
-    if (!error) setProfile(data);
+    if (!error) {
+      const acceptedBeforeLogin = sessionStorage.getItem(TERMS_ACCEPTANCE_KEY) === TERMS_VERSION;
+      if (data && acceptedBeforeLogin && (!data.termsAccepted || data.termsVersion !== TERMS_VERSION)) {
+        const { data: acceptedProfile, error: acceptError } = await supabase
+          .from("collaborators_profile")
+          .update({ termsAccepted: true, termsAcceptedAt: new Date().toISOString(), termsVersion: TERMS_VERSION })
+          .eq("authUserId", userId)
+          .select()
+          .maybeSingle();
+        if (!acceptError && acceptedProfile) {
+          sessionStorage.removeItem(TERMS_ACCEPTANCE_KEY);
+          setProfile(acceptedProfile);
+          setLoading(false);
+          return;
+        }
+      }
+      setProfile(data);
+    }
     setLoading(false);
   }
 

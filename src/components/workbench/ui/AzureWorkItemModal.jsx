@@ -4,9 +4,11 @@ import { supabase, isSupabaseConfigured } from "../../../lib/supabaseClient.js";
 import { azureWorkItemUrl } from "../../../utils/azure.js";
 import { countries, formatWorkItemCode } from "../../../utils/constants.js";
 import { compactSprintLabel } from "../../../utils/sprints.js";
-import { buildLegacyQaResultSlackText, buildQaResultDiscussionHtml, legacyMention, limitationContextTemplate } from "../../../utils/slackReport.js";
-import { buildCollaboratorNameIndex, evidenceDedupeKey, evidenceEnvironmentOrder, evidenceEnvironments, evidenceResultInfo, findCollaboratorByName, isQaEvidenceEntry } from "../../../utils/workbench/formatters.js";
+import { buildLegacyQaResultSlackText, buildQaResultDiscussionHtml, buildTestFailedTestsQaMessage, legacyMention, limitationContextTemplate } from "../../../utils/slackReport.js";
+import { resolveSlackWebhooks } from "../../../utils/slack.js";
+import { buildCollaboratorNameIndex, evidenceDedupeKey, evidenceEnvironmentOrder, evidenceEnvironments, evidenceResultInfo, findCollaboratorByName, isQaEvidenceEntry, normalize, qaStatusInfo } from "../../../utils/workbench/formatters.js";
 import { useCollaborators } from "../../../hooks/useCollaborators.js";
+import { useAppSettings } from "../../../hooks/useAppSettings.js";
 import { useAuth } from "../../../contexts/AuthContext.jsx";
 import { useToast } from "../../../contexts/ToastContext.jsx";
 import { CountryVisual, EnvBadge, IdentityAvatar, QaPicker, ResultBadge, TypeBadge, envIconSrc, typeIconSrc } from "./WorkbenchPrimitives.jsx";
@@ -224,6 +226,7 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
   const { user } = useAuth();
   const { pushToast } = useToast();
   const { collaborators = [] } = useCollaborators();
+  const { getSetting } = useAppSettings();
   const fileInputRef = useRef(null);
   const [result, setResult] = useState("");
   const [state, setState] = useState("Ready to Beta");
@@ -236,9 +239,17 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
   const [saving, setSaving] = useState(false);
   const [liveDiscussions, setLiveDiscussions] = useState(null);
   const [liveDiscussionEvidence, setLiveDiscussionEvidence] = useState(null);
+  const [liveContent, setLiveContent] = useState(null);
   const [discussionsLoading, setDiscussionsLoading] = useState(false);
   const [newTagDraft, setNewTagDraft] = useState("");
   const [assumingTask, setAssumingTask] = useState(false);
+  // Fluxo completo de Fail (especificacao enviada pelo usuario): um bug
+  // reprovando o teste pode ser "parte da entrega" (o item corretivo e uma
+  // TASK, o item testado vai pra Active) ou "externo" (item corretivo e um
+  // BUG separado; se nao for impeditivo o item testado segue aprovado
+  // normalmente, se for impeditivo o item testado vai pra Blocked).
+  const [bugScope, setBugScope] = useState("");
+  const [bugBlocking, setBugBlocking] = useState("");
   const azureReady = Boolean(profile?.azureOrgUrl && profile?.azureProject && profile?.azurePat);
   const detailCacheKey = buildApiCacheKey("workItemDetail", profile?.id || profile?.email || "anonymous", profile?.azureOrgUrl, profile?.azureProject, item?.id);
 
@@ -254,6 +265,7 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
     if (cached?.data) {
       setLiveDiscussions(cached.data.discussions || []);
       setLiveDiscussionEvidence(cached.data.discussionEvidence || []);
+      setLiveContent(cached.data.content || null);
       if (cached.fresh) return () => { cancelled = true; };
     } else {
       setDiscussionsLoading(true);
@@ -263,11 +275,12 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
     })).then(({ data }) => {
       if (cancelled) return;
       if (data?.ok) {
-        const next = { discussions: data.discussions || [], discussionEvidence: data.discussionEvidence || [] };
+        const next = { discussions: data.discussions || [], discussionEvidence: data.discussionEvidence || [], content: data.content || null };
         const nextSignature = stableSignature(next);
         if (nextSignature !== cached?.signature) {
           setLiveDiscussions(next.discussions);
           setLiveDiscussionEvidence(next.discussionEvidence);
+          setLiveContent(next.content);
         }
         writeApiCache(detailCacheKey, next, nextSignature);
       }
@@ -280,6 +293,16 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
 
   const discussions = liveDiscussions ?? item.discussions ?? [];
   const discussionEvidence = liveDiscussionEvidence ?? item.discussionEvidence ?? [];
+  // Description/Acceptance Criteria/Repro Steps saíram do fetch em lote do
+  // board (pesavam demais multiplicados por centenas de itens — podem ter
+  // imagens coladas direto no HTML) e agora só chegam junto com este fetch
+  // sob demanda de 1 item; `item.description` etc. como fallback cobre só
+  // o caso raro de algum chamador ainda passar isso pronto.
+  const content = liveContent ?? {
+    description: item.description || "",
+    acceptanceCriteria: item.acceptanceCriteria || "",
+    reproSteps: item.reproSteps || ""
+  };
   const url = azureEditableUrl(profile, item);
   const itemCode = formatWorkItemCode(item.id, item.type);
   const countryOptions = Object.keys(countries);
@@ -386,7 +409,7 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
         item: {
           type: "Task",
           title: item.title,
-          description: item.description || "",
+          description: content.description || "",
           areaPath: item.areaPath || profile?.azureProject,
           sprint: item.sprint || item.iteration,
           tags,
@@ -397,10 +420,61 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
       }
     });
     if (!error && data?.ok) {
-      pushToast({ title: t("workItemModal.taskCreatedTitle"), body: t("workItemModal.taskCreatedBody", { id: data.id, type: item.type }), tone: "success" });
+      pushToast({ title: t("workItemModal.taskCreatedTitle"), body: t("workItemModal.taskCreatedBody", { id: data.id, type: "Task" }), tone: "success" });
     } else {
       pushToast({ title: t("workItemModal.taskCreateFailedTitle"), body: data?.error || error?.message || "", tone: "danger" });
     }
+  }
+
+  // Colaborador padrao dos itens corretivos (Furtado, na especificacao de
+  // fluxo) — busca por substring no nome/aliases/slackName em vez de match
+  // exato, ja que nao sabemos a forma exata cadastrada (ex.: "Joao Furtado").
+  function findCollaboratorByLooseName(needle) {
+    if (!needle) return null;
+    const target = normalize(needle);
+    return collaborators.find((person) => {
+      const candidates = [person.azureName, person.slackName, ...(person.aliases || [])];
+      return candidates.some((name) => name && normalize(name).includes(target));
+    }) || null;
+  }
+
+  // Item corretivo do fluxo de Fail: TASK (bug faz parte da entrega, secao
+  // 6.3 da especificacao) ou BUG (bug externo, secao 6.5) — mesma acao
+  // "create" do Azure ja usada por createLinkedTask, generalizada pro tipo e
+  // pras tags fixas exigidas (0-Pais + 2-BugINT). Devolve o item criado
+  // (id/title) pra usar no Parent/Child da notificacao do Slack.
+  async function createCorrectiveItem(workItemType) {
+    if (!profile?.azureOrgUrl || !profile?.azureProject || !profile?.azurePat) return null;
+    const furtado = findCollaboratorByLooseName("furtado");
+    const countryTags = (item.tags || []).filter(isCountryTag);
+    const tags = Array.from(new Set([...countryTags, "2-BugINT"]));
+    const titlePrefix = workItemType === "Task" ? t("workItemModal.correctiveTaskTitlePrefix") : t("workItemModal.correctiveBugTitlePrefix");
+    const { data, error } = await supabase.functions.invoke("azureWorkItemAction", {
+      body: {
+        action: "create",
+        orgUrl: profile.azureOrgUrl,
+        project: profile.azureProject,
+        pat: profile.azurePat,
+        item: {
+          type: workItemType,
+          title: `${titlePrefix} ${itemCode} - ${item.title}`.slice(0, 255),
+          description: context || "",
+          areaPath: item.areaPath || profile?.azureProject,
+          sprint: item.sprint || item.iteration,
+          tags,
+          priority: item.priority,
+          assigneeAlias: furtado?.azureName || "",
+          parentId: item.id
+        }
+      }
+    });
+    if (!error && data?.ok) {
+      pushToast({ title: t("workItemModal.taskCreatedTitle"), body: t("workItemModal.taskCreatedBody", { id: data.id, type: workItemType }), tone: "success" });
+      if (!furtado) pushToast({ title: t("workItemModal.furtadoNotFoundTitle"), body: t("workItemModal.furtadoNotFoundBody"), tone: "warning" });
+      return { id: data.id, title: `${titlePrefix} ${itemCode} - ${item.title}`, type: workItemType, url: azureWorkItemUrl(profile.azureOrgUrl, profile.azureProject, data.id) };
+    }
+    pushToast({ title: t("workItemModal.taskCreateFailedTitle"), body: data?.error || error?.message || "", tone: "danger" });
+    return null;
   }
 
   async function assumeTask() {
@@ -437,13 +511,43 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
     return String(value || "").trim().toLowerCase();
   }
 
+  // Estagio atual -> proximo status quando o resultado e uma aprovacao
+  // (Approved/Limitation, ou Fail externo nao-impeditivo — a entrega segue
+  // normalmente mesmo com um bug estranho a ela encontrado no caminho).
+  function approvedNextState() {
+    return qaStatusInfo(item.state).key === "inBeta" ? "HMG CNK" : "Ready to Beta";
+  }
+
+  // Proximo status depende do ESTAGIO ATUAL do item e, no caso de Fail, de
+  // duas perguntas da especificacao de fluxo fornecida pelo usuario
+  // (WokFlow.pdf/BugUSflwo.pdf/especificacao_fluxos_work_items.md):
+  // In QA/In BETA + Approved/Limitation -> Ready to Beta/HMG CNK. Fail:
+  // bug faz parte da entrega -> Active + tag "2-Failed" + TASK corretiva
+  // vinculada + aviso no Slack Tests_QA; bug externo NAO impeditivo -> seguem
+  // aprovado normalmente (o bug vira um BUG separado, nao trava esta
+  // entrega); bug externo impeditivo -> Blocked (motivo = campo Contexto,
+  // obrigatorio) + BUG corretivo vinculado.
   function setResultAndState(nextResult) {
     setResult(nextResult);
-    setState(nextResult === "pass" ? "Ready to Beta" : "In QA");
+    setBugScope("");
+    setBugBlocking("");
+    setState(nextResult === "fail" ? "Active" : approvedNextState());
     // Limitation sempre tem o mesmo motivo padrao (limitacao de ambiente
     // Beta/PRD) — pre-preenche o contexto com esse texto, editavel. Pass e
     // Fail nao tem texto padrao, entao o campo comeca vazio.
     setContext(nextResult === "limitation" ? limitationContextTemplate : "");
+  }
+
+  function handleBugScopeChange(nextScope) {
+    setBugScope(nextScope);
+    setBugBlocking("");
+    if (nextScope === "delivery") setState("Active");
+    // "external" so decide o status depois de responder se e impeditivo.
+  }
+
+  function handleBugBlockingChange(nextBlocking) {
+    setBugBlocking(nextBlocking);
+    setState(nextBlocking === "yes" ? "Blocked" : approvedNextState());
   }
 
   function attachmentKey(attachment) {
@@ -561,11 +665,31 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
     return <span key={tag}>{tag}</span>;
   }
 
+  function resultBlockedFromSaving() {
+    if (!result) return true;
+    if (result !== "fail") return false;
+    // Fail exige responder o fluxo completo antes de salvar — nao da pra
+    // aplicar Active+2-Failed ou criar o item corretivo certo sem saber se
+    // o bug e parte da entrega ou externo (e, se externo, se bloqueia).
+    if (!bugScope) return true;
+    if (bugScope === "external" && !bugBlocking) return true;
+    if (bugScope === "external" && bugBlocking === "yes" && !context.trim()) return true;
+    return false;
+  }
+
   async function saveResult() {
-    if (!onTestResult || !result) return;
+    if (!onTestResult || resultBlockedFromSaving()) return;
     setSaving(true);
+    const isDeliveryFail = result === "fail" && bugScope === "delivery";
+    const isExternalBlocking = result === "fail" && bugScope === "external" && bugBlocking === "yes";
+    const isExternalNonBlocking = result === "fail" && bugScope === "external" && bugBlocking === "no";
+    // Bug externo NAO impeditivo: a entrega testada continua aprovada de
+    // verdade (secao 6.5.1 da especificacao) — o "Fail" clicado era so pra
+    // reportar o bug encontrado no caminho, nao reflete o resultado real
+    // deste item, entao a evidencia grava Approved.
+    const evidenceResult = isExternalNonBlocking ? "pass" : result;
     await onTestResult(item, {
-      lastTestResult: result,
+      lastTestResult: evidenceResult,
       context,
       note: context,
       state,
@@ -574,6 +698,39 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
       breakpoints: selectedBreakpoints,
       attachments
     });
+    // Especificacao de fluxo: toda reprovacao "parte da entrega" exige a
+    // tag "2-Failed" — `onTestResult`/`updateItem` (useWorkItems.js) nao
+    // mexe em tags no ramo de resultado de teste, entao aplica num segundo
+    // passo via `onUpdateItem` (mesmo caminho generico usado por addTag).
+    if (isDeliveryFail && onUpdateItem && !(item.tags || []).includes("2-Failed")) {
+      await onUpdateItem({ tags: [...(item.tags || []), "2-Failed"] });
+    }
+    if (isDeliveryFail || isExternalBlocking || isExternalNonBlocking) {
+      const correctiveItem = await createCorrectiveItem(isDeliveryFail ? "Task" : "Bug");
+      if (isDeliveryFail && correctiveItem) {
+        const collaboratorNameIndex = buildCollaboratorNameIndex(collaborators);
+        const devAssignee = collaborators.find((c) => c.id === item.assigneeId)
+          || findCollaboratorByName(collaboratorNameIndex, item.assigneeName)
+          || { azureName: item.assigneeName };
+        // Mesma regra de FYI fixo usada no envio normal de resultado
+        // (useWorkItems.js) — quem tem fixedMention/fixedMentionOnFailure
+        // e mencionado automaticamente (ex.: @natalia, @furtado).
+        const fyiPeople = collaborators.filter((person) => person.fixedMention || person.isFyiFixed || person.fyiFixed || person.fixedFyi || person.fixedMentionOnFailure);
+        const webhooks = resolveSlackWebhooks(getSetting, "testsQa");
+        if (webhooks.length) {
+          const text = buildTestFailedTestsQaMessage({
+            item,
+            correctiveItem,
+            environmentLabel: (selectedEnvironments[0] || item.env || "QA"),
+            assignee: devAssignee,
+            fyi: fyiPeople
+          });
+          webhooks.forEach((webhookUrl) => {
+            supabase.functions.invoke("slackNotify", { body: { webhooks: [webhookUrl], text } }).catch(() => {});
+          });
+        }
+      }
+    }
     localStorage.removeItem(`starkHubTestDraft:${item.id}`);
     setSaving(false);
     resetResultForm();
@@ -587,6 +744,8 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
     setSelectedEnvironments(["QA"]);
     setSelectedBreakpoints(["desktop"]);
     setAttachments([]);
+    setBugScope("");
+    setBugBlocking("");
   }
 
   function cancelResult() {
@@ -692,20 +851,24 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
           <details className="mbaz-new-modal-collapse" open>
             <summary><span>{t("workItemModal.descriptionTitle")}</span><small>{t("workItemModal.descriptionSubtitle")}</small></summary>
             <div className="mbaz-new-modal-description-body">
-              {item.description ? <RichAzureHtml html={item.description} /> : null}
-              {item.acceptanceCriteria ? (
-                <div className="mbaz-new-modal-description-block">
-                  <strong>Acceptance Criteria</strong>
-                  <RichAzureHtml html={item.acceptanceCriteria} />
-                </div>
-              ) : null}
-              {item.reproSteps ? (
-                <div className="mbaz-new-modal-description-block">
-                  <strong>Repro Steps</strong>
-                  <RichAzureHtml html={item.reproSteps} />
-                </div>
-              ) : null}
-              {!item.description && !item.acceptanceCriteria && !item.reproSteps ? <p className="mbaz-new-modal-muted">{t("workItemModal.noContent")}</p> : null}
+              {discussionsLoading && !liveContent ? <p className="mbaz-new-modal-muted">{t("workItemModal.loading")}</p> : (
+                <>
+                  {content.description ? <RichAzureHtml html={content.description} /> : null}
+                  {content.acceptanceCriteria ? (
+                    <div className="mbaz-new-modal-description-block">
+                      <strong>Acceptance Criteria</strong>
+                      <RichAzureHtml html={content.acceptanceCriteria} />
+                    </div>
+                  ) : null}
+                  {content.reproSteps ? (
+                    <div className="mbaz-new-modal-description-block">
+                      <strong>Repro Steps</strong>
+                      <RichAzureHtml html={content.reproSteps} />
+                    </div>
+                  ) : null}
+                  {!content.description && !content.acceptanceCriteria && !content.reproSteps ? <p className="mbaz-new-modal-muted">{t("workItemModal.noContent")}</p> : null}
+                </>
+              )}
             </div>
           </details>
           <details className="mbaz-new-modal-result-history" open>
@@ -783,14 +946,42 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
               <button type="button" className={result === "fail" ? "active fail" : "fail"} onClick={() => setResultAndState("fail")}><i className="bi bi-x-lg" /> Fail</button>
               <button type="button" className={result === "limitation" ? "active limitation" : "limitation"} onClick={() => setResultAndState("limitation")}><i className="bi bi-exclamation-triangle-fill" /> Limitation</button>
             </div>
+            {result === "fail" && (
+              <div className="mbaz-new-modal-fail-flow">
+                <div className="mbaz-new-modal-fail-question">
+                  <span>{t("workItemModal.bugScopeQuestion")}</span>
+                  <div className="mbaz-new-modal-fail-toggle">
+                    <button type="button" className={bugScope === "delivery" ? "active" : ""} onClick={() => handleBugScopeChange("delivery")}>{t("workItemModal.bugScopeDelivery")}</button>
+                    <button type="button" className={bugScope === "external" ? "active" : ""} onClick={() => handleBugScopeChange("external")}>{t("workItemModal.bugScopeExternal")}</button>
+                  </div>
+                </div>
+                {bugScope === "delivery" && <p className="mbaz-new-modal-fail-hint"><i className="bi bi-info-circle" /> {t("workItemModal.bugScopeDeliveryHint")}</p>}
+                {bugScope === "external" && (
+                  <>
+                    <div className="mbaz-new-modal-fail-question">
+                      <span>{t("workItemModal.bugBlockingQuestion")}</span>
+                      <div className="mbaz-new-modal-fail-toggle">
+                        <button type="button" className={bugBlocking === "yes" ? "active danger" : ""} onClick={() => handleBugBlockingChange("yes")}>{t("workItemModal.yes")}</button>
+                        <button type="button" className={bugBlocking === "no" ? "active" : ""} onClick={() => handleBugBlockingChange("no")}>{t("workItemModal.no")}</button>
+                      </div>
+                    </div>
+                    {bugBlocking === "yes" && <p className="mbaz-new-modal-fail-hint danger"><i className="bi bi-exclamation-triangle" /> {t("workItemModal.bugBlockingHint")}</p>}
+                    {bugBlocking === "no" && <p className="mbaz-new-modal-fail-hint"><i className="bi bi-info-circle" /> {t("workItemModal.bugNonBlockingHint")}</p>}
+                  </>
+                )}
+              </div>
+            )}
             {result ? (
             <div className="mbaz-new-modal-form-grid">
               <label><span>{t("workItemModal.nextStatusLabel")}</span><select value={state} onChange={(event) => setState(event.target.value)} title={t("workItemModal.nextStatusLabel")}>
                 <option value="">{t("workItemModal.doNotChangeStatus")}</option>
+                <option value="Active">Active</option>
                 <option value="In QA">In QA</option>
                 <option value="Ready to Beta">Ready to Beta</option>
                 <option value="In BETA">In BETA</option>
+                <option value="HMG CNK">HMG CNK</option>
                 <option value="Ready to Prod">Ready to Prod</option>
+                <option value="Blocked">Blocked</option>
               </select></label>
               <fieldset><legend>{t("workItemModal.environmentTestedLegend")}</legend><div className="mbaz-new-modal-checks">{environmentOptions.map((env) => <button key={env} type="button" className={`mbaz-new-modal-toggle-pill ${selectedEnvironments.includes(env) ? "active" : ""}`} onClick={() => toggleValue(env, setSelectedEnvironments)}><img src={envIconSrc(env)} alt="" />{env}</button>)}</div></fieldset>
               <fieldset><legend>{t("workItemModal.countryTestedLegend")}</legend><div className="mbaz-new-modal-checks countries">{countryOptions.filter((country) => country !== "BR").map((country) => <button key={country} type="button" className={`mbaz-new-modal-toggle-pill country ${selectedCountries.includes(country) ? "active" : ""}`} onClick={() => toggleValue(country, setSelectedCountries)}><CountryVisual code={country} compact /></button>)}</div></fieldset>
@@ -835,7 +1026,7 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
             ) : <div className="mbaz-new-modal-result-empty"><i className="bi bi-arrow-up" /> {t("workItemModal.selectResultPrompt")}</div>}
             <div className="mbaz-new-modal-testbar-footer">
               {result && <button type="button" className="mbaz-new-modal-cancel-result" onClick={cancelResult} disabled={saving}>{t("workItemModal.cancelButton")}</button>}
-              <button type="button" className="mbaz-new-modal-save-result" onClick={saveResult} disabled={saving || !result || !selectedEnvironments.length}>{saving ? t("workItemModal.savingButton") : t("workItemModal.registerResultButton")}</button>
+              <button type="button" className="mbaz-new-modal-save-result" onClick={saveResult} disabled={saving || !result || !selectedEnvironments.length || resultBlockedFromSaving()}>{saving ? t("workItemModal.savingButton") : t("workItemModal.registerResultButton")}</button>
             </div>
           </div>
         )}

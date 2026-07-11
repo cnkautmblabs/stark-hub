@@ -61,7 +61,7 @@ import {
   nextEnvStep,
   workItemTypes
 } from "../../utils/constants.js";
-import { copyExecutiveReportText, downloadExecutiveReportPdf } from "../../utils/executiveReport.js";
+import { copyExecutiveReportText, copyQaTestEvidenceReportText, downloadExecutiveReportPdf } from "../../utils/executiveReport.js";
 import { buildGovernanceSlackText, buildHoursNoticeText } from "../../utils/slackReport.js";
 import { resolveSlackWebhooks } from "../../utils/slack.js";
 import { compactSprintLabel, findCurrentSprint } from "../../utils/sprints.js";
@@ -314,7 +314,12 @@ export function QaBoardWorkbench() {
   const [sort, setSort] = usePersistentState("starkHubFilters:qaBoard:sort", "changed_desc");
   const [groupBy, setGroupBy] = usePersistentState("starkHubFilters:qaBoard:groupBy", "none");
   const [expandedIds, setExpandedIds] = useState(() => new Set());
-  const [chartsCollapsed, setChartsCollapsed] = usePersistentState("starkHubFilters:qaBoard:chartsCollapsed", false);
+  // Default agora e OCULTO (antes era mostrado): time reportou tela cheia
+  // de informacao/confusa logo de cara — graficos continuam a 1 clique
+  // ("Mostrar graficos"), so param de ocupar a tela toda no primeiro
+  // acesso. So afeta quem nunca tocou nesse toggle (preferencia salva de
+  // quem ja mudou continua intacta).
+  const [chartsCollapsed, setChartsCollapsed] = usePersistentState("starkHubFilters:qaBoard:chartsCollapsed", true);
   const { activeItem, openItem: setActiveItem, closeItem: closeActiveItem } = usePersistentActiveWorkItem("starkHubActiveWorkItem:qaBoard", items);
 
   const byId = useMemo(() => new Map(collaborators.map((person) => [person.id, person])), [collaborators]);
@@ -828,6 +833,7 @@ export function MyItemsWorkbench() {
   const { collaborators } = useCollaborators();
   const { evidence } = useTestEvidence();
   const { getSetting } = useAppSettings();
+  const { pushToast } = useToast();
   const [search, setSearch] = usePersistentState("starkHubFilters:myItems:search", "");
   const [hoursFilter, setHoursFilter] = usePersistentState("starkHubFilters:myItems:hours", "all");
   const [types, setTypes] = usePersistentState("starkHubFilters:myItems:types", () => profile?.accessLevel === accessLevels.qa ? ["Task", "Bug", "User Story"] : ["Task", "Bug"]);
@@ -838,9 +844,13 @@ export function MyItemsWorkbench() {
   const [environmentFilter, setEnvironmentFilter] = usePersistentState("starkHubFilters:myItems:environment", []);
   const [testResultFilter, setTestResultFilter] = usePersistentState("starkHubFilters:myItems:result", []);
   const [groupBy, setGroupBy] = usePersistentState("starkHubFilters:myItems:groupBy", "none");
-  const [summaryCollapsed, setSummaryCollapsed] = usePersistentState("starkHubFilters:myItems:summaryCollapsed", false);
-  const [filtersCollapsed, setFiltersCollapsed] = usePersistentState("starkHubFilters:myItems:filtersCollapsed", false);
-  const [insightsCollapsed, setInsightsCollapsed] = usePersistentState("starkHubFilters:myItems:insightsCollapsed", false);
+  // Mesma mudanca de default do QA Board (ver comentario la): time
+  // reportou excesso de informacao logo de cara — resumo/filtros/insights
+  // agora comecam ocultos, a 1 clique de distancia, em vez de ocupar a
+  // tela toda no primeiro acesso.
+  const [summaryCollapsed, setSummaryCollapsed] = usePersistentState("starkHubFilters:myItems:summaryCollapsed", true);
+  const [filtersCollapsed, setFiltersCollapsed] = usePersistentState("starkHubFilters:myItems:filtersCollapsed", true);
+  const [insightsCollapsed, setInsightsCollapsed] = usePersistentState("starkHubFilters:myItems:insightsCollapsed", true);
   const [viewMode, setViewMode] = usePersistentState("starkHubFilters:myItems:viewMode", "list");
   const [fullscreen, setFullscreen] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -980,6 +990,29 @@ export function MyItemsWorkbench() {
   const collaboratorById = useMemo(() => new Map(collaborators.map((person) => [person.id, person])), [collaborators]);
   const qaPeople = collaborators.filter((person) => person.isQa);
 
+  // Relatorio "QA TEST EVIDENCE REPORT" do userscript legado — a funcao que
+  // gera o texto (`copyQaTestEvidenceReportText`) ja tinha sido portada pra
+  // ca numa rodada anterior, mas nunca ganhou um botao de verdade; ficou
+  // orfa (nenhum import em lugar nenhum) desde entao. So os registros de
+  // teste que respeitam os filtros atuais entram, igual ao "Filtered
+  // records" do userscript.
+  async function handleCopyQaEvidenceReport() {
+    const records = [];
+    visibleItems.forEach((item) => {
+      recordsForItem(item, evidence).forEach((entry) => {
+        const envs = evidenceEnvironments(entry);
+        if (!envs.length) return;
+        records.push({ ...entry, workItemId: entry.workItemId || item.id, environment: envs[0] });
+      });
+    });
+    if (!records.length) {
+      pushToast({ title: t("myItems.qaReportTitle"), body: t("myItems.qaReportEmpty"), tone: "warning" });
+      return;
+    }
+    await copyQaTestEvidenceReportText({ records, workItems: visibleItems, collaborators });
+    pushToast({ title: t("myItems.qaReportTitle"), body: t("myItems.qaReportCopied"), tone: "success" });
+  }
+
   function toggleType(type) {
     setTypes((current) => current.includes(type) ? current.filter((value) => value !== type) : [...current, type]);
   }
@@ -1095,6 +1128,7 @@ export function MyItemsWorkbench() {
           <IconButton title={t("qaBoard.viewGrid")} onClick={() => setViewMode("grid")}><i className="bi bi-grid-3x3-gap" /></IconButton>
           <IconButton title={t("qaBoard.viewCompact")} onClick={() => setViewMode("compact")}><i className="bi bi-list" /></IconButton>
           <IconButton title={t("qaBoard.exportCsv")} onClick={() => exportWorkItemsCsv("meus-itens", visibleItems)}><FiDownload /></IconButton>
+          {isQa && <IconButton title={t("myItems.qaReportTitle")} onClick={handleCopyQaEvidenceReport}><i className="bi bi-clipboard2-data" /></IconButton>}
           {demoMode && <IconButton title={t("myItems.newTaskTitle")} onClick={createDemoTask}><i className="bi bi-plus-lg" /></IconButton>}
           <IconButton title={t("qaBoard.refresh")} onClick={reload}><FiRefreshCw className={refreshing ? "mbw-spin" : ""} /></IconButton>
         </>}
@@ -1468,7 +1502,9 @@ export function HoursWorkbench() {
   const [goalFilter, setGoalFilter] = usePersistentState("starkHubFilters:governance:goal", "all");
   const [roleGroup, setRoleGroup] = usePersistentState("starkHubFilters:governance:roleGroup", "all");
   const [viewMode, setViewMode] = usePersistentState("starkHubFilters:governance:viewMode", "grid");
-  const [chartsCollapsed, setChartsCollapsed] = usePersistentState("starkHubFilters:governance:chartsCollapsed", false);
+  // Mesma mudanca de default do QA Board/Meus itens — graficos comecam
+  // ocultos, a 1 clique de distancia (ver comentario em QaBoardWorkbench).
+  const [chartsCollapsed, setChartsCollapsed] = usePersistentState("starkHubFilters:governance:chartsCollapsed", true);
   const [metaMetric, setMetaMetric] = usePersistentState("starkHubFilters:governance:metaMetric", "hours");
   const [countryMetric, setCountryMetric] = usePersistentState("starkHubFilters:governance:countryMetric", "count");
   const [expanded, setExpanded] = useState(() => new Set());
@@ -2182,6 +2218,7 @@ export function SettingsWorkbench() {
   const [slackTestWebhookDraft, setSlackTestWebhookDraft] = useState(isGestao ? slackTestWebhookUrl : personalSlackTestWebhookUrl);
   const [slackResultWebhookDraft, setSlackResultWebhookDraft] = useState(() => (slackWebhooks || []).find((entry) => entry.purpose === "testResult")?.url || "");
   const [slackCreationWebhookDraft, setSlackCreationWebhookDraft] = useState(() => (slackWebhooks || []).find((entry) => entry.purpose === "workItemCreation")?.url || "");
+  const [slackTestsQaWebhookDraft, setSlackTestsQaWebhookDraft] = useState(() => (slackWebhooks || []).find((entry) => entry.purpose === "testsQa")?.url || "");
   const [slackCustomWebhookDraft, setSlackCustomWebhookDraft] = useState(() => (slackWebhooks || []).find((entry) => entry.purpose === "custom")?.url || "");
 
   const [goalHoursDraft, setGoalHoursDraft] = useState(goalHours);
@@ -2205,6 +2242,7 @@ export function SettingsWorkbench() {
   useEffect(() => {
     setSlackResultWebhookDraft((slackWebhooks || []).find((entry) => entry.purpose === "testResult")?.url || "");
     setSlackCreationWebhookDraft((slackWebhooks || []).find((entry) => entry.purpose === "workItemCreation")?.url || "");
+    setSlackTestsQaWebhookDraft((slackWebhooks || []).find((entry) => entry.purpose === "testsQa")?.url || "");
     setSlackCustomWebhookDraft((slackWebhooks || []).find((entry) => entry.purpose === "custom")?.url || "");
   }, [slackWebhooks]);
   useEffect(() => setGoalHoursDraft(goalHours), [goalHours]);
@@ -2293,6 +2331,7 @@ export function SettingsWorkbench() {
     setSlackTestWebhookDraft(isGestao ? slackTestWebhookUrl : personalSlackTestWebhookUrl);
     setSlackResultWebhookDraft((slackWebhooks || []).find((entry) => entry.purpose === "testResult")?.url || "");
     setSlackCreationWebhookDraft((slackWebhooks || []).find((entry) => entry.purpose === "workItemCreation")?.url || "");
+    setSlackTestsQaWebhookDraft((slackWebhooks || []).find((entry) => entry.purpose === "testsQa")?.url || "");
     setSlackCustomWebhookDraft((slackWebhooks || []).find((entry) => entry.purpose === "custom")?.url || "");
   }
 
@@ -2300,6 +2339,7 @@ export function SettingsWorkbench() {
     return [
       { purpose: "testResult", name: "Resultado de testes", url: slackResultWebhookDraft, enabled: Boolean(slackResultWebhookDraft) },
       { purpose: "workItemCreation", name: "QA Demand Notification", url: slackCreationWebhookDraft, enabled: Boolean(slackCreationWebhookDraft) },
+      { purpose: "testsQa", name: "Tests_QA (bug reprovado em teste)", url: slackTestsQaWebhookDraft, enabled: Boolean(slackTestsQaWebhookDraft) },
       { purpose: "custom", name: "Custom", url: slackCustomWebhookDraft, enabled: Boolean(slackCustomWebhookDraft) }
     ].filter((entry) => entry.url);
   }
@@ -2813,6 +2853,7 @@ export function SettingsWorkbench() {
               <div className="mb-settings-webhook-grid">
                 <label className="mb-form-row"><span>{t("settings.resultWebhookLabel")}</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={slackResultWebhookDraft} onChange={(event) => setSlackResultWebhookDraft(event.target.value)} placeholder={t("settings.resultWebhookPlaceholder")} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /><button type="button" onClick={() => testSlackWebhook(slackResultWebhookDraft, t("settings.resultWebhookTestLabel"))}>{t("settings.testButton")}</button></div></label>
                 <label className="mb-form-row"><span>{t("settings.creationWebhookLabel")}</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={slackCreationWebhookDraft} onChange={(event) => setSlackCreationWebhookDraft(event.target.value)} placeholder={t("settings.creationWebhookPlaceholder")} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /><button type="button" onClick={() => testSlackWebhook(slackCreationWebhookDraft, t("settings.creationWebhookTestLabel"))}>{t("settings.testButton")}</button></div></label>
+                <label className="mb-form-row"><span>{t("settings.testsQaWebhookLabel")}</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={slackTestsQaWebhookDraft} onChange={(event) => setSlackTestsQaWebhookDraft(event.target.value)} placeholder={t("settings.testsQaWebhookPlaceholder")} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /><button type="button" onClick={() => testSlackWebhook(slackTestsQaWebhookDraft, t("settings.testsQaWebhookTestLabel"))}>{t("settings.testButton")}</button></div></label>
                 <label className="mb-form-row"><span>{t("settings.customWebhookLabel")}</span><div className="mb-secret-field"><input type={showSecrets ? "text" : "password"} value={slackCustomWebhookDraft} onChange={(event) => setSlackCustomWebhookDraft(event.target.value)} placeholder={t("settings.customWebhookPlaceholder")} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /><button type="button" onClick={() => testSlackWebhook(slackCustomWebhookDraft, t("settings.customWebhookTestLabel"))}>{t("settings.testButton")}</button></div></label>
               </div>
               {!isGestao && <small className="mb-settings-note">{t("settings.slackPersonalNote")}</small>}
@@ -2824,6 +2865,7 @@ export function SettingsWorkbench() {
                   || slackTestWebhookDraft !== (isGestao ? slackTestWebhookUrl : personalSlackTestWebhookUrl)
                   || slackResultWebhookDraft !== (currentPurposeWebhooks.find((entry) => entry.purpose === "testResult")?.url || "")
                   || slackCreationWebhookDraft !== (currentPurposeWebhooks.find((entry) => entry.purpose === "workItemCreation")?.url || "")
+                  || slackTestsQaWebhookDraft !== (currentPurposeWebhooks.find((entry) => entry.purpose === "testsQa")?.url || "")
                   || slackCustomWebhookDraft !== (currentPurposeWebhooks.find((entry) => entry.purpose === "custom")?.url || "");
                 return dirty && (
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>

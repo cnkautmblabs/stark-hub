@@ -1649,14 +1649,16 @@ body {
   color: rgba(255,255,255,.85);
 }
 .mb-home-widget.shortcut .mb-home-widget-edit,
-.mb-home-widget.shortcut .mb-home-widget-remove {
+.mb-home-widget.shortcut .mb-home-widget-remove,
+.mb-home-widget.shortcut .mb-home-widget-pin {
   background: rgba(0,0,0,.4);
   border-color: transparent;
   color: #fff;
 }
 .mb-home-widget-drag,
 .mb-home-widget-edit,
-.mb-home-widget-remove {
+.mb-home-widget-remove,
+.mb-home-widget-pin {
   flex: none;
   width: 22px;
   height: 22px;
@@ -1672,7 +1674,8 @@ body {
   color: rgba(0,0,0,.45);
 }
 .mb-home-widget-edit,
-.mb-home-widget-remove {
+.mb-home-widget-remove,
+.mb-home-widget-pin {
   border: 1px solid var(--starkBorder);
   background: var(--starkSurface);
   color: var(--starkMuted);
@@ -1688,6 +1691,42 @@ body {
 .mb-home-widget-remove:hover {
   color: #dc2626;
   border-color: #dc2626;
+}
+.mb-home-widget-pin:hover {
+  color: #d97706;
+  border-color: #d97706;
+}
+.mb-home-widget-pin-menu {
+  position: relative;
+}
+.mb-home-widget-pin-options {
+  position: absolute;
+  top: 26px;
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  background: var(--starkSurface);
+  border: 1px solid var(--starkBorder);
+  border-radius: 8px;
+  box-shadow: 0 12px 24px rgba(0,0,0,.18);
+  overflow: hidden;
+}
+.mb-home-widget-pin-options button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--starkText);
+  padding: 8px 10px;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.mb-home-widget-pin-options button:hover {
+  background: var(--starkSurfaceAlt);
 }
 .mb-home-widget-body {
   display: flex;
@@ -1775,6 +1814,14 @@ body {
   -webkit-line-clamp: 5;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+/* Card flutuante/pinado (WidgetBody clamp=false): a nota inteira aparece,
+   sem cortar em 5 linhas — o card ja rola sozinho quando o texto nao cabe
+   na altura atual, e redimensionar revela mais sem precisar editar. */
+.mb-home-widget-note-text-wrap.no-clamp p {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
 }
 .mb-home-widget-note-more {
   display: inline-block;
@@ -1925,6 +1972,17 @@ body {
 .mb-home-modal.note footer {
   border-top-color: rgba(0,0,0,.12);
 }
+.mb-home-modal-muted {
+  color: var(--starkMuted);
+  font-size: 12.5px;
+  margin: 0;
+}
+.mb-home-note-view-text {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #1f2937;
+  white-space: normal;
+}
 .mb-home-modal-body .mb-home-modal-note-label {
   display: flex;
   flex-direction: row;
@@ -2072,6 +2130,11 @@ body {
   padding: 7px 10px;
   font-size: 11.5px;
   font-weight: 700;
+}
+:root[data-theme="dark"] .mb-home-modal-error {
+  border-color: #7a2626;
+  background: #3a1414;
+  color: #fca5a5;
 }
 .mb-home-template-actions {
   display: flex;
@@ -2237,6 +2300,17 @@ body {
   padding: 0 10px;
   font-size: 12.5px;
 }
+.mb-home-summary-controls {
+  /* Envolve o toggle Hoje/Recorrente + os seletores de recorrencia (quando
+     visiveis) num unico item de grid — sem isso, o painel de recorrencia
+     era um 4o filho direto do grid de 3 colunas do form, entao ele "sobrava"
+     pra uma linha nova implicita e empurrava o botao Adicionar junto,
+     tirando-o do lugar certo (bug relatado pelo usuario). */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
 .mb-home-summary-type {
   display: flex;
   border: 1px solid var(--starkBorder);
@@ -2359,6 +2433,9 @@ body {
 }
 .mb-home-summary-item.auto {
   border-style: dashed;
+}
+.mb-home-summary-item.inactive-today {
+  opacity: 0.5;
 }
 .mb-home-summary-type.admin {
   margin-right: 6px;
@@ -2556,6 +2633,10 @@ body {
 .mbw-btn.danger {
   color: #b42318;
   border-color: #f3b8b2;
+}
+:root[data-theme="dark"] .mbw-btn.danger {
+  color: #fca5a5;
+  border-color: #7a2626;
 }
 .mbw-btn:disabled {
   opacity: .58;
@@ -2836,6 +2917,10 @@ body {
   background: #fee2e2;
   color: #991b1b;
 }
+:root[data-theme="dark"] .mbw-alert.error {
+  background: #3a1414;
+  color: #fca5a5;
+}
 .mbw-empty {
   display: grid;
   justify-items: center;
@@ -2886,6 +2971,9 @@ body {
   object-fit: cover;
   background: #eef4fb;
   border: 1px solid var(--starkBorder);
+}
+:root[data-theme="dark"] .mbw-avatar.image {
+  background: #172033;
 }
 .mbw-avatar-row.compact {
   gap: 0;
@@ -3070,6 +3158,9 @@ body {
 .mbw-chip.blue { background: #dbeafe; color: #1d4ed8; }
 .mbw-chip.green { background: #dcfce7; color: #166534; }
 .mbw-chip.amber { background: #fef3c7; color: #92400e; }
+:root[data-theme="dark"] .mbw-chip.blue { background: #132a4a; color: #93c5fd; }
+:root[data-theme="dark"] .mbw-chip.green { background: #143a24; color: #86efac; }
+:root[data-theme="dark"] .mbw-chip.amber { background: #3a2a0f; color: #fcd34d; }
 
 .mbaz-grid {
   display: grid;
@@ -4267,6 +4358,19 @@ body {
   color: #e5e7eb;
   border-color: #334155;
 }
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-kpi > span {
+  background: #132a4a;
+}
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-kpi.gold > span {
+  background: #3a3410;
+  color: #fde68a;
+}
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-kpi.red > span {
+  background: #3a1414;
+}
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-kpi.blue > span {
+  background: #132a4a;
+}
 :root[data-theme="dark"] .mbdhc-governance .mbdhc-donut::after { background: #111827; }
 :root[data-theme="dark"] .mbdhc-governance .mbdhc-dev-card {
   background: linear-gradient(180deg, #111827, #0f172a);
@@ -4312,6 +4416,18 @@ body {
 :root[data-theme="dark"] .mbdhc-work-test-panel .mbaz-evidence-env-count {
   background: #263244;
   color: #f8fafc;
+}
+:root[data-theme="dark"] .mbdhc-work-test-panel .mbaz-evidence-run-group.approved {
+  background: #143a24;
+  color: #86efac;
+}
+:root[data-theme="dark"] .mbdhc-work-test-panel .mbaz-evidence-run-group.fail {
+  background: #3a1414;
+  color: #fca5a5;
+}
+:root[data-theme="dark"] .mbdhc-work-test-panel .mbaz-evidence-run-group.limitation {
+  background: #3a2a0f;
+  color: #fcd34d;
 }
 @media (max-width: 1180px) {
   .mbdhc-governance .mbdhc-dashboard-grid,
@@ -5109,6 +5225,10 @@ body {
   border-radius: 9px;
   background: #fff;
 }
+:root[data-theme="dark"] .mb-collaborator-roles > div {
+  border-color: #334155;
+  background: #172033;
+}
 .mb-collaborator-roles label {
   display: inline-flex;
   align-items: center;
@@ -5116,6 +5236,9 @@ body {
   color: #334155;
   font-size: 12px;
   font-weight: 800;
+}
+:root[data-theme="dark"] .mb-collaborator-roles label {
+  color: #cbd5e1;
 }
 .mb-collaborator-roles input {
   margin: 0;
@@ -6570,6 +6693,80 @@ body {
 .mbaz-new-modal-test-options button.active.approved { border-color: #86efac; background: #dcfce7; color: #166534; }
 .mbaz-new-modal-test-options button.active.fail { border-color: #fecaca; background: #fee2e2; color: #991b1b; }
 .mbaz-new-modal-test-options button.active.limitation { border-color: #fde68a; background: #fef3c7; color: #9a6700; }
+
+/* Fluxo de Fail (bug faz parte da entrega vs bug externo, impeditivo ou
+   nao) — especificacao de fluxo de trabalho fornecida pelo usuario. */
+.mbaz-new-modal-fail-flow {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px dashed #fca5a5;
+  border-radius: 10px;
+  background: #fef2f2;
+}
+.mbaz-new-modal-fail-question {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  font-weight: 800;
+  color: #7f1d1d;
+}
+.mbaz-new-modal-fail-toggle {
+  display: inline-flex;
+  border: 1px solid #fca5a5;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.mbaz-new-modal-fail-toggle button {
+  border: 0;
+  background: #fff;
+  color: #7f1d1d;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.mbaz-new-modal-fail-toggle button + button {
+  border-left: 1px solid #fca5a5;
+}
+.mbaz-new-modal-fail-toggle button.active { background: #ef4444; color: #fff; }
+.mbaz-new-modal-fail-toggle button.active.danger { background: #b91c1c; }
+.mbaz-new-modal-fail-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 11.5px;
+  color: #7f1d1d;
+}
+.mbaz-new-modal-fail-hint.danger { font-weight: 800; }
+:root[data-theme="dark"] .mbaz-new-modal-fail-flow {
+  border-color: #7f1d1d;
+  background: #2a1414;
+}
+:root[data-theme="dark"] .mbaz-new-modal-fail-question,
+:root[data-theme="dark"] .mbaz-new-modal-fail-hint {
+  color: #fca5a5;
+}
+:root[data-theme="dark"] .mbaz-new-modal-fail-toggle {
+  border-color: #7f1d1d;
+}
+:root[data-theme="dark"] .mbaz-new-modal-fail-toggle button {
+  background: #1f1417;
+  color: #fca5a5;
+}
+:root[data-theme="dark"] .mbaz-new-modal-fail-toggle button + button {
+  border-left-color: #7f1d1d;
+}
+:root[data-theme="dark"] .mbaz-new-modal-fail-toggle button.active {
+  background: #ef4444;
+  color: #fff;
+}
 .mbaz-new-modal-testbar-rich {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -6918,6 +7115,11 @@ body {
   white-space: pre-wrap;
   word-break: break-word;
 }
+:root[data-theme="dark"] .mbaz-slack-raw {
+  border-color: #334155;
+  background: #0f172a;
+  color: #e5e7eb;
+}
 .mb-profile-check {
   min-height: 34px;
   display: inline-flex;
@@ -6993,6 +7195,11 @@ body {
   font-size: 12px;
   font-weight: 850;
   text-decoration: none;
+}
+:root[data-theme="dark"] .mbaz-new-modal-open {
+  border-color: #2563eb;
+  background: #132a4a;
+  color: #93c5fd;
 }
 .mbaz-new-modal-open.primary {
   background: #0078d4;
@@ -7789,6 +7996,14 @@ body {
   background: #cbd5e1;
   color: #0f172a;
 }
+:root[data-theme="dark"] .mbaz-new-modal-tag-editable button {
+  background: #172033;
+  color: #94a3b8;
+}
+:root[data-theme="dark"] .mbaz-new-modal-tag-editable button:hover {
+  background: #334155;
+  color: #f8fafc;
+}
 .mbaz-new-modal-tag-add {
   display: flex;
   gap: 6px;
@@ -7818,6 +8033,19 @@ body {
 }
 .mbaz-new-modal-tag-add button:hover {
   background: #e2e8f0;
+}
+:root[data-theme="dark"] .mbaz-new-modal-tag-add input {
+  border-color: #334155;
+  background: #0f172a;
+  color: #e5e7eb;
+}
+:root[data-theme="dark"] .mbaz-new-modal-tag-add button {
+  border-color: #334155;
+  background: #172033;
+  color: #e5e7eb;
+}
+:root[data-theme="dark"] .mbaz-new-modal-tag-add button:hover {
+  background: #334155;
 }
 .mbaz-new-modal-status-gated {
   display: flex;
@@ -7852,6 +8080,15 @@ body {
 .mbaz-new-modal-status-hours-btn:hover,
 .mbaz-new-modal-assume-task-btn:hover {
   background: #dbeafe;
+}
+:root[data-theme="dark"] .mbaz-new-modal-status-hours-btn,
+:root[data-theme="dark"] .mbaz-new-modal-assume-task-btn {
+  background: #132a4a;
+  color: #93c5fd;
+}
+:root[data-theme="dark"] .mbaz-new-modal-status-hours-btn:hover,
+:root[data-theme="dark"] .mbaz-new-modal-assume-task-btn:hover {
+  background: #1e3a5f;
 }
 .mbaz-new-modal-assume-task-btn {
   margin-top: 6px;
@@ -8189,6 +8426,31 @@ body {
   border-color: #334155;
   color: #94a3b8;
 }
+:root[data-theme="dark"] .mbaz-react-shell :is(.mbaz-test-summary,.mbaz-pr-env-pill) {
+  background: #172033;
+  border-color: #334155;
+  color: #94a3b8;
+}
+:root[data-theme="dark"] .mbaz-react-shell :is(.mbaz-test-summary.approved,.mbaz-pr-env-pill.beta,.mbaz-evidence-run-group.approved) {
+  background: #143a24;
+  border-color: #1f5c37;
+  color: #86efac;
+}
+:root[data-theme="dark"] .mbaz-react-shell :is(.mbaz-test-summary.fail,.mbaz-pr-env-pill.prod,.mbaz-evidence-run-group.fail) {
+  background: #3a1414;
+  border-color: #7a2626;
+  color: #fca5a5;
+}
+:root[data-theme="dark"] .mbaz-react-shell :is(.mbaz-test-summary.limitation,.mbaz-evidence-run-group.limitation) {
+  background: #3a2a0f;
+  border-color: #7a5a1f;
+  color: #fcd34d;
+}
+:root[data-theme="dark"] .mbaz-react-shell .mbaz-pr-env-pill.qa {
+  background: #3a3410;
+  border-color: #7a6a1f;
+  color: #fde68a;
+}
 :root[data-theme="dark"] .mbaz-new-modal,
 :root[data-theme="dark"] .mbaz-new-modal-header,
 :root[data-theme="dark"] .mbaz-new-modal-close,
@@ -8243,6 +8505,21 @@ body {
 :root[data-theme="dark"] .mbaz-new-modal-description-block,
 :root[data-theme="dark"] .mbaz-new-modal-discussions article {
   background: #111827;
+}
+:root[data-theme="dark"] :is(.mbaz-new-modal-result-chip.approved,.mbaz-new-modal-test-options button.active.approved) {
+  background: #143a24;
+  border-color: #1f5c37;
+  color: #86efac;
+}
+:root[data-theme="dark"] :is(.mbaz-new-modal-result-chip.fail,.mbaz-new-modal-test-options button.active.fail) {
+  background: #3a1414;
+  border-color: #7a2626;
+  color: #fca5a5;
+}
+:root[data-theme="dark"] :is(.mbaz-new-modal-result-chip.limitation,.mbaz-new-modal-test-options button.active.limitation) {
+  background: #3a2a0f;
+  border-color: #7a5a1f;
+  color: #fcd34d;
 }
 :root[data-theme="dark"] .mbaz-new-modal-rich-html a,
 :root[data-theme="dark"] .mbaz-new-modal-workitem-grid a,
@@ -8481,9 +8758,13 @@ body {
   margin-top: 8px;
 }
 .mb-settings-workbench .mb-notification-sound-row {
-  display: flex;
+  /* Grid com colunas fixas (nao flex+space-between) — o switch e o botao
+     "Testar" precisam cair na MESMA posicao horizontal em toda linha,
+     independente do tamanho do rotulo/descricao de cada evento (relatado
+     pelo usuario: switches desalinhados entre as linhas). */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   min-height: 48px;
   padding: 9px 0;
@@ -8737,6 +9018,16 @@ body {
   color: #e5e7eb;
   border-color: #334155;
 }
+:root[data-theme="dark"] .mb-settings-save-status.success {
+  background: #143a24;
+  color: #86efac;
+  border-color: #1f5c37;
+}
+:root[data-theme="dark"] .mb-settings-save-status.error {
+  background: #3a1414;
+  color: #fca5a5;
+  border-color: #7a2626;
+}
 @media (max-width: 760px) {
   .mb-settings-workbench .mb-featureflag-grid,
   .mb-settings-workbench .mb-governance-grid,
@@ -8963,6 +9254,10 @@ body {
   background: #fff8dc;
   border-bottom: 1px solid #e7c75a;
 }
+:root[data-theme="dark"] .mb-my-bulk-bar {
+  background: #3a3410;
+  border-bottom-color: #7a6a1f;
+}
 .mb-my-bulk-bar span {
   margin-right: auto;
   font-size: 10px;
@@ -8977,6 +9272,11 @@ body {
   font-size: 10px;
   font-weight: 800;
   cursor: pointer;
+}
+:root[data-theme="dark"] .mb-my-bulk-bar button {
+  background: #172033;
+  border-color: #334155;
+  color: #e5e7eb;
 }
 .mb-my-bulk-bar button:first-of-type {
   background: #172033;
@@ -9078,6 +9378,11 @@ body {
   font-weight: 900;
   cursor: pointer;
 }
+:root[data-theme="dark"] .mb-my-type-toggles button {
+  background: #172033;
+  border-color: #334155;
+  color: #94a3b8;
+}
 .mb-my-type-toggles button img {
   width: 16px;
   height: 16px;
@@ -9097,6 +9402,21 @@ body {
   background: #eef6ff;
   border-color: #0078d4;
   color: #005a9e;
+}
+:root[data-theme="dark"] .mb-my-type-toggles .task.active {
+  background: #3a3410;
+  border-color: #c99a00;
+  color: #fde68a;
+}
+:root[data-theme="dark"] .mb-my-type-toggles .bug.active {
+  background: #3a1414;
+  border-color: #d13438;
+  color: #fca5a5;
+}
+:root[data-theme="dark"] .mb-my-type-toggles .story.active {
+  background: #132a4a;
+  border-color: #2563eb;
+  color: #93c5fd;
 }
 .mb-my-test-dashboard {
   display: grid;
@@ -9121,6 +9441,10 @@ body {
   border-radius: 8px;
   background: #eef2f7;
   box-shadow: inset 0 0 0 1px #dbe3ef;
+}
+:root[data-theme="dark"] .mb-my-test-chart-bar {
+  background: #172033;
+  box-shadow: inset 0 0 0 1px #334155;
 }
 .mb-my-test-chart-bar span {
   display: inline-flex;
@@ -9359,6 +9683,10 @@ body {
   color: #64748b;
   font-size: 12px;
   font-weight: 800;
+}
+:root[data-theme="dark"] .mb-my-items-loading {
+  border-color: #334155;
+  color: #94a3b8;
 }
 .mb-my-items-list {
   display: grid;
@@ -9786,6 +10114,12 @@ body {
   font-size: 10px;
   font-weight: 900;
 }
+:root[data-theme="dark"] .mb-my-qa-test-strip span,
+:root[data-theme="dark"] .mb-my-qa-test-strip strong {
+  border-color: #334155;
+  background: #172033;
+  color: #e5e7eb;
+}
 .mb-my-qa-env-summary {
   min-height: 44px;
 }
@@ -9822,6 +10156,10 @@ body {
   border: 1px solid #94a3b8;
   border-radius: 4px;
   background: #fff;
+}
+:root[data-theme="dark"] .mb-my-item-check span {
+  border-color: #334155;
+  background: #172033;
 }
 .mb-my-item-check input:checked + span {
   background: #0078d4;
@@ -10266,6 +10604,11 @@ body {
   color: #e5e7eb;
   border-color: #334155;
 }
+:root[data-theme="dark"] .mb-my-hours-error {
+  background: #3a1414;
+  color: #fca5a5;
+  border-color: #7a2626;
+}
 :root[data-theme="dark"] .mb-my-item-title-link,
 :root[data-theme="dark"] .mb-my-summary-card-kpis b,
 :root[data-theme="dark"] .mb-my-summary-hour-kpis b,
@@ -10304,6 +10647,31 @@ body {
 :root[data-theme="dark"] .mb-my-insights > header small,
 :root[data-theme="dark"] .mb-my-filter-heading span {
   color: #94a3b8;
+}
+:root[data-theme="dark"] .mb-my-qa-board-card :is(.mbaz-test-summary,.mbaz-pr-env-pill) {
+  background: #172033;
+  border-color: #334155;
+  color: #94a3b8;
+}
+:root[data-theme="dark"] .mb-my-qa-board-card :is(.mbaz-test-summary.approved,.mbaz-pr-env-pill.beta,.mbaz-evidence-run-group.approved) {
+  background: #143a24;
+  border-color: #1f5c37;
+  color: #86efac;
+}
+:root[data-theme="dark"] .mb-my-qa-board-card :is(.mbaz-test-summary.fail,.mbaz-pr-env-pill.prod,.mbaz-evidence-run-group.fail) {
+  background: #3a1414;
+  border-color: #7a2626;
+  color: #fca5a5;
+}
+:root[data-theme="dark"] .mb-my-qa-board-card :is(.mbaz-test-summary.limitation,.mbaz-evidence-run-group.limitation) {
+  background: #3a2a0f;
+  border-color: #7a5a1f;
+  color: #fcd34d;
+}
+:root[data-theme="dark"] .mb-my-qa-board-card .mbaz-pr-env-pill.qa {
+  background: #3a3410;
+  border-color: #7a6a1f;
+  color: #fde68a;
 }
 :root[data-theme="dark"] .mbw-card-skeleton-pill,
 :root[data-theme="dark"] .mbw-card-skeleton-title,
@@ -10872,6 +11240,46 @@ body {
 :root[data-theme="dark"] .mbaz-tests-page :is(.mbaz-evidence-card-context,.mbaz-evidence-summary,.mbaz-evidence-date-field,.mbaz-evidence-filter-label,.mbaz-evidence-note) {
   color: #94a3b8;
 }
+:root[data-theme="dark"] .mbaz-tests-page .mbaz-evidence-run-group.approved {
+  background: #143a24;
+  color: #86efac;
+}
+:root[data-theme="dark"] .mbaz-tests-page .mbaz-evidence-run-group.fail {
+  background: #3a1414;
+  color: #fca5a5;
+}
+:root[data-theme="dark"] .mbaz-tests-page .mbaz-evidence-run-group.limitation {
+  background: #3a2a0f;
+  color: #fcd34d;
+}
+:root[data-theme="dark"] .mbaz-tests-page .mbaz-evidence-last-status.approved {
+  background: #143a24;
+  color: #86efac;
+}
+:root[data-theme="dark"] .mbaz-tests-page .mbaz-evidence-last-status.fail {
+  background: #3a1414;
+  color: #fca5a5;
+}
+:root[data-theme="dark"] .mbaz-tests-page .mbaz-evidence-last-status.limitation {
+  background: #3a2a0f;
+  color: #fcd34d;
+}
+:root[data-theme="dark"] .mbaz-tests-page .mbaz-evidence-env-block.env-dev .mbaz-evidence-env-label {
+  background: #172033;
+  color: #94a3b8;
+}
+:root[data-theme="dark"] .mbaz-tests-page .mbaz-evidence-env-block.env-qa .mbaz-evidence-env-label {
+  background: #3a3410;
+  color: #fde68a;
+}
+:root[data-theme="dark"] .mbaz-tests-page .mbaz-evidence-env-block.env-beta .mbaz-evidence-env-label {
+  background: #143a24;
+  color: #86efac;
+}
+:root[data-theme="dark"] .mbaz-tests-page .mbaz-evidence-env-block.env-prod .mbaz-evidence-env-label {
+  background: #3a1414;
+  color: #fca5a5;
+}
 @media (max-width: 980px) {
   .mbaz-tests-page .mbaz-evidence-filter-top,
   .mbaz-tests-page .mbaz-evidence-filter-grid,
@@ -10994,6 +11402,9 @@ body {
   border-radius: 8px;
   background: #e9eef5;
 }
+:root[data-theme="dark"] .mb-my-test-chart-bar {
+  background: #172033;
+}
 .mb-my-test-chart-bar span {
   min-width: 42px;
   display: inline-flex;
@@ -11104,6 +11515,22 @@ body {
 .mbdhc-work-test-toggle.fail span { border-color: #fecaca; background: #fee2e2; }
 .mbdhc-work-test-toggle.limitation { color: #9a6700; }
 .mbdhc-work-test-toggle.limitation span { border-color: #fde68a; background: #fff3cd; }
+:root[data-theme="dark"] .mbdhc-work-test-toggle {
+  border-top-color: #334155;
+  color: #e5e7eb;
+}
+:root[data-theme="dark"] .mbdhc-work-test-toggle span,
+:root[data-theme="dark"] .mbdhc-work-test-toggle em,
+:root[data-theme="dark"] .mbdhc-work-test-toggle b {
+  background: #172033;
+  border-color: #334155;
+}
+:root[data-theme="dark"] .mbdhc-work-test-toggle.approved { color: #86efac; }
+:root[data-theme="dark"] .mbdhc-work-test-toggle.approved span { border-color: #1f5c37; background: #143a24; }
+:root[data-theme="dark"] .mbdhc-work-test-toggle.fail { color: #fca5a5; }
+:root[data-theme="dark"] .mbdhc-work-test-toggle.fail span { border-color: #7a2626; background: #3a1414; }
+:root[data-theme="dark"] .mbdhc-work-test-toggle.limitation { color: #fcd34d; }
+:root[data-theme="dark"] .mbdhc-work-test-toggle.limitation span { border-color: #7a5a1f; background: #3a2a0f; }
 .mbdhc-work-test-toggle > i:last-child {
   margin-left: auto;
   color: #94a3b8;
@@ -11221,6 +11648,11 @@ body {
   background: #fff;
   border-color: #b8d7f3;
   font-weight: 900;
+}
+:root[data-theme="dark"] .mbaz-react-shell .mbaz-chart-toggle {
+  color: #93c5fd;
+  background: #132a4a;
+  border-color: #2563eb;
 }
 .mb-my-items-filter-row {
   grid-template-columns: auto repeat(4, minmax(150px, 1fr));
@@ -11453,6 +11885,9 @@ body {
 .mb-mgmt-test-summary .approved { background: #dcfce7; color: #166534; }
 .mb-mgmt-test-summary .fail { background: #fee2e2; color: #991b1b; }
 .mb-mgmt-test-summary .limitation { background: #fff3cd; color: #9a6700; }
+:root[data-theme="dark"] .mb-mgmt-test-summary .approved { background: #143a24; color: #86efac; }
+:root[data-theme="dark"] .mb-mgmt-test-summary .fail { background: #3a1414; color: #fca5a5; }
+:root[data-theme="dark"] .mb-mgmt-test-summary .limitation { background: #3a2a0f; color: #fcd34d; }
 .mb-mgmt-test-bar {
   position: relative;
   display: flex;
@@ -11611,8 +12046,198 @@ body {
   background: #263244;
   color: #f8fafc;
 }
+:root[data-theme="dark"] .mbdhc-work-test-panel .mbaz-evidence-run-group.approved {
+  background: #143a24;
+  color: #86efac;
+}
+:root[data-theme="dark"] .mbdhc-work-test-panel .mbaz-evidence-run-group.fail {
+  background: #3a1414;
+  color: #fca5a5;
+}
+:root[data-theme="dark"] .mbdhc-work-test-panel .mbaz-evidence-run-group.limitation {
+  background: #3a2a0f;
+  color: #fcd34d;
+}
 
 :root[data-theme="dark"] .mbdhc-work-test-panel .mbaz-evidence-pending-icon,
 :root[data-theme="dark"] .mbdhc-work-test-panel .mbaz-evidence-help {
   color: #cbd5e1;
+}
+
+/* ---------- Widgets fixados flutuando (Pin) ---------- */
+/* Camada mais alta do app de proposito — pedido explicito do usuario pra
+   ficar visivel em QUALQUER tela, inclusive por cima do modal de Work Item
+   (2147483600, o maior z-index ja usado no projeto ate aqui). */
+.stark-floating-widgets-root {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  pointer-events: none;
+}
+.stark-floating-widget {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--starkSurface);
+  border: 1px solid var(--starkBorder);
+  border-radius: 10px;
+  box-shadow: 0 18px 40px rgba(0,0,0,.35);
+  overflow: hidden;
+  min-width: 190px;
+  min-height: 150px;
+}
+.stark-floating-widget-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--starkSurfaceAlt);
+  border-bottom: 1px solid var(--starkBorder);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.stark-floating-widget-header:active {
+  cursor: grabbing;
+}
+.stark-floating-widget-header > i {
+  color: var(--starkMuted);
+  font-size: 12px;
+}
+.stark-floating-widget-opacity {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--starkAccent);
+  cursor: pointer;
+}
+.stark-floating-widget-close,
+.stark-floating-widget-edit {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--starkMuted);
+  cursor: pointer;
+  font-size: 10px;
+}
+.stark-floating-widget-close:hover {
+  color: #dc2626;
+}
+.stark-floating-widget-edit:hover {
+  color: var(--starkAccent);
+}
+.stark-floating-widget-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+}
+/* Post-it flutuante: texto sempre quebra a linha dentro da largura do
+   card (nunca empurra pra o lado) — sem isso, uma palavra/URL longa
+   forcava rolagem horizontal em vez do post-it so crescer pra baixo
+   (bug relatado pelo usuario testando de verdade). */
+.stark-floating-widget-body .mb-home-widget-note-body,
+.stark-floating-widget-body .mb-home-widget-note-body strong,
+.stark-floating-widget-body .mb-home-widget-note-body p {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+.stark-floating-widget-body .mb-home-widget-note-body,
+.stark-floating-widget-body .mb-home-widget-shortcut-body {
+  height: 100%;
+}
+.stark-floating-widget-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, var(--starkBorder) 50%);
+  /* Acima do <a> do atalho/link (que preenche o corpo inteiro) — sem isso
+     o clique no canto abria o link em vez de comecar a redimensionar
+     (relatado pelo usuario testando atalhos e links). */
+  z-index: 5;
+}
+
+/* ---------- Widgets fixados no menu lateral (Pin no menu) ---------- */
+.stark-sidebar-pinned {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--starkBorder);
+}
+.stark-sidebar-pinned-label {
+  display: block;
+  padding: 4px 16px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--starkMuted);
+}
+.stark-sidebar-pinned-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.stark-sidebar-pinned-trigger {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+/* Icone/imagem real do atalho/link (favicon) ou um selo colorido pra nota
+   — pedido explicito do usuario ("pin no menu deveria mostrar o icone/img
+   e nome"), no lugar do icone Bootstrap generico que tinha antes. */
+.stark-sidebar-pinned-trigger .mb-home-widget-placeholder,
+.stark-sidebar-pinned-trigger img {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+.stark-sidebar-pinned-swatch {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  color: rgba(0,0,0,.55);
+}
+.stark-sidebar-pinned-trigger .stark-nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stark-sidebar-pinned-close {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--starkMuted);
+  cursor: pointer;
+  margin-right: 8px;
+}
+.stark-sidebar-pinned-close:hover {
+  color: #dc2626;
 }

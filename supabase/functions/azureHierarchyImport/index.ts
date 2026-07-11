@@ -24,13 +24,25 @@ function json(body, status = 200) {
 
 function normalizeOrgUrl(rawUrl) {
   const trimmed = String(rawUrl || "").trim().replace(/\/+$/, "");
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  return `https://dev.azure.com/${trimmed}`;
+  const url = /^https?:\/\//i.test(trimmed) ? trimmed : `https://dev.azure.com/${trimmed}`;
+  return isAllowedAzureUrl(url) ? url : "";
+}
+
+function isAllowedAzureUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    return url.protocol === "https:" && (url.hostname === "dev.azure.com" || url.hostname.endsWith(".visualstudio.com"));
+  } catch {
+    return false;
+  }
 }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ ok: false, error: "Método não suportado." }, 405);
+
+  const contentLength = Number(req.headers.get("content-length") || 0);
+  if (contentLength > 1_000_000) return json({ ok: false, error: "Payload de importacao muito grande." }, 413);
 
   let payload;
   try {
@@ -44,6 +56,7 @@ Deno.serve(async (req) => {
   if (!tree?.children?.length) return json({ ok: false, error: "Nenhum item reconhecido para importar." }, 400);
 
   const baseUrl = normalizeOrgUrl(orgUrl);
+  if (!baseUrl) return json({ ok: false, error: "URL do Azure DevOps invalida. Use dev.azure.com ou *.visualstudio.com." }, 400);
   const authHeader = `Basic ${btoa(`:${pat}`)}`;
   const projectPath = `${baseUrl}/${encodeURIComponent(project)}`;
   const log = [];

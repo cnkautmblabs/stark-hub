@@ -23,6 +23,7 @@ import { useAuth } from "../../contexts/AuthContext.jsx";
 import { useTheme } from "../../contexts/ThemeContext.jsx";
 import { useFeatureFlags } from "../../contexts/FeatureFlagsContext.jsx";
 import { accessLevels } from "../../utils/constants.js";
+import { SidebarPinnedWidgets } from "../common/FloatingWidgetsLayer.jsx";
 
 const navByRole = {
   [accessLevels.dev]: [
@@ -100,6 +101,7 @@ export default function Sidebar({ collapsed, onToggle }) {
         <NavLink to="/about" className="stark-nav-link" title={t("nav.about")}>
           <FiInfo /> <span className="stark-nav-label">{t("nav.about")}</span>
         </NavLink>
+        <SidebarPinnedWidgets collapsed={collapsed} />
       </nav>
 
       <button

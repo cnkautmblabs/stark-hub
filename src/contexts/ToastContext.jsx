@@ -2,6 +2,8 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { highlightWorkItem, savePendingWorkItemHighlight } from "../utils/workbench/highlight.js";
 import { playSoundFile } from "../utils/notificationSounds.js";
 import { useAuth } from "./AuthContext.jsx";
+import { useTranslation } from "react-i18next";
+import { SUPABASE_QUOTA_EVENT } from "../lib/supabaseClient.js";
 
 // Notificacoes visuais leves (toast), pedidas pelo usuario pra completar os
 // sons de notificacao que ja existiam (Configuracoes > Notificacoes sonoras):
@@ -39,6 +41,7 @@ function writeHistory(userKey, entries) {
 // Historico de toasts e por pessoa (cada uma ve so o proprio), guardado no
 // localStorage do navegador — mesmo mecanismo de `personalSettings.js`.
 export function ToastProvider({ children }) {
+  const { t, i18n } = useTranslation();
   const { profile, user } = useAuth();
   const userKey = profile?.id || user?.email || "anonymous";
   const [toasts, setToasts] = useState([]);
@@ -74,6 +77,26 @@ export function ToastProvider({ children }) {
     });
     return id;
   }, [dismissToast, userKey]);
+
+  useEffect(() => {
+    let lastShownAt = 0;
+    const handleQuotaExceeded = (event) => {
+      if (Date.now() - lastShownAt < 15000) return;
+      lastShownAt = Date.now();
+      const resetAt = event.detail?.resetAt;
+      const resetDate = resetAt
+        ? new Intl.DateTimeFormat(i18n.language, { dateStyle: "long" }).format(new Date(resetAt))
+        : t("common.supabaseQuotaResetUnknown");
+      pushToast({
+        title: t("common.supabaseQuotaTitle"),
+        body: t("common.supabaseQuotaBody", { date: resetDate }),
+        tone: "danger",
+        durationMs: 15000
+      });
+    };
+    window.addEventListener(SUPABASE_QUOTA_EVENT, handleQuotaExceeded);
+    return () => window.removeEventListener(SUPABASE_QUOTA_EVENT, handleQuotaExceeded);
+  }, [i18n.language, pushToast, t]);
 
   const markAllRead = useCallback(() => {
     setHistory((current) => {

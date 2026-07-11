@@ -254,7 +254,7 @@ export function buildWorkItemDescriptionHtml(typeKey, form, attachmentUrls = [])
 export function buildWorkItemCreationSlackText({ item, form, authorName }) {
   const type = String(item?.type || "Work Item");
   const isBug = /bug/i.test(type);
-  const icon = isBug ? ":bug-tag:" : type.toLowerCase() === "user story" ? ":us-tag:" : type.toLowerCase() === "feature" ? ":feat-tag:" : type.toLowerCase() === "epic" ? ":epic-tag:" : type.toLowerCase() === "test case" ? ":test-tag:" : ":task-tag:";
+  const icon = isBug ? ":bug-tag:" : type.toLowerCase() === "user story" ? ":us-tag:" : type.toLowerCase() === "feature" ? ":feature-tag:" : type.toLowerCase() === "epic" ? ":epic-tag:" : type.toLowerCase() === "test case" ? ":test-tag:" : ":task-tag:";
   const title = item?.title || form?.title || "Sem titulo";
   const createdBy = authorName || form?.authorName || "Stark Hub";
   const description = String(item?.description || "").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").trim();
