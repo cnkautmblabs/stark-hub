@@ -550,15 +550,33 @@ Deno.serve(async (req) => {
     // "campo de conteudo renomeado" que justificava buscar tudo foi movido
     // pro fetch sob demanda de 1 item (azureWorkItemDetail), que roda so
     // quando o modal daquele item abre. $expand "Relations" ainda traz o
-    // link de Pull Request usado no pill de PR/Pipeline.
-    const batchResponse = await fetch(`${baseUrl}/_apis/wit/workitemsbatch?api-version=7.1`, {
-      method: "POST",
-      headers: { Authorization: authHeader, "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: chunk, fields: WORK_ITEM_FIELDS, errorPolicy: "Omit", $expand: "Relations" })
-    });
-    if (!batchResponse.ok) continue;
-    const batchData = await batchResponse.json();
-    rawWorkItems.push(...(batchData.value || []));
+    // link de Pull Request usado no pill de PR/Pipeline — mas a API do Azure
+    // DevOps rejeita `fields` e `$expand` na MESMA chamada ("The expand
+    // parameter can not be used with the fields parameter.", 400), então
+    // precisa de duas chamadas por lote (em paralelo). Antes disso essa
+    // combinação sempre dava 400, o `continue` engolia o erro em silêncio, e
+    // o board ficava sempre vazio mesmo com a busca WIQL achando os itens
+    // certos (bug real reportado pelo usuário).
+    const [fieldsResponse, relationsResponse] = await Promise.all([
+      fetch(`${baseUrl}/_apis/wit/workitemsbatch?api-version=7.1`, {
+        method: "POST",
+        headers: { Authorization: authHeader, "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: chunk, fields: WORK_ITEM_FIELDS, errorPolicy: "Omit" })
+      }),
+      fetch(`${baseUrl}/_apis/wit/workitemsbatch?api-version=7.1`, {
+        method: "POST",
+        headers: { Authorization: authHeader, "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: chunk, errorPolicy: "Omit", $expand: "Relations" })
+      })
+    ]);
+    if (!fieldsResponse.ok) continue;
+    const fieldsData = await fieldsResponse.json();
+    const relationsById = new Map();
+    if (relationsResponse.ok) {
+      const relationsData = await relationsResponse.json();
+      (relationsData.value || []).forEach((wi: any) => relationsById.set(wi.id, wi.relations || []));
+    }
+    rawWorkItems.push(...(fieldsData.value || []).map((wi: any) => ({ ...wi, relations: relationsById.get(wi.id) || [] })));
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
