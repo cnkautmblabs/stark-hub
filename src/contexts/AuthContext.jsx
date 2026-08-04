@@ -3,6 +3,7 @@ import { supabase, isSupabaseConfigured } from "../lib/supabaseClient.js";
 import { isDomainAllowed, accessLevels } from "../utils/constants.js";
 import { mockProfiles } from "../utils/mockData.js";
 import { readPersonalSettings, writePersonalSettings } from "../utils/personalSettings.js";
+import { clearApiCache } from "../utils/localApiCache.js";
 
 // Campos da conexão Azure DevOps (PAT, org, projeto, time). Isso é uma
 // credencial pessoal — nunca deve ir para o banco (RLS ou não, um PAT em
@@ -199,6 +200,12 @@ export function AuthProvider({ children }) {
   // AzureConnectionForm.jsx) — gravados só no localStorage deste navegador.
   function updateLocalAzureConnection(patch) {
     writePersonalSettings(profile, session?.user, patch);
+    // A cache de work items (useWorkItems) é chaveada por org/projeto/time,
+    // mas não pelo PAT — reconectar com um PAT novo (mesmo org/projeto/time
+    // de antes) reaproveitava, por até 60s, um resultado em cache obtido com
+    // o PAT antigo (às vezes vazio/quebrado), fazendo o board parecer que a
+    // reconexão não fez nada (bug real reportado pelo usuário).
+    clearApiCache("workItems");
     setAzureConnectionVersion((v) => v + 1);
     return { data: mergeLocalAzureConnection(profile, session?.user), error: null };
   }
