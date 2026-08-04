@@ -465,19 +465,38 @@ Deno.serve(async (req) => {
     }
   }
 
-  const webAppMbLabsPaths = allPaths.filter(isWebAppMbLabsIteration);
-  const baseScopedPaths = webAppMbLabsPaths.length ? webAppMbLabsPaths : [];
-  const pattern = String(iterationPattern || "MB Labs").trim().toLowerCase();
-  const scopedPaths = pattern ? baseScopedPaths.filter((path) => path.toLowerCase().includes(pattern)) : baseScopedPaths;
+  // O filtro fixo "WebApp"+"MB Labs" (isWebAppMbLabsIteration) só existe
+  // pra evitar o vazamento entre times no fallback ABAIXO (projeto inteiro,
+  // sem time informado — ver comentário da Lenio Labs). Quando o time foi
+  // encontrado de verdade (usedTeamScope=true), o próprio endpoint
+  // teamsettings/iterations do Azure já devolve só as sprints DESSE time —
+  // aplicar o padrão fixo em cima disso não protege nada a mais, só descarta
+  // sprints reais sempre que a convenção de nome do time muda (ex.: time
+  // renomeado de "MB Labs" pra "WebApp Team"), devolvendo 0 itens sem
+  // nenhum erro visível (bug real reportado pelo usuário: PAT válido,
+  // conexão testada com sucesso, board sempre vazio).
+  let scopedPaths;
+  if (usedTeamScope) {
+    const customPattern = String(iterationPattern || "").trim().toLowerCase();
+    scopedPaths = customPattern ? allPaths.filter((path) => path.toLowerCase().includes(customPattern)) : allPaths;
+    if (customPattern && !scopedPaths.length) {
+      return json({ ok: false, error: `Nenhuma sprint do time "${team}" contém "${iterationPattern}".` });
+    }
+  } else {
+    const webAppMbLabsPaths = allPaths.filter(isWebAppMbLabsIteration);
+    const baseScopedPaths = webAppMbLabsPaths.length ? webAppMbLabsPaths : [];
+    const pattern = String(iterationPattern || "MB Labs").trim().toLowerCase();
+    scopedPaths = pattern ? baseScopedPaths.filter((path) => path.toLowerCase().includes(pattern)) : baseScopedPaths;
 
-  // Um padrão configurado que não bate com NADA é quase sempre erro de
-  // digitação — melhor travar aqui com um aviso claro do que devolver o
-  // projeto inteiro sem avisar (foi esse silêncio que vazou a Lenio Labs).
-  if (pattern && !scopedPaths.length) {
-    return json({ ok: false, error: `Nenhuma sprint WebApp MB Labs contém "${iterationPattern || "MB Labs"}". A busca global foi limitada a WebApp + MB Labs.` });
-  }
-  if (!scopedPaths.length) {
-    return json({ ok: false, error: "Não foi possível determinar sprints WebApp MB Labs no projeto." });
+    // Um padrão configurado que não bate com NADA é quase sempre erro de
+    // digitação — melhor travar aqui com um aviso claro do que devolver o
+    // projeto inteiro sem avisar (foi esse silêncio que vazou a Lenio Labs).
+    if (pattern && !scopedPaths.length) {
+      return json({ ok: false, error: `Nenhuma sprint WebApp MB Labs contém "${iterationPattern || "MB Labs"}". A busca global foi limitada a WebApp + MB Labs.` });
+    }
+    if (!scopedPaths.length) {
+      return json({ ok: false, error: "Não foi possível determinar sprints WebApp MB Labs no projeto." });
+    }
   }
 
   const iterationClause = `AND (${scopedPaths.map((path) => `[System.IterationPath] UNDER '${path.replace(/'/g, "''")}'`).join(" OR ")})`;
