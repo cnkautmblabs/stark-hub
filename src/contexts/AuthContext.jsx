@@ -47,7 +47,7 @@ const AuthContext = createContext(null);
 // navegação pode ser tomada: se tratássemos como deslogado, o ProtectedRoute
 // redirecionaria para /login *antes* do Supabase processar o token OAuth que
 // acabou de chegar na URL após o redirect do Google, perdendo a sessão.
-const SESSION_PENDING = undefined;
+export const SESSION_PENDING = undefined;
 
 const OAUTH_PENDING_KEY = "stark-hub-oauth-pending";
 export const TERMS_VERSION = "draft-2026-07-10";

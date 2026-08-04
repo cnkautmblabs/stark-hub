@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { supabase, isSupabaseConfigured } from "../lib/supabaseClient.js";
 import { getDemoFeatureFlags, setDemoFeatureFlag } from "../utils/demoStore.js";
-import { useAuth } from "./AuthContext.jsx";
+import { SESSION_PENDING, useAuth } from "./AuthContext.jsx";
 
 const FeatureFlagsContext = createContext(null);
 
 export function FeatureFlagsProvider({ children }) {
-  const { demoMode } = useAuth();
+  const { demoMode, session } = useAuth();
   const [flags, setFlags] = useState(() => getDemoFeatureFlags());
   const [loaded, setLoaded] = useState(false);
 
@@ -17,6 +17,15 @@ export function FeatureFlagsProvider({ children }) {
       return;
     }
     if (!isSupabaseConfigured) {
+      setLoaded(true);
+      return;
+    }
+    // A policy de feature_flags exige um usuario autenticado (via
+    // current_is_management()); disparar a query antes da sessao do
+    // Supabase resolver (ou sem sessao nenhuma, ex.: tela de login) so gera
+    // um 401 que nunca é refeito, já que esse efeito não reagia a `session`.
+    if (session === SESSION_PENDING) return;
+    if (!session?.user) {
       setLoaded(true);
       return;
     }
@@ -31,7 +40,7 @@ export function FeatureFlagsProvider({ children }) {
         }
         setLoaded(true);
       });
-  }, [demoMode]);
+  }, [demoMode, session]);
 
   function isEnabled(key) {
     return flags[key] !== false; // padrão: habilitado, a menos que explicitamente desativado
