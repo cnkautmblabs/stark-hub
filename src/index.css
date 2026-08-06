@@ -3389,6 +3389,11 @@ body {
   gap: 10px;
   align-items: end;
 }
+.mbdhc-governance .mbdhc-sprint-range-hint {
+  align-self: center;
+  color: var(--mbdhc-muted);
+  font-size: 12px;
+}
 .mbdhc-governance .mbdhc-filter-actions {
   display: flex;
   align-items: flex-end;

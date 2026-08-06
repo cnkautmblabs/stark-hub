@@ -64,7 +64,7 @@ import {
 import { copyExecutiveReportText, copyQaTestEvidenceReportText, downloadExecutiveReportPdf } from "../../utils/executiveReport.js";
 import { buildGovernanceSlackText, buildHoursNoticeText } from "../../utils/slackReport.js";
 import { resolveSlackWebhooks } from "../../utils/slack.js";
-import { compactSprintLabel, findCurrentSprint } from "../../utils/sprints.js";
+import { compactSprintLabel, findCurrentSprint, sprintSortValue } from "../../utils/sprints.js";
 import { dateStamp, downloadCsv, exportWorkItemsCsv } from "../../utils/csvExport.js";
 import {
   collaboratorRoleLevels,
@@ -1490,14 +1490,21 @@ function goalProgressColor(percent) {
 export function HoursWorkbench() {
   const { t } = useTranslation();
   const { profile, demoMode } = useAuth();
-  const { items, error, loading, refreshing, reload } = useWorkItems();
+  // includeClosed: igual ao Dashboard de Gerenciamento — esta tela permite
+  // filtrar por sprints passadas (range), e a query padrao do resto do app
+  // exclui Closed/Removed (foco em trabalho ativo). Sem isso, qualquer
+  // sprint ja encerrada aparecia com uma fracao dos cards reais (so os que
+  // por algum motivo ainda nao foram fechados no Azure), dando a impressao
+  // de que a equipe entregou muito menos do que entregou de fato.
+  const { items, error, loading, refreshing, reload } = useWorkItems({ includeClosed: true });
   const { collaborators } = useCollaborators();
   const { evidence } = useTestEvidence();
   const { getSetting } = useAppSettings();
   const [search, setSearch] = usePersistentState("starkHubFilters:governance:search", "");
   const [collaboratorFilter, setCollaboratorFilter] = usePersistentState("starkHubFilters:governance:collaborator", []);
   const [typeFilter, setTypeFilter] = usePersistentState("starkHubFilters:governance:type", "all");
-  const [sprintFilter, setSprintFilter] = usePersistentState("starkHubFilters:governance:sprint", []);
+  const [sprintFrom, setSprintFrom] = usePersistentState("starkHubFilters:governance:sprintFrom", "");
+  const [sprintTo, setSprintTo] = usePersistentState("starkHubFilters:governance:sprintTo", "");
   const [hourStatus, setHourStatus] = usePersistentState("starkHubFilters:governance:hours", "all");
   const [goalFilter, setGoalFilter] = usePersistentState("starkHubFilters:governance:goal", "all");
   const [roleGroup, setRoleGroup] = usePersistentState("starkHubFilters:governance:roleGroup", "all");
@@ -1512,9 +1519,25 @@ export function HoursWorkbench() {
   const goalDefault = getSetting("defaultGoalHours", defaultGoalHours);
   const peopleById = useMemo(() => new Map(collaborators.map((person) => [person.id, person])), [collaborators]);
   const peopleByName = useMemo(() => buildCollaboratorNameIndex(collaborators), [collaborators]);
-  const sprintOptions = Array.from(new Set(items.map((item) => item.sprint || item.iteration).filter(Boolean))).sort((a, b) => String(b).localeCompare(String(a), "pt-BR"));
+  // Ordenacao cronologica real (ver sprintSortValue) — nao alfabetica, senao
+  // "Aug26" vem antes de "Jan26" so porque "A" < "J", quebrando o range
+  // De/Ate abaixo (ex.: selecionar Jun26..Ago26 cortava o meio errado).
+  const sprintOptions = Array.from(new Set(items.map((item) => item.sprint || item.iteration).filter(Boolean))).sort((a, b) => sprintSortValue(a) - sprintSortValue(b));
   const currentSprint = findCurrentSprint(sprintOptions);
-  const effectiveSprintFilter = sprintFilter.length ? sprintFilter : currentSprint ? [currentSprint] : [];
+  // Pedido do usuario: antes so dava pra ver 1 sprint por vez. De/Ate
+  // igual ao Dashboard de Gerenciamento — os dois campos sempre mostram um
+  // valor resolvido (default = sprint atual dos dois lados, ou seja, 1
+  // sprint), nunca ficam vazios sem explicar o periodo aplicado.
+  const sprintFromDefault = currentSprint || sprintOptions[sprintOptions.length - 1] || "";
+  const fromValue = sprintFrom || sprintFromDefault;
+  const toValue = sprintTo || sprintFromDefault;
+  const effectiveSprintFilter = useMemo(() => {
+    if (!sprintOptions.length) return [];
+    const fromIndex = sprintOptions.indexOf(fromValue);
+    const toIndex = sprintOptions.indexOf(toValue);
+    if (fromIndex === -1 || toIndex === -1) return sprintOptions;
+    return sprintOptions.slice(Math.min(fromIndex, toIndex), Math.max(fromIndex, toIndex) + 1);
+  }, [sprintOptions, fromValue, toValue]);
 
   // Gestao deve refletir o periodo filtrado (sprint atual por padrao),
   // nao o historico completo do time. O escopo de periodo (sprint/tipo/
@@ -1733,7 +1756,8 @@ export function HoursWorkbench() {
     setSearch("");
     setCollaboratorFilter([]);
     setTypeFilter("all");
-    setSprintFilter([]);
+    setSprintFrom("");
+    setSprintTo("");
     setHourStatus("all");
     setGoalFilter("all");
     setRoleGroup("all");
@@ -1939,7 +1963,9 @@ export function HoursWorkbench() {
           <ProfileCombobox label={t("governance.collaboratorLabel")} people={developers.map((dev) => ({ id: dev.key, azureName: dev.displayName, color: dev.color }))} values={collaboratorFilter} multiple onChange={setCollaboratorFilter} />
           <FilterCombobox label={t("governance.roleLabel")} options={[{ value: accessLevels.dev, label: "Dev" }, { value: accessLevels.qa, label: "QA" }, { value: accessLevels.gestao, label: "Gestao" }, { value: accessLevels.gerente, label: "Gerente" }]} values={roleGroup === "all" ? [] : [roleGroup]} multiple={false} onChange={(value) => setRoleGroup(value || "all")} />
           <FilterCombobox label={t("governance.typeLabel")} options={["Task", "Bug", "User Story", "Feature"].map((value) => ({ value, label: value }))} values={typeFilter === "all" ? [] : [typeFilter]} multiple={false} onChange={(value) => setTypeFilter(value || "all")} />
-          <FilterCombobox label={t("governance.sprintLabel")} options={sprintOptions.map((sprint) => ({ value: sprint, label: compactSprintLabel(sprint) }))} values={effectiveSprintFilter[0] ? [effectiveSprintFilter[0]] : []} multiple={false} allLabel={t("governance.currentSprint")} onChange={(value) => setSprintFilter(value ? [value] : [])} />
+          <FilterCombobox label={t("governance.sprintFromLabel")} options={sprintOptions.map((sprint) => ({ value: sprint, label: compactSprintLabel(sprint) }))} values={fromValue ? [fromValue] : []} multiple={false} onChange={(value) => setSprintFrom(value || "")} />
+          <FilterCombobox label={t("governance.sprintToLabel")} options={sprintOptions.map((sprint) => ({ value: sprint, label: compactSprintLabel(sprint) }))} values={toValue ? [toValue] : []} multiple={false} onChange={(value) => setSprintTo(value || "")} />
+          <span className="mbdhc-sprint-range-hint">{t("governance.rangeHint", { count: effectiveSprintFilter.length, sprints: effectiveSprintFilter.map(compactSprintLabel).join(", ") || "-" })}</span>
           <FilterCombobox label={t("governance.hoursFilterLabel")} options={[{ value: "with", label: t("governance.withHours") }, { value: "without", label: t("governance.withoutHours") }]} values={hourStatus === "all" ? [] : [hourStatus]} multiple={false} onChange={(value) => setHourStatus(value || "all")} />
           <FilterCombobox label={t("governance.goalStatusLabel")} options={[{ value: "below", label: t("governance.below") }, { value: "met", label: t("governance.met") }, { value: "above", label: t("governance.above") }]} values={goalFilter === "all" ? [] : [goalFilter]} multiple={false} onChange={(value) => setGoalFilter(value || "all")} />
           <div className="mbdhc-filter-actions"><button className="mbdhc-button secondary" type="button" onClick={resetFilters}>{t("qaBoard.clearFilters")}</button></div>

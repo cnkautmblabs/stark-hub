@@ -6,23 +6,10 @@ import { useWorkItems } from "../../../hooks/useWorkItems.js";
 import { useCollaborators } from "../../../hooks/useCollaborators.js";
 import { useTestEvidence } from "../../../hooks/useTestEvidence.js";
 import { usePersistentState } from "../../../hooks/usePersistentState.js";
-import { compactSprintLabel } from "../../../utils/sprints.js";
+import { compactSprintLabel, sprintSortValue } from "../../../utils/sprints.js";
 import { dateStamp, downloadCsv } from "../../../utils/csvExport.js";
 import { buildCollaboratorNameIndex, evidenceDedupeKey, evidenceEnvironments, findCollaboratorByName, isQaEvidenceEntry, normalizeResult } from "../../../utils/workbench/formatters.js";
 import { AvatarDot, ChartSkeleton, CompactAxisTick, FilterCombobox, Kpi, KpiSkeleton, RechartsTooltip, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
-
-const monthOrder = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
-
-// Sprints do Stark Hub sao rotuladas "Mon26" (mes + 2 digitos do ano) — nao
-// da pra ordenar como string (Jan26 < Dec26 alfabeticamente, mas Dec vem
-// depois). Decompoe em ano*12+mes para ordenar/cortar o range corretamente.
-function sprintSortValue(label) {
-  const match = String(label || "").match(/^([A-Za-z]{3})(\d{2})$/);
-  if (!match) return 0;
-  const monthIndex = monthOrder.indexOf(match[1].toLowerCase());
-  const year = 2000 + Number(match[2]);
-  return year * 12 + (monthIndex === -1 ? 0 : monthIndex);
-}
 
 const deliveredTypes = ["Feature", "User Story", "Task", "Bug"];
 

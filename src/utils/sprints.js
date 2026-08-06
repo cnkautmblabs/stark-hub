@@ -27,6 +27,18 @@ const monthAliases = {
 };
 
 const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const monthOrder = monthNames.map((month) => month.toLowerCase());
+
+// Sprints do Stark Hub sao rotuladas "Mon26" (mes + 2 digitos do ano) — nao
+// da pra ordenar como string (Jan26 < Dec26 alfabeticamente, mas Dec vem
+// depois). Decompoe em ano*12+mes para ordenar/cortar o range corretamente.
+export function sprintSortValue(label) {
+  const match = String(label || "").match(/^([A-Za-z]{3})(\d{2})$/);
+  if (!match) return 0;
+  const monthIndex = monthOrder.indexOf(match[1].toLowerCase());
+  const year = 2000 + Number(match[2]);
+  return year * 12 + (monthIndex === -1 ? 0 : monthIndex);
+}
 
 export function sprintLeaf(value) {
   return String(value || "").split("\\").pop() || "";
