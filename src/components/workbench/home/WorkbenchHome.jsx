@@ -385,6 +385,16 @@ export function WorkbenchHome() {
   const isAdmin = Boolean(profile?.isAdmin || access === accessLevels.admin);
   const isGestao = hasManagementAccess(access, isAdmin);
   const isGerente = access === accessLevels.gerente;
+  // O card "Gestao da equipe" desta tela precisa do historico completo
+  // (itens ja Closed no Azure) pra nao subestimar horas — mesmo raciocinio
+  // ja aplicado na tela dedicada Gestao da equipe/Painel executivo (ver
+  // useWorkItems.js). A busca padrao acima (`items`) fica ativa-apenas de
+  // proposito (board/QA/Meus itens focam em trabalho em andamento); sem uma
+  // busca separada aqui, a hora registrada de um item sumia deste card
+  // assim que o item era fechado no Azure, mesmo com o apontamento certo
+  // (bug real reportado pela equipe). So habilitada pra quem realmente ve o
+  // card (Gestao/Gerente/Admin) pra nao pesar a Home de todo mundo.
+  const { items: governanceItems } = useWorkItems({ includeClosed: true, enabled: isGestao });
   const accessLabel = isAdmin && isQa ? `${accessLevelLabels[access]} (Admin)` : accessLevelLabels[access] || "Acesso";
   const userKey = profile?.id || user?.email || "anonymous";
   const goalDefault = getSetting("defaultGoalHours", defaultGoalHours);
@@ -585,7 +595,7 @@ export function WorkbenchHome() {
     collaborators.filter((person) => person.isDev || person.isQa || person.isManagement).forEach((person) => {
       map.set(person.id, { name: person.azureName, hours: 0, goal: Number(person.goalHours || goalDefault) });
     });
-    items.forEach((item) => {
+    governanceItems.forEach((item) => {
       const person = collaborators.find((entry) => entry.id === item.assigneeId) || findCollaboratorByName(collaboratorNameIndex, item.assigneeName);
       const key = person?.id || item.assigneeName || "unassigned";
       if (!map.has(key)) map.set(key, { name: item.assigneeName || t("home.unassigned"), hours: 0, goal: goalDefault });
@@ -596,16 +606,19 @@ export function WorkbenchHome() {
       label: row.hours < row.goal ? t("home.below") : row.hours > row.goal ? t("home.above") : t("home.met"),
       tone: row.hours < row.goal ? "danger" : row.hours > row.goal ? "warning" : "primary"
     }));
-  }, [collaboratorNameIndex, collaborators, goalDefault, isGestao, items, t]);
+  }, [collaboratorNameIndex, collaborators, goalDefault, isGestao, governanceItems, t]);
 
   const governanceTotals = useMemo(() => ({
     developers: developerRows.length,
-    cards: items.length,
+    cards: governanceItems.length,
     hours: developerRows.reduce((sum, row) => sum + row.hours, 0),
     goal: developerRows.reduce((sum, row) => sum + row.goal, 0),
     missing: developerRows.reduce((sum, row) => sum + Math.max(row.goal - row.hours, 0), 0),
-    extra: developerRows.reduce((sum, row) => sum + Math.max(row.hours - row.goal, 0), 0)
-  }), [developerRows, items]);
+    extra: developerRows.reduce((sum, row) => sum + Math.max(row.hours - row.goal, 0), 0),
+    goalBelow: developerRows.filter((row) => row.hours < row.goal).length,
+    goalMet: developerRows.filter((row) => row.hours === row.goal).length,
+    goalAbove: developerRows.filter((row) => row.hours > row.goal).length
+  }), [developerRows, governanceItems]);
 
   // "Hoje" era um recorte fixo (so a data de hoje, sem opcao de ver outro
   // dia ou um intervalo) — vira um range inicio/fim que o usuario controla,

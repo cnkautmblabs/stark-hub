@@ -118,7 +118,11 @@ function mentionNameForSlack(person) {
 // entrega e series por sprint — o filtro padrao do resto do app exclui
 // Closed/Removed de proposito (foco no trabalho ativo), entao aqui a
 // consulta ignora o customQuery global e busca todos os estados.
-export function useWorkItems({ includeClosed = false } = {}) {
+// `enabled`: permite adiar a busca (ex.: a variante includeClosed so faz
+// sentido pra quem realmente ve a secao que consome esses dados — sem isso,
+// TODA carga da Home dispararia uma busca historica pesada, mesmo pra quem
+// nunca ve o card de Gestao da equipe).
+export function useWorkItems({ includeClosed = false, enabled = true } = {}) {
   const { demoMode, profile, user } = useAuth();
   const { getSetting } = useAppSettings();
   const { collaborators } = useCollaborators();
@@ -164,6 +168,11 @@ export function useWorkItems({ includeClosed = false } = {}) {
   }, [cacheKey]);
 
   const loadItems = useCallback(async ({ force = false } = {}) => {
+    if (!enabled) {
+      setLoading(false);
+      hasLoadedRef.current = true;
+      return;
+    }
     if (demoMode) {
       setItems(getDemoWorkItems());
       setLoading(false);
@@ -249,7 +258,7 @@ export function useWorkItems({ includeClosed = false } = {}) {
     hasLoadedRef.current = true;
     setLoading(false);
     setRefreshing(false);
-  }, [demoMode, azureReady, profile?.azureOrgUrl, profile?.azureProject, profile?.azureTeam, profile?.azurePat, iterationPattern, customQuery, maxItems, includeClosed, pushToast, cacheKey, user]);
+  }, [enabled, demoMode, azureReady, profile?.azureOrgUrl, profile?.azureProject, profile?.azureTeam, profile?.azurePat, iterationPattern, customQuery, maxItems, includeClosed, pushToast, cacheKey, user]);
 
   useEffect(() => {
     loadItems();
@@ -259,7 +268,7 @@ export function useWorkItems({ includeClosed = false } = {}) {
   // atualização automática" do userscript legado (refreshIntervalSeconds),
   // configurável em Configurações > Consulta Azure DevOps. 0 desativa.
   useEffect(() => {
-    if (demoMode || !azureReady || !autoRefreshSeconds) return;
+    if (!enabled || demoMode || !azureReady || !autoRefreshSeconds) return;
     // So atualiza com a aba visivel — antes rodava mesmo em segundo plano
     // (aba minimizada/outra aba em foco o dia inteiro), gerando egress do
     // Supabase (Edge Function + subconsultas) sem ninguem olhando o board.
@@ -268,10 +277,10 @@ export function useWorkItems({ includeClosed = false } = {}) {
       loadItems({ force: true });
     }, autoRefreshSeconds * 1000);
     return () => clearInterval(id);
-  }, [demoMode, azureReady, autoRefreshSeconds, loadItems]);
+  }, [enabled, demoMode, azureReady, autoRefreshSeconds, loadItems]);
 
   useEffect(() => {
-    if (demoMode || !azureReady) return undefined;
+    if (!enabled || demoMode || !azureReady) return undefined;
     let lastRefresh = 0;
     function refreshIfVisible() {
       if (document.visibilityState === "hidden") return;
