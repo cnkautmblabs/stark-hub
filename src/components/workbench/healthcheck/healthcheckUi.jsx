@@ -188,8 +188,13 @@ export function HcExecutionModal({ block, country, countries, onClose, t, langua
           <IconButton title={t("common.close")} onClick={onClose}><i className="bi bi-x-lg" /></IconButton>
         </header>
         <div className="stark-hc-drawer-body">
-          <StatusPill status={countryResult?.status || "unknown"} t={t} />
-          <p className="stark-hc-muted">{formatDateTime(normalized.finishedAt, language)}</p>
+          <div className="stark-hc-execution-meta">
+            <StatusPill status={countryResult?.status || "unknown"} t={t} />
+            <div className="stark-hc-execution-meta-right">
+              {typeof countryResult?.durationMs === "number" && <strong>{countryResult.durationMs} ms</strong>}
+              <span>{formatDateTime(normalized.finishedAt, language)}</span>
+            </div>
+          </div>
           <h4>{t("healthCheck.detailEndpointsTitle")}</h4>
           <EndpointStepList steps={countryResult?.steps} t={t} />
           {!countryResult && <EmptyState title={t("healthCheck.noHealthcheckData")} />}
