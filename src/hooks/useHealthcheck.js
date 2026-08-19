@@ -37,7 +37,13 @@ export function useHealthcheck() {
   const [incidentLog, setIncidentLog] = usePersistentState(hcStorageKeys.incidentLog, []);
   const [result, setResult] = useState(() => hcReadLastResult()?.result || null);
   const [loading, setLoading] = useState(true);
-  const [countdown, setCountdown] = useState(hcRefreshIntervalSeconds);
+  // Timestamp alvo do proximo refresh, nao um contador de segundos em
+  // estado do React — um segundo por segundo aqui forcaria a pagina INTEIRA
+  // (graficos Recharts inclusive) a re-renderizar a cada tick, reanimando as
+  // barras do zero sem parar (o "piscar" reportado pelo usuario). O
+  // countdown visual e derivado disso localmente, isolado num componente
+  // proprio (ver AutoRefreshCountdown no Workbench).
+  const [nextRefreshAt, setNextRefreshAt] = useState(() => Date.now() + hcRefreshIntervalSeconds * 1000);
   const resultRef = useRef(result);
   resultRef.current = result;
 
@@ -54,7 +60,7 @@ export function useHealthcheck() {
     setResult(next);
     hcSaveLastResult(next);
     setHistory((current) => hcAppendHistoryBlock(current || [], next));
-    setCountdown(hcRefreshIntervalSeconds);
+    setNextRefreshAt(Date.now() + hcRefreshIntervalSeconds * 1000);
     setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [countries, environment, scenario, setHistory, setIncidentLog]);
@@ -80,15 +86,7 @@ export function useHealthcheck() {
 
   useEffect(() => {
     if (!autoRefresh) return undefined;
-    const timer = window.setInterval(() => {
-      setCountdown((current) => {
-        if (current <= 1) {
-          refresh();
-          return hcRefreshIntervalSeconds;
-        }
-        return current - 1;
-      });
-    }, 1000);
+    const timer = window.setInterval(refresh, hcRefreshIntervalSeconds * 1000);
     return () => window.clearInterval(timer);
   }, [autoRefresh, refresh]);
 
@@ -192,7 +190,7 @@ export function useHealthcheck() {
     setScenario,
     autoRefresh,
     setAutoRefresh,
-    countdown,
+    nextRefreshAt,
     result,
     loading,
     refresh,

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Bar, BarChart, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useAuth } from "../../../contexts/AuthContext.jsx";
@@ -48,9 +48,28 @@ function formatBlockLabel(block, t, language) {
 }
 
 function formatCountdown(totalSeconds) {
-  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
-  const seconds = Math.floor(totalSeconds % 60).toString().padStart(2, "0");
+  const clamped = Math.max(0, totalSeconds);
+  const minutes = Math.floor(clamped / 60).toString().padStart(2, "0");
+  const seconds = Math.floor(clamped % 60).toString().padStart(2, "0");
   return `${minutes}:${seconds}`;
+}
+
+// Ticka a cada 1s isolado num componente-folha — se isso vivesse no estado
+// do hook/pagina, cada tick re-renderizaria a arvore inteira (heatmaps,
+// graficos Recharts) e as barras reanimariam do zero sem parar (o "piscar"
+// reportado pelo usuario). Aqui so este texto pequeno re-renderiza.
+function AutoRefreshCountdown({ nextRefreshAt, t }) {
+  const [secondsLeft, setSecondsLeft] = useState(() => Math.round((nextRefreshAt - Date.now()) / 1000));
+
+  useEffect(() => {
+    setSecondsLeft(Math.round((nextRefreshAt - Date.now()) / 1000));
+    const timer = window.setInterval(() => {
+      setSecondsLeft(Math.round((nextRefreshAt - Date.now()) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [nextRefreshAt]);
+
+  return <>{t("healthCheck.nextCheckIn", { time: formatCountdown(secondsLeft) })}</>;
 }
 
 function HcFlag({ iso2, code, size = 20 }) {
@@ -320,17 +339,21 @@ function uptimeBarColor(value) {
 }
 
 function DashboardCharts({ hc, t }) {
-  const uptimeData = hc.countries
+  // Memoizado nas dependencias reais (nao recriar o array a cada render) —
+  // a pagina re-renderiza toda vez que o countdown do proximo refresh muda
+  // de contexto (ex. troca de ambiente), e um array novo a cada render fazia
+  // o Recharts tratar como "dado novo" e reanimar as barras do zero.
+  const uptimeData = useMemo(() => hc.countries
     .filter((country) => country.active)
     .map((country) => ({ code: country.code, uptime: hc.periodUptimeByCountry[country.code] ?? 100 }))
-    .sort((a, b) => a.uptime - b.uptime);
+    .sort((a, b) => a.uptime - b.uptime), [hc.countries, hc.periodUptimeByCountry]);
 
-  const latencyData = hc.countries
+  const latencyData = useMemo(() => hc.countries
     .filter((country) => country.active)
     .map((country) => {
       const row = (hc.result?.countries || []).find((entry) => entry.country === country.code);
       return { code: country.code, latency: row?.durationMs ?? 0 };
-    });
+    }), [hc.countries, hc.result]);
 
   return (
     <div className="stark-hc-dashboard-grid">
@@ -342,7 +365,7 @@ function DashboardCharts({ hc, t }) {
               <XAxis type="number" domain={[Math.min(95, ...uptimeData.map((row) => row.uptime)), 100]} hide />
               <YAxis type="category" dataKey="code" width={54} tick={<HcCountryAxisTick countries={hc.countries} width={48} />} axisLine={false} tickLine={false} />
               <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
-              <Bar dataKey="uptime" name={t("healthCheck.uptimeTitle")} radius={[0, 6, 6, 0]} barSize={12}>
+              <Bar dataKey="uptime" name={t("healthCheck.uptimeTitle")} radius={[0, 6, 6, 0]} barSize={12} isAnimationActive={false}>
                 {uptimeData.map((row) => <Cell key={row.code} fill={uptimeBarColor(row.uptime)} />)}
                 <LabelList dataKey="uptime" position="right" formatter={(value) => `${value.toFixed(2)}%`} style={{ fill: "var(--starkMuted)", fontSize: 11 }} />
               </Bar>
@@ -359,7 +382,7 @@ function DashboardCharts({ hc, t }) {
               <XAxis type="number" hide />
               <YAxis type="category" dataKey="code" width={54} tick={<HcCountryAxisTick countries={hc.countries} width={48} />} axisLine={false} tickLine={false} />
               <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
-              <Bar dataKey="latency" name="ms" fill="#0ea5e9" radius={[0, 6, 6, 0]} barSize={12}>
+              <Bar dataKey="latency" name="ms" fill="#0ea5e9" radius={[0, 6, 6, 0]} barSize={12} isAnimationActive={false}>
                 <LabelList dataKey="latency" position="right" formatter={(value) => `${value} ms`} style={{ fill: "var(--starkMuted)", fontSize: 11 }} />
               </Bar>
             </BarChart>
@@ -432,7 +455,7 @@ export function HealthCheckWorkbench() {
           </label>
           <button type="button" className={`stark-hc-autorefresh ${hc.autoRefresh ? "on" : ""}`} onClick={() => hc.setAutoRefresh((value) => !value)} aria-pressed={hc.autoRefresh}>
             <i className={`bi ${hc.autoRefresh ? "bi-toggle-on" : "bi-toggle-off"}`} />
-            {hc.autoRefresh ? t("healthCheck.nextCheckIn", { time: formatCountdown(hc.countdown) }) : t("healthCheck.autoRefreshOff")}
+            {hc.autoRefresh ? <AutoRefreshCountdown nextRefreshAt={hc.nextRefreshAt} t={t} /> : t("healthCheck.autoRefreshOff")}
           </button>
         </div>
       </div>
