@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { I18nextProvider, useTranslation } from "react-i18next";
 import ReactorLogo from "../../components/layout/ReactorLogo.jsx";
+import publicI18n, { publicSupportedLanguages } from "../../i18n/publicInstance.js";
 import {
   AutoRefreshCountdown,
   HcFlag,
@@ -36,7 +37,44 @@ async function fetchPublicStatus() {
   }
 }
 
-export default function PublicHealthStatus() {
+function LanguageSelect({ t, i18n }) {
+  return (
+    <label className="stark-public-status-lang">
+      <span className="visually-hidden">{t("publicStatus.languageLabel")}</span>
+      <i className="bi bi-globe2" />
+      <select value={i18n.resolvedLanguage || i18n.language} onChange={(event) => i18n.changeLanguage(event.target.value)}>
+        {publicSupportedLanguages.map((lang) => <option key={lang.code} value={lang.code}>{lang.label}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function WhatWeMonitor({ t }) {
+  const steps = [
+    { icon: "bi-box-arrow-in-right", titleKey: "stepLoginTitle", descKey: "stepLoginDesc" },
+    { icon: "bi-person-vcard", titleKey: "stepMemberTitle", descKey: "stepMemberDesc" },
+    { icon: "bi-box-arrow-right", titleKey: "stepSignoutTitle", descKey: "stepSignoutDesc" }
+  ];
+  return (
+    <section className="stark-public-status-explainer">
+      <h2>{t("publicStatus.whatWeMonitorTitle")}</h2>
+      <p>{t("publicStatus.whatWeMonitorBody")}</p>
+      <div className="stark-public-status-steps">
+        {steps.map((step) => (
+          <div key={step.titleKey} className="stark-public-status-step">
+            <i className={`bi ${step.icon}`} />
+            <div>
+              <strong>{t(`publicStatus.${step.titleKey}`)}</strong>
+              <span>{t(`publicStatus.${step.descKey}`)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PublicHealthStatusContent() {
   const { t, i18n } = useTranslation();
   const [state, setState] = useState({ loading: true, enabled: true, rows: [] });
   const [nextRefreshAt, setNextRefreshAt] = useState(() => Date.now() + hcRefreshIntervalSeconds * 1000);
@@ -88,10 +126,15 @@ export default function PublicHealthStatus() {
             <span>{t("pages.healthCheck.subtitle")}</span>
           </div>
         </div>
-        <span className="stark-public-status-refresh">
-          <i className="bi bi-arrow-repeat" /> <AutoRefreshCountdown nextRefreshAt={nextRefreshAt} t={t} />
-        </span>
+        <div className="stark-public-status-header-actions">
+          <LanguageSelect t={t} i18n={i18n} />
+          <span className="stark-public-status-refresh">
+            <i className="bi bi-arrow-repeat" /> <AutoRefreshCountdown nextRefreshAt={nextRefreshAt} t={t} />
+          </span>
+        </div>
       </header>
+
+      <WhatWeMonitor t={t} />
 
       {state.loading ? (
         <div className="stark-public-status-loading">{t("common.loading")}</div>
@@ -146,5 +189,13 @@ export default function PublicHealthStatus() {
         <span>{t("publicStatus.poweredBy")}</span>
       </footer>
     </div>
+  );
+}
+
+export default function PublicHealthStatus() {
+  return (
+    <I18nextProvider i18n={publicI18n}>
+      <PublicHealthStatusContent />
+    </I18nextProvider>
   );
 }

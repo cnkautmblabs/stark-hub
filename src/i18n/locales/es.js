@@ -1186,6 +1186,15 @@ export default {
     uptimeLabel: "uptime",
     poweredBy: "Desarrollado con Stark Hub",
     disabledTitle: "Status page no disponible",
-    disabledBody: "Esta status page publica fue desactivada temporalmente por el equipo."
+    disabledBody: "Esta status page publica fue desactivada temporalmente por el equipo.",
+    languageLabel: "Idioma",
+    whatWeMonitorTitle: "¿Que estamos monitoreando?",
+    whatWeMonitorBody: "Cada 5 minutos simulamos el inicio de sesion de un cliente real en la app de Cinemark, para cada pais de la lista de abajo. Si algun paso falla, ese pais se marca como degradado o caido hasta que se recupere.",
+    stepLoginTitle: "Iniciar sesion",
+    stepLoginDesc: "¿Un cliente puede iniciar sesion en su cuenta?",
+    stepMemberTitle: "Datos de la cuenta",
+    stepMemberDesc: "¿Podemos cargar su informacion de socio?",
+    stepSignoutTitle: "Cerrar sesion",
+    stepSignoutDesc: "¿Puede cerrar sesion de forma segura despues?"
   }
 };

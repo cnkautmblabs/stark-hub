@@ -1186,6 +1186,15 @@ export default {
     uptimeLabel: "uptime",
     poweredBy: "Powered by Stark Hub",
     disabledTitle: "Status page unavailable",
-    disabledBody: "This public status page has been temporarily disabled by the team."
+    disabledBody: "This public status page has been temporarily disabled by the team.",
+    languageLabel: "Language",
+    whatWeMonitorTitle: "What are we monitoring?",
+    whatWeMonitorBody: "Every 5 minutes, we simulate a real customer signing in on the Cinemark app for each country listed below. If any step fails, that country is marked as degraded or down until it recovers.",
+    stepLoginTitle: "Sign in",
+    stepLoginDesc: "Can a customer log into their account?",
+    stepMemberTitle: "Account details",
+    stepMemberDesc: "Can we load their member information?",
+    stepSignoutTitle: "Sign out",
+    stepSignoutDesc: "Can they safely sign out afterwards?"
   }
 };
