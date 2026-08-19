@@ -60,8 +60,8 @@ function WhatWeMonitor({ t }) {
     { icon: "bi-box-arrow-right", titleKey: "stepSignoutTitle", descKey: "stepSignoutDesc" }
   ];
   return (
-    <section className="stark-public-status-explainer">
-      <h2>{t("publicStatus.whatWeMonitorTitle")}</h2>
+    <details className="stark-public-status-explainer">
+      <summary>{t("publicStatus.whatWeMonitorTitle")}</summary>
       <p>{t("publicStatus.whatWeMonitorBody")}</p>
       <div className="stark-public-status-steps">
         {steps.map((step) => (
@@ -75,7 +75,7 @@ function WhatWeMonitor({ t }) {
         ))}
       </div>
       <StatusLegendDetails t={t} />
-    </section>
+    </details>
   );
 }
 
