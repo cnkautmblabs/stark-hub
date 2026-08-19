@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { isSupabaseConfigured, supabase } from "../lib/supabaseClient.js";
 import { usePersistentState } from "./usePersistentState.js";
 import {
   hcAppendHistoryBlock,
   hcBlocksForRange,
+  hcBlocksFromLiveRows,
   hcBuildDailyHistory,
   hcBuildInitialHistory,
   hcCalculateSystemStatus,
   hcDateRangeForPreset,
   hcDeriveActiveIncidents,
   hcDetectResolvedIncidents,
+  hcDownsampleBlocks,
   hcIncidentStartedAt,
+  hcLiveBlocksForRange,
   hcLoadHealthcheckResult,
+  hcNormalizeLiveResult,
   hcReadLastResult,
   hcRefreshIntervalSeconds,
   hcSaveLastResult,
@@ -21,6 +26,23 @@ import {
 
 function newCountryId(code) {
   return `${String(code || "xx").toLowerCase()}-${Date.now().toString(36)}`;
+}
+
+// Quantas execucoes reais buscar do Supabase por refresh — a cada 5min, 3000
+// linhas cobrem ~10 dias. Cobre o KPI de 7 dias com folga; 30d/90d ficam
+// parciais ate a pipeline acumular mais historico (sem inventar o resto).
+const LIVE_ROWS_LIMIT = 3000;
+
+async function fetchLiveRows(environment) {
+  if (!isSupabaseConfigured || !supabase) return [];
+  const { data, error } = await supabase
+    .from("healthcheck_results")
+    .select("*")
+    .eq("environment", environment)
+    .order("createdAt", { ascending: false })
+    .limit(LIVE_ROWS_LIMIT);
+  if (error || !data) return [];
+  return data;
 }
 
 export function useHealthcheck() {
@@ -36,6 +58,7 @@ export function useHealthcheck() {
   const [periodTo, setPeriodTo] = usePersistentState(hcStorageKeys.periodTo, initialRange.to);
   const [incidentLog, setIncidentLog] = usePersistentState(hcStorageKeys.incidentLog, []);
   const [result, setResult] = useState(() => hcReadLastResult()?.result || null);
+  const [liveBlocks, setLiveBlocks] = useState([]); // [] enquanto a pipeline real nao publicou nada ainda
   const [loading, setLoading] = useState(true);
   // Timestamp alvo do proximo refresh, nao um contador de segundos em
   // estado do React — um segundo por segundo aqui forcaria a pagina INTEIRA
@@ -47,6 +70,8 @@ export function useHealthcheck() {
   const resultRef = useRef(result);
   resultRef.current = result;
 
+  const hasLiveData = liveBlocks.length > 0;
+
   const activeCountryKey = useMemo(
     () => countries.filter((country) => country.active).map((country) => country.code).join(","),
     [countries]
@@ -54,21 +79,29 @@ export function useHealthcheck() {
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const next = await hcLoadHealthcheckResult(countries, environment, scenario);
+    const rows = await fetchLiveRows(environment);
+    let next;
+    let nextLiveBlocks = [];
+    if (rows.length) {
+      nextLiveBlocks = hcBlocksFromLiveRows(rows);
+      next = hcNormalizeLiveResult(rows[0], countries); // rows[0] = mais recente (order desc)
+    } else {
+      next = await hcLoadHealthcheckResult(countries, environment, scenario);
+    }
     const resolved = hcDetectResolvedIncidents(resultRef.current, next, countries);
     if (resolved.length) setIncidentLog((current) => [...resolved, ...current].slice(0, 20));
     setResult(next);
+    setLiveBlocks(nextLiveBlocks);
     hcSaveLastResult(next);
-    setHistory((current) => hcAppendHistoryBlock(current || [], next));
+    if (!nextLiveBlocks.length) setHistory((current) => hcAppendHistoryBlock(current || [], next));
     setNextRefreshAt(Date.now() + hcRefreshIntervalSeconds * 1000);
     setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [countries, environment, scenario, setHistory, setIncidentLog]);
 
-  // Seed inicial do historico fino (24h) e do backdrop diario (90 dias) na
-  // primeira vez que o modulo roda neste navegador — depois disso o
-  // historico fino so cresce por refresh real, e o diario e resemeado
-  // apenas quando ambiente/paises mudam (ver efeito abaixo).
+  // Seed inicial do historico fino demo (24h) e do backdrop diario demo (90
+  // dias) na primeira vez que o modulo roda neste navegador — so usado
+  // enquanto a pipeline real nao publicou nada ainda (ver hasLiveData).
   useEffect(() => {
     if (!history || !history.length) setHistory(hcBuildInitialHistory(countries, scenario, environment));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -146,11 +179,21 @@ export function useHealthcheck() {
 
   const activeIncidents = useMemo(() => {
     if (!result) return [];
+    const historyForIncidents = hasLiveData ? liveBlocks : (history || []);
     return hcDeriveActiveIncidents(result, countries).map((incident) => ({
       ...incident,
-      startedAt: hcIncidentStartedAt(history || [], incident.countryCode)
+      startedAt: hcIncidentStartedAt(historyForIncidents, incident.countryCode)
     }));
-  }, [result, countries, history]);
+  }, [result, countries, history, liveBlocks, hasLiveData]);
+
+  // Blocos completos (sem downsample) de um intervalo — precisao total pro
+  // NUMERO de uptime. hasLiveData usa as execucoes reais direto; senao cai
+  // no hibrido fino(24h)+diario(90d) do motor de demo.
+  function blocksForRange(fromDate, toDate, countryCode) {
+    return hasLiveData
+      ? hcLiveBlocksForRange(liveBlocks, fromDate, toDate, countryCode)
+      : hcBlocksForRange(history || [], dailyHistory || [], fromDate, toDate, countryCode);
+  }
 
   // KPIs fixos (brief #17) — sempre 24h/7d/30d/90d reais, independente do
   // filtro de periodo ajustavel abaixo (que alimenta os graficos/heatmaps
@@ -159,23 +202,29 @@ export function useHealthcheck() {
     const ranges = { h24: "24h", d7: "7d", d30: "30d", d90: "90d" };
     return Object.fromEntries(Object.entries(ranges).map(([key, preset]) => {
       const range = hcDateRangeForPreset(preset);
-      return [key, hcUptimeForBlocks(hcBlocksForRange(history || [], dailyHistory || [], range.from, range.to))];
+      return [key, hcUptimeForBlocks(blocksForRange(range.from, range.to))];
     }));
-  }, [history, dailyHistory]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasLiveData, liveBlocks, history, dailyHistory]);
 
-  // Blocos/uptime do periodo ATUALMENTE selecionado (preset ou custom),
-  // geral e por pais — usado no heatmap por pais e no grafico de uptime.
+  // Blocos do periodo ATUALMENTE selecionado (preset ou custom), reduzidos
+  // pra caber no heatmap visual — geral e por pais.
   const periodBlocksByCountry = useMemo(() => {
-    const map = { overall: hcBlocksForRange(history || [], dailyHistory || [], periodFrom, periodTo) };
-    countries.forEach((country) => {
-      map[country.code] = hcBlocksForRange(history || [], dailyHistory || [], periodFrom, periodTo, country.code);
-    });
+    const build = (code) => hcDownsampleBlocks(blocksForRange(periodFrom, periodTo, code));
+    const map = { overall: build(undefined) };
+    countries.forEach((country) => { map[country.code] = build(country.code); });
     return map;
-  }, [history, dailyHistory, countries, periodFrom, periodTo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasLiveData, liveBlocks, history, dailyHistory, countries, periodFrom, periodTo]);
 
+  // Uptime do periodo selecionado — precisao total (nao usa a versao
+  // reduzida acima, so o heatmap precisa dela).
   const periodUptimeByCountry = useMemo(() => {
-    return Object.fromEntries(Object.entries(periodBlocksByCountry).map(([key, blocks]) => [key, hcUptimeForBlocks(blocks)]));
-  }, [periodBlocksByCountry]);
+    const map = { overall: hcUptimeForBlocks(blocksForRange(periodFrom, periodTo)) };
+    countries.forEach((country) => { map[country.code] = hcUptimeForBlocks(blocksForRange(periodFrom, periodTo, country.code)); });
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasLiveData, liveBlocks, history, dailyHistory, countries, periodFrom, periodTo]);
 
   return {
     countries,
@@ -192,6 +241,7 @@ export function useHealthcheck() {
     setAutoRefresh,
     nextRefreshAt,
     result,
+    hasLiveData,
     loading,
     refresh,
     history: history || [],

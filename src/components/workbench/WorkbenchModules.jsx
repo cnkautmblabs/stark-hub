@@ -2388,6 +2388,7 @@ export function SettingsWorkbench() {
   // Local drafts for per-section confirm behavior
   const [productDraft, setProductDraft] = useState(productName);
   const [azureAutoRefreshDraft, setAzureAutoRefreshDraft] = useState(azureAutoRefreshSeconds);
+  const [healthcheckPublicEnabled, setHealthcheckPublicEnabled] = useState(true);
   const [localFlags, setLocalFlags] = useState(flags || {});
   // per-section inline status removed in favor of toasts
 
@@ -2648,6 +2649,7 @@ export function SettingsWorkbench() {
     setSlackTestMode(Boolean(getSetting("slackTestMode", false)));
     setSlackTestWebhookUrl(getSetting("slackTestWebhookUrl", ""));
     setSlackPrimaryWebhookName(getSetting("slackPrimaryWebhookName", "Canal principal"));
+    setHealthcheckPublicEnabled(getSetting("healthcheckPublicEnabled", true) !== false);
     initialSettingsSynced.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingsLoading]);
@@ -2958,6 +2960,27 @@ export function SettingsWorkbench() {
             <label className="mb-form-row"><span>{t("settings.productNameLabel")}</span><input value={productDraft} onChange={(event) => setProductDraft(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
             <label className="mb-form-row"><span>{t("settings.autoRefreshLabel")}</span><input type="number" min="0" step="10" value={azureAutoRefreshDraft} onChange={(event) => setAzureAutoRefreshDraft(event.target.value)} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></label>
           <small className="mb-settings-note">{t("settings.autoRefreshNote")}</small>
+          <label className="mb-switch-row">
+            <span><strong>{t("settings.healthcheckPublicLabel")}</strong><small>{t("settings.healthcheckPublicDesc", { url: `${window.location.origin}${import.meta.env.BASE_URL}cnk-health-check-status` })}</small></span>
+            <span className="mb-switch">
+              <input
+                type="checkbox"
+                checked={healthcheckPublicEnabled}
+                onChange={async (event) => {
+                  const next = event.target.checked;
+                  setHealthcheckPublicEnabled(next);
+                  const { error } = await updateSetting("healthcheckPublicEnabled", next);
+                  if (error) {
+                    setHealthcheckPublicEnabled(!next);
+                    pushToast({ title: t("settings.toastErrorTitle"), body: error.message, tone: "danger" });
+                  } else {
+                    pushToast({ title: t("settings.toastSettingsTitle"), body: t("settings.toastAppliedSuccess"), tone: "success" });
+                  }
+                }}
+              />
+              <span className="mb-switch-slider" />
+            </span>
+          </label>
           {isAdmin && (
             <>
               <div className="mb-settings-subtitle">{t("settings.featuresSubtitle")}</div>

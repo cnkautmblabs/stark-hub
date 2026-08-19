@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Bar, BarChart, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useAuth } from "../../../contexts/AuthContext.jsx";
@@ -8,115 +8,18 @@ import {
   hcEnvironments,
   hcPeriodPresets,
   hcScenarios,
-  hcStatusOrder,
-  hcStatusStyle
+  hcStatusOrder
 } from "../../../utils/workbench/healthcheck.js";
 import { Button, EmptyState, IconButton, InfoTooltip, RechartsTooltip, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
-
-const flagPalette = ["#2563eb", "#16a34a", "#d97706", "#7c3aed", "#0891b2", "#dc2626", "#4f46e5"];
-
-function colorForCode(code) {
-  const value = String(code || "").split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return flagPalette[value % flagPalette.length];
-}
-
-function formatDateTime(value, language) {
-  if (!value) return "-";
-  try {
-    return new Intl.DateTimeFormat(language, {
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: "America/Sao_Paulo"
-    }).format(new Date(value)).replace(".", "");
-  } catch {
-    return "-";
-  }
-}
-
-function formatBlockLabel(block, t, language) {
-  if (block.granularity === "day") {
-    try {
-      const formatted = new Intl.DateTimeFormat(language, { day: "2-digit", month: "short" }).format(new Date(`${block.at}T12:00:00`));
-      return `${formatted} · ${t(`healthCheck.status.${block.overall}`)}`;
-    } catch {
-      return t(`healthCheck.status.${block.overall}`);
-    }
-  }
-  return `${formatDateTime(block.at, language)} · ${t(`healthCheck.status.${block.overall}`)}`;
-}
-
-function formatCountdown(totalSeconds) {
-  const clamped = Math.max(0, totalSeconds);
-  const minutes = Math.floor(clamped / 60).toString().padStart(2, "0");
-  const seconds = Math.floor(clamped % 60).toString().padStart(2, "0");
-  return `${minutes}:${seconds}`;
-}
-
-// Ticka a cada 1s isolado num componente-folha — se isso vivesse no estado
-// do hook/pagina, cada tick re-renderizaria a arvore inteira (heatmaps,
-// graficos Recharts) e as barras reanimariam do zero sem parar (o "piscar"
-// reportado pelo usuario). Aqui so este texto pequeno re-renderiza.
-function AutoRefreshCountdown({ nextRefreshAt, t }) {
-  const [secondsLeft, setSecondsLeft] = useState(() => Math.round((nextRefreshAt - Date.now()) / 1000));
-
-  useEffect(() => {
-    setSecondsLeft(Math.round((nextRefreshAt - Date.now()) / 1000));
-    const timer = window.setInterval(() => {
-      setSecondsLeft(Math.round((nextRefreshAt - Date.now()) / 1000));
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [nextRefreshAt]);
-
-  return <>{t("healthCheck.nextCheckIn", { time: formatCountdown(secondsLeft) })}</>;
-}
-
-function HcFlag({ iso2, code, size = 20 }) {
-  const [failed, setFailed] = useState(false);
-  if (!iso2 || failed) {
-    return <span className="stark-hc-flag fallback" style={{ background: colorForCode(code) }}>{String(code || "?").slice(0, 2)}</span>;
-  }
-  return <img className="stark-hc-flag" src={flagUrl(iso2, size)} alt="" loading="lazy" onError={() => setFailed(true)} />;
-}
-
-function StatusDot({ status }) {
-  const style = hcStatusStyle[status] || hcStatusStyle.unknown;
-  return <i className={`stark-hc-dot bi ${style.icon}`} style={{ color: style.color }} aria-hidden="true" />;
-}
-
-function StatusPill({ status, t }) {
-  const style = hcStatusStyle[status] || hcStatusStyle.unknown;
-  return (
-    <span className="stark-hc-status-pill" style={{ color: style.color, background: style.background }}>
-      <StatusDot status={status} /> {t(`healthCheck.status.${status}`)}
-    </span>
-  );
-}
-
-function SystemStatusBanner({ status, t, lastCheckedLabel }) {
-  return (
-    <div className={`stark-hc-banner ${status}`} role="status" aria-live="polite">
-      <StatusDot status={status} />
-      <div>
-        <strong>{t(`healthCheck.banner.${status}`)}</strong>
-        <span>{lastCheckedLabel}</span>
-      </div>
-    </div>
-  );
-}
-
-function Heatmap({ blocks, t, language, compact = false }) {
-  if (!blocks.length) return <EmptyState title={t("healthCheck.noHistory")} />;
-  return (
-    <div className={`stark-hc-heatmap ${compact ? "compact" : ""}`} role="img" aria-label={t("healthCheck.historySubtitle")}>
-      {blocks.map((block) => {
-        const style = hcStatusStyle[block.overall] || hcStatusStyle.unknown;
-        return <span key={block.at} className="stark-hc-heatmap-block" style={{ background: style.color }} title={formatBlockLabel(block, t, language)} />;
-      })}
-    </div>
-  );
-}
+import {
+  AutoRefreshCountdown,
+  HcFlag,
+  Heatmap,
+  StatusDot,
+  StatusPill,
+  SystemStatusBanner,
+  formatDateTime
+} from "./healthcheckUi.jsx";
 
 function PeriodFilter({ hc, t }) {
   return (
@@ -444,15 +347,21 @@ export function HealthCheckWorkbench() {
               {hcEnvironments.map((env) => <option key={env} value={env}>{env}</option>)}
             </select>
           </label>
-          <label className="stark-hc-select demo">
-            <span>
-              <span className="stark-badge-demo">demo</span> {t("healthCheck.demoScenarioLabel")}
-              <InfoTooltip text={t("healthCheck.demoScenarioHelp")} />
+          {hc.hasLiveData ? (
+            <span className="stark-hc-live-badge" title={t("healthCheck.liveDataHelp")}>
+              <i className="bi bi-broadcast" /> {t("healthCheck.liveDataLabel")}
             </span>
-            <select value={hc.scenario} onChange={(event) => hc.setScenario(event.target.value)}>
-              {hcScenarios.map((scenario) => <option key={scenario} value={scenario}>{t(`healthCheck.demoScenario.${scenario}`)}</option>)}
-            </select>
-          </label>
+          ) : (
+            <label className="stark-hc-select demo">
+              <span>
+                <span className="stark-badge-demo">demo</span> {t("healthCheck.demoScenarioLabel")}
+                <InfoTooltip text={t("healthCheck.demoScenarioHelp")} />
+              </span>
+              <select value={hc.scenario} onChange={(event) => hc.setScenario(event.target.value)}>
+                {hcScenarios.map((scenario) => <option key={scenario} value={scenario}>{t(`healthCheck.demoScenario.${scenario}`)}</option>)}
+              </select>
+            </label>
+          )}
           <button type="button" className={`stark-hc-autorefresh ${hc.autoRefresh ? "on" : ""}`} onClick={() => hc.setAutoRefresh((value) => !value)} aria-pressed={hc.autoRefresh}>
             <i className={`bi ${hc.autoRefresh ? "bi-toggle-on" : "bi-toggle-off"}`} />
             {hc.autoRefresh ? <AutoRefreshCountdown nextRefreshAt={hc.nextRefreshAt} t={t} /> : t("healthCheck.autoRefreshOff")}

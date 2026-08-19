@@ -1,10 +1,13 @@
 // =============================================================================
 // CONFIG
 // =============================================================================
-// Monitor sintetico dos BFFs/Web da Cinemark LATAM. Ainda nao existe pipeline
-// real publicando resultados (ver #24 do brief) — este modulo roda 100% em
-// modo demo/localStorage hoje, mas ja separa "carregar resultado" de "gerar
-// mock" para trocar por uma API/Supabase real sem reescrever a UI.
+// Monitor sintetico dos BFFs/Web da Cinemark LATAM. A pipeline real (Azure
+// DevOps, repo qa-playwright-mblabs, azure-pipelines-healthchecks.yml, roda
+// a cada 5min) publica cada execucao na tabela Supabase public.healthcheck_
+// results via a Edge Function healthcheckIngest. O hook prefere sempre esse
+// dado real; só cai para o gerador de demo/mock abaixo enquanto a tabela
+// estiver vazia (antes da pipeline ser conectada, ou localmente sem Supabase
+// configurado).
 export const hcStorageKeys = {
   countries: "stark-healthcheck-countries",
   environment: "stark-healthcheck-environment",
@@ -47,7 +50,7 @@ export function hcSeedCountries() {
   return [
     { id: "ar", code: "AR", name: "Argentina", iso2: "ar", webUrl: "https://www.cinemark.com.ar", bffUrl: "https://bff.cinemark.com.ar", active: true, maintenance: false, createdAt: now, updatedAt: now },
     { id: "cl", code: "CL", name: "Chile", iso2: "cl", webUrl: "https://www.cinemark.cl", bffUrl: "https://bff.cinemark.cl", active: true, maintenance: false, createdAt: now, updatedAt: now },
-    { id: "pe", code: "PE", name: "Peru", iso2: "pe", webUrl: "https://www.cinemark.com.pe", bffUrl: "https://bff.cinemark.com.pe", active: true, maintenance: false, createdAt: now, updatedAt: now },
+    { id: "pe", code: "PE", name: "Peru", iso2: "pe", webUrl: "https://www.cinemark-peru.com", bffUrl: "https://bff.cinemark-peru.com", active: true, maintenance: false, createdAt: now, updatedAt: now },
     { id: "bo", code: "BO", name: "Bolivia", iso2: "bo", webUrl: "https://www.cinemark.com.bo", bffUrl: "https://bff.cinemark.com.bo", active: true, maintenance: false, createdAt: now, updatedAt: now },
     { id: "py", code: "PY", name: "Paraguay", iso2: "py", webUrl: "https://www.cinemark.com.py", bffUrl: "https://bff.cinemark.com.py", active: true, maintenance: false, createdAt: now, updatedAt: now }
   ];
@@ -318,6 +321,98 @@ export function hcUptimeForBlocks(blocks = []) {
   if (!blocks.length) return 100;
   const weights = blocks.map((block) => blockWeight(block.overall));
   return Math.round((weights.reduce((sum, value) => sum + value, 0) / weights.length) * 10000) / 100;
+}
+
+// =============================================================================
+// LIVE DATA — normaliza linhas reais de public.healthcheck_results (gravadas
+// pela Edge Function healthcheckIngest a partir da pipeline Azure DevOps)
+// pro MESMO formato que o motor de demo produz, pra UI/status engine/
+// incident engine nao precisarem saber a diferenca.
+// =============================================================================
+function hcStepKeyFromName(name) {
+  const key = String(name || "").trim().toLowerCase();
+  if (key === "login") return "login";
+  if (key === "get member") return "getMember";
+  if (key === "sign out") return "signOut";
+  return key.replace(/\s+/g, "-") || "step";
+}
+
+export function hcNormalizeLiveResult(row, countries) {
+  const byCode = new Map((countries || []).map((country) => [country.code, country]));
+  const countryResults = (row.countries || []).map((entry) => {
+    const config = byCode.get(entry.country);
+    const steps = (entry.steps || []).map((step) => ({
+      key: hcStepKeyFromName(step.name),
+      name: step.name,
+      endpoint: step.endpoint,
+      ok: Boolean(step.ok),
+      httpStatus: step.httpStatus ?? 0,
+      durationMs: step.durationMs ?? 0,
+      attempts: step.attempts ?? 1
+    }));
+    return {
+      country: entry.country,
+      countryId: config?.id || entry.country,
+      status: hcCalculateCountryStatus({ steps }, config),
+      durationMs: entry.durationMs ?? 0,
+      steps
+    };
+  });
+  return {
+    source: "live",
+    environment: row.environment,
+    startedAt: row.startedAt,
+    finishedAt: row.finishedAt || row.startedAt,
+    durationMs: row.durationMs ?? 0,
+    countries: countryResults,
+    status: hcCalculateSystemStatus(countryResults.map((entry) => entry.status))
+  };
+}
+
+// Uma linha por execucao real (a cada 5min) -> um "bloco" {at, overall,
+// byCountry}, mesmo formato dos blocos de historico do motor de demo.
+// Ordenado cronologicamente (mais antigo primeiro).
+export function hcBlocksFromLiveRows(rows = []) {
+  return rows
+    .slice()
+    .sort((a, b) => String(a.startedAt || "").localeCompare(String(b.startedAt || "")))
+    .map((row) => {
+      const byCountry = {};
+      (row.countries || []).forEach((entry) => {
+        const steps = (entry.steps || []).map((step) => ({ ok: Boolean(step.ok), httpStatus: step.httpStatus ?? 0 }));
+        byCountry[entry.country] = hcStatusFromSteps(steps);
+      });
+      return { at: row.finishedAt || row.startedAt, overall: hcCalculateSystemStatus(Object.values(byCountry)), byCountry };
+    });
+}
+
+// Recorta um array PLANO de blocos (ja em ordem cronologica) por data — sem
+// a distincao dia/bloco fino do motor de demo, porque aqui SAO todas
+// execucoes reais, uma granularidade so.
+export function hcLiveBlocksForRange(blocks, fromDate, toDate, countryCode) {
+  return (blocks || [])
+    .filter((block) => {
+      const dateKey = hcIsoDateLocal(block.at);
+      return dateKey >= fromDate && dateKey <= toDate;
+    })
+    .map((block) => ({ at: block.at, overall: countryCode ? (block.byCountry?.[countryCode] || "unknown") : block.overall }));
+}
+
+// So pro HEATMAP visual: um periodo longo (ex. 90 dias a cada 5min) tem
+// milhares de blocos, ilegivel como barra. O numero de uptime usa a lista
+// cheia (hcLiveBlocksForRange) pra precisao; o heatmap usa esta versao
+// reduzida. Cada bucket vira o PIOR status entre os blocos que caem nele
+// (mesma filosofia "pior status vence" do resto do status engine).
+export function hcDownsampleBlocks(blocks, targetCount = hcHistoryBlockCount) {
+  if (blocks.length <= targetCount) return blocks;
+  const bucketSize = Math.ceil(blocks.length / targetCount);
+  const buckets = [];
+  for (let i = 0; i < blocks.length; i += bucketSize) {
+    const slice = blocks.slice(i, i + bucketSize);
+    const worst = slice.reduce((acc, block) => (statusSeverity[block.overall] > statusSeverity[acc] ? block.overall : acc), slice[0].overall);
+    buckets.push({ at: slice[slice.length - 1].at, overall: worst });
+  }
+  return buckets;
 }
 
 // =============================================================================

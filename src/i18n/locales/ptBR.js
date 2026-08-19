@@ -396,6 +396,8 @@ export default {
     productNameLabel: "Nome do produto",
     autoRefreshLabel: "Intervalo de atualizacao automatica (segundos)",
     autoRefreshNote: "Tempo entre cada atualizacao automatica do Quality Board e Meus itens. Use 0 para desativar o auto-reload.",
+    healthcheckPublicLabel: "Status page publica",
+    healthcheckPublicDesc: "Permite que qualquer pessoa abra {{url}} sem fazer login, mostrando uma visao minimizada e somente-leitura do status atual do Health Check.",
     featuresSubtitle: "Funcionalidades",
     confirmButton: "Confirmar",
     cancelButton: "Cancelar",
@@ -1111,6 +1113,8 @@ export default {
       outage: "Interrupcao grave"
     },
     demoScenarioHelp: "Ainda nao existe uma pipeline de monitoramento real conectada — isso troca o status simulado mostrado abaixo, so pra preview/teste. Quando uma pipeline real for conectada, esse controle some.",
+    liveDataLabel: "Ao vivo",
+    liveDataHelp: "Mostrando resultados reais da pipeline PROD BFF Synthetic Healthchecks (Azure DevOps), atualizado a cada 5 minutos.",
     nextCheckIn: "Proxima verificacao em {{time}}",
     autoRefreshOff: "Atualizacao automatica desligada",
     activeIncidentTitle: "Interrupcao parcial do sistema — {{count}} pais(es) afetado(s)",
@@ -1176,5 +1180,12 @@ export default {
     deleteButton: "Excluir",
     deleteConfirmTitle: "Excluir {{name}}?",
     deleteConfirmBody: "Isso vai remover o pais da configuracao local."
+  },
+  publicStatus: {
+    noDataYet: "Ainda sem dados de healthcheck publicados.",
+    uptimeLabel: "uptime",
+    poweredBy: "Feito com Stark Hub",
+    disabledTitle: "Status page indisponivel",
+    disabledBody: "Essa status page publica foi desativada temporariamente pela equipe."
   }
 };

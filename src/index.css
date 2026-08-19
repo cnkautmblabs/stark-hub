@@ -12678,6 +12678,24 @@ body {
   align-items: center;
   gap: 5px;
 }
+.stark-hc-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--starkHcOperational);
+  background: var(--starkHcOperationalBg);
+  color: var(--starkHcOperational);
+  font-size: 11.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+}
+.stark-hc-live-badge i {
+  font-size: 13px;
+}
 .stark-hc-autorefresh {
   display: inline-flex;
   align-items: center;
@@ -13275,5 +13293,132 @@ body {
   .stark-hc-history-country-label b,
   .stark-hc-history-country-label {
     font-size: 11px;
+  }
+}
+
+/* ============================================================
+   Health Check — status page publica (/cnk-health-check-status)
+   Sem sidebar/topbar, minimizada, no espirito do githubstatus.com.
+   ============================================================ */
+.stark-public-status-page {
+  min-height: 100vh;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 32px 20px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: var(--starkBackground);
+  color: var(--starkText);
+  font-family: inherit;
+}
+.stark-public-status-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--starkBorder);
+}
+.stark-public-status-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.stark-public-status-brand strong {
+  display: block;
+  font-size: 16px;
+}
+.stark-public-status-brand span {
+  display: block;
+  color: var(--starkMuted);
+  font-size: 11.5px;
+}
+.stark-public-status-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--starkMuted);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.stark-public-status-loading,
+.stark-public-status-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 60px 20px;
+  color: var(--starkMuted);
+  text-align: center;
+}
+.stark-public-status-empty i {
+  font-size: 28px;
+}
+.stark-public-status-components {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--starkBorder);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.stark-public-status-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px;
+  background: var(--starkSurface);
+  border-bottom: 1px solid var(--starkBorder);
+}
+.stark-public-status-row:last-child {
+  border-bottom: 0;
+}
+.stark-public-status-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.stark-public-status-row-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--starkMuted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.stark-public-status-footer {
+  text-align: center;
+  padding-top: 12px;
+  color: var(--starkMuted);
+  font-size: 11.5px;
+}
+.stark-public-status-disabled {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 40px 20px;
+}
+.stark-public-status-disabled h1 {
+  font-size: 20px;
+  margin: 8px 0 0;
+}
+.stark-public-status-disabled p {
+  color: var(--starkMuted);
+  max-width: 420px;
+}
+
+@media (max-width: 600px) {
+  .stark-public-status-page {
+    padding: 20px 14px 40px;
+  }
+  .stark-public-status-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
   }
 }

@@ -396,6 +396,8 @@ export default {
     productNameLabel: "Product name",
     autoRefreshLabel: "Auto-refresh interval (seconds)",
     autoRefreshNote: "Time between each automatic refresh of Quality Board and My items. Use 0 to disable auto-reload.",
+    healthcheckPublicLabel: "Public status page",
+    healthcheckPublicDesc: "Lets anyone open {{url}} without logging in, showing a minimized read-only view of the current Health Check status.",
     featuresSubtitle: "Features",
     confirmButton: "Confirm",
     cancelButton: "Cancel",
@@ -1111,6 +1113,8 @@ export default {
       outage: "Major outage"
     },
     demoScenarioHelp: "There's no live monitoring pipeline connected yet — this switches the simulated status shown below, for preview/testing. Once a real pipeline is wired in, this control goes away.",
+    liveDataLabel: "Live",
+    liveDataHelp: "Showing real results from the PROD BFF Synthetic Healthchecks pipeline (Azure DevOps), updated every 5 minutes.",
     nextCheckIn: "Next check in {{time}}",
     autoRefreshOff: "Auto refresh off",
     activeIncidentTitle: "Partial system outage — {{count}} country/countries affected",
@@ -1176,5 +1180,12 @@ export default {
     deleteButton: "Delete",
     deleteConfirmTitle: "Delete {{name}}?",
     deleteConfirmBody: "This will remove the country from local configuration."
+  },
+  publicStatus: {
+    noDataYet: "No health check data published yet.",
+    uptimeLabel: "uptime",
+    poweredBy: "Powered by Stark Hub",
+    disabledTitle: "Status page unavailable",
+    disabledBody: "This public status page has been temporarily disabled by the team."
   }
 };

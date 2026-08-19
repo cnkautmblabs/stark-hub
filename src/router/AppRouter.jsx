@@ -18,10 +18,13 @@ import About from "../pages/About.jsx";
 import ProtectedRoute from "./ProtectedRoute.jsx";
 import WorkbenchHome from "../pages/WorkbenchHome.jsx";
 import HealthCheck from "../pages/healthcheck/HealthCheck.jsx";
+import PublicHealthStatus from "../pages/status/PublicHealthStatus.jsx";
 
 export default function AppRouter() {
   return (
     <Routes>
+      {/* Publica de proposito — sem ProtectedRoute, visivel sem login (brief: status page no espirito do githubstatus.com). */}
+      <Route path="/cnk-health-check-status" element={<PublicHealthStatus />} />
       <Route path="/login" element={<Login />} />
       <Route path="/pending" element={<PendingApproval />} />
       <Route path="/azure-setup" element={<AzureSetup />} />
