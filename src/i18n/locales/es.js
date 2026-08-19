@@ -1170,6 +1170,7 @@ export default {
     fieldFlag: "Bandera (ISO2)",
     fieldWebUrl: "URL Web",
     fieldBffUrl: "URL BFF",
+    fieldPartner: "Socio responsable",
     fieldActive: "Activo",
     maintenanceLabel: "Mantenimiento",
     addCountryButton: "Agregar Pais",
@@ -1179,7 +1180,18 @@ export default {
     saveButton: "Guardar Pais",
     deleteButton: "Eliminar",
     deleteConfirmTitle: "¿Eliminar {{name}}?",
-    deleteConfirmBody: "Esto eliminara el pais de la configuracion local."
+    deleteConfirmBody: "Esto eliminara el pais de la configuracion local.",
+    partnerLabel: "Socio",
+    statusLegendTitle: "¿Que significan estos estados?",
+    statusLegendIntro: "No siempre podemos saber con certeza si un problema es del socio o nuestro — esto es lo que cada respuesta generalmente significa:",
+    httpExplain: {
+      "2xx": { label: "Exito", description: "El servicio respondio con normalidad." },
+      "3xx": { label: "Redireccion", description: "El servicio redirigio la solicitud — a veces esperado, a veces senal de una mala configuracion." },
+      "4xx": { label: "Error del cliente", description: "La solicitud fue rechazada (por ejemplo, un problema de sesion o autenticacion). Puede originarse en cualquiera de los dos lados — vale la pena consultarlo con el socio responsable." },
+      "5xx": { label: "Error del servidor", description: "El backend no pudo procesar la solicitud — normalmente indica un problema en la capa de servicio de ese pais." },
+      timeout: { label: "Sin respuesta", description: "El servicio no respondio a tiempo — puede ser un problema de red, DNS o infraestructura." },
+      unknown: { label: "Inesperado", description: "Respuesta inesperada." }
+    }
   },
   publicStatus: {
     noDataYet: "Aun no hay datos de healthcheck publicados.",

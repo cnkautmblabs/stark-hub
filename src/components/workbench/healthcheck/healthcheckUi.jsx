@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { flagUrl } from "../../../utils/constants.js";
-import { hcStatusStyle } from "../../../utils/workbench/healthcheck.js";
+import { hcHttpStatusExplain, hcPartnerShortLabel, hcStatusStyle } from "../../../utils/workbench/healthcheck.js";
 import { EmptyState } from "../ui/WorkbenchPrimitives.jsx";
 
 // Peças visuais compartilhadas entre o Health Check autenticado
@@ -97,6 +97,44 @@ export function SystemStatusBanner({ status, t, lastCheckedLabel }) {
         <span>{lastCheckedLabel}</span>
       </div>
     </div>
+  );
+}
+
+export function PartnerBadge({ partner }) {
+  if (!partner) return null;
+  return <span className="stark-hc-partner-badge" title={partner}>{hcPartnerShortLabel(partner)}</span>;
+}
+
+// Explica a FAIXA do HTTP status sem nunca apontar culpa a um parceiro
+// especifico — "não da pra definir se o problema é do parceiro ou não"
+// (pedido explicito do usuario). So descreve o que aquela faixa costuma
+// significar, no mesmo espirito das mensagens ja usadas no Slack.
+export function HttpStatusNote({ httpStatus, t }) {
+  const { range } = hcHttpStatusExplain(httpStatus);
+  return (
+    <p className="stark-hc-status-note">
+      <strong>{t(`healthCheck.httpExplain.${range}.label`)}</strong> — {t(`healthCheck.httpExplain.${range}.description`)}
+    </p>
+  );
+}
+
+const statusLegendRanges = ["2xx", "3xx", "4xx", "5xx", "timeout"];
+
+export function StatusLegendDetails({ t }) {
+  return (
+    <details className="stark-hc-status-legend">
+      <summary>{t("healthCheck.statusLegendTitle")}</summary>
+      <p className="stark-hc-status-legend-intro">{t("healthCheck.statusLegendIntro")}</p>
+      {statusLegendRanges.map((range) => (
+        <div key={range} className="stark-hc-status-legend-row">
+          <code>{range === "timeout" ? "—" : range}</code>
+          <div>
+            <strong>{t(`healthCheck.httpExplain.${range}.label`)}</strong>
+            <span>{t(`healthCheck.httpExplain.${range}.description`)}</span>
+          </div>
+        </div>
+      ))}
+    </details>
   );
 }
 

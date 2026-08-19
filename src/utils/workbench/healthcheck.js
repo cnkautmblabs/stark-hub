@@ -1,3 +1,5 @@
+import { serviceLayerOptions } from "../workItemWizard.js";
+
 // =============================================================================
 // CONFIG
 // =============================================================================
@@ -45,15 +47,46 @@ export const hcEndpoints = [
   { key: "signOut", name: "Sign Out", method: "POST", path: "/api/auth/signout" }
 ];
 
+// Mesma taxonomia de parceiros do campo "Which partners are involved in the
+// demand?" do assistente de criacao de Work Item (workItemWizard.js) — um
+// unico vocabulario pra "quem e responsavel por qual camada" em todo o app.
+export const hcPartnerOptions = serviceLayerOptions;
+
+// Extrai só o nome curto do parceiro pro badge (ex. "NextSolutions (Legacy
+// Service Layer - AR Only)" -> "NextSolutions") — o valor completo continua
+// disponível no title/tooltip.
+export function hcPartnerShortLabel(partner) {
+  return String(partner || "").split(" (")[0].trim();
+}
+
 export function hcSeedCountries() {
   const now = new Date().toISOString();
+  const nextSolutions = hcPartnerOptions[0].value; // NextSolutions (Legacy Service Layer - AR Only)
+  const sunDevs = hcPartnerOptions[1].value; // SunDevs (Legacy Service Layer - Other countries)
   return [
-    { id: "ar", code: "AR", name: "Argentina", iso2: "ar", webUrl: "https://www.cinemark.com.ar", bffUrl: "https://bff.cinemark.com.ar", active: true, maintenance: false, createdAt: now, updatedAt: now },
-    { id: "cl", code: "CL", name: "Chile", iso2: "cl", webUrl: "https://www.cinemark.cl", bffUrl: "https://bff.cinemark.cl", active: true, maintenance: false, createdAt: now, updatedAt: now },
-    { id: "pe", code: "PE", name: "Peru", iso2: "pe", webUrl: "https://www.cinemark-peru.com", bffUrl: "https://bff.cinemark-peru.com", active: true, maintenance: false, createdAt: now, updatedAt: now },
-    { id: "bo", code: "BO", name: "Bolivia", iso2: "bo", webUrl: "https://www.cinemark.com.bo", bffUrl: "https://bff.cinemark.com.bo", active: true, maintenance: false, createdAt: now, updatedAt: now },
-    { id: "py", code: "PY", name: "Paraguay", iso2: "py", webUrl: "https://www.cinemark.com.py", bffUrl: "https://bff.cinemark.com.py", active: true, maintenance: false, createdAt: now, updatedAt: now }
+    { id: "ar", code: "AR", name: "Argentina", iso2: "ar", webUrl: "https://www.cinemark.com.ar", bffUrl: "https://bff.cinemark.com.ar", partner: nextSolutions, active: true, maintenance: false, createdAt: now, updatedAt: now },
+    { id: "cl", code: "CL", name: "Chile", iso2: "cl", webUrl: "https://www.cinemark.cl", bffUrl: "https://bff.cinemark.cl", partner: sunDevs, active: true, maintenance: false, createdAt: now, updatedAt: now },
+    { id: "pe", code: "PE", name: "Peru", iso2: "pe", webUrl: "https://www.cinemark-peru.com", bffUrl: "https://bff.cinemark-peru.com", partner: sunDevs, active: true, maintenance: false, createdAt: now, updatedAt: now },
+    { id: "bo", code: "BO", name: "Bolivia", iso2: "bo", webUrl: "https://www.cinemark.com.bo", bffUrl: "https://bff.cinemark.com.bo", partner: sunDevs, active: true, maintenance: false, createdAt: now, updatedAt: now },
+    { id: "py", code: "PY", name: "Paraguay", iso2: "py", webUrl: "https://www.cinemark.com.py", bffUrl: "https://bff.cinemark.com.py", partner: sunDevs, active: true, maintenance: false, createdAt: now, updatedAt: now }
   ];
+}
+
+// =============================================================================
+// STATUS EXPLAIN — traducao amigavel de faixas de HTTP status (brief: "nao
+// da pra saber se e do parceiro ou nao, mas pelo menos explica o que
+// significa"). NUNCA atribui culpa a um parceiro especifico — so descreve
+// o que aquela faixa de status costuma indicar, no mesmo espirito das
+// mensagens ja usadas no Slack (send-healthcheck-slack-report.py).
+// =============================================================================
+export function hcHttpStatusExplain(status) {
+  const code = Number(status) || 0;
+  if (code === 0) return { range: "timeout" };
+  if (code >= 200 && code < 300) return { range: "2xx" };
+  if (code >= 300 && code < 400) return { range: "3xx" };
+  if (code >= 400 && code < 500) return { range: "4xx" };
+  if (code >= 500) return { range: "5xx" };
+  return { range: "unknown" };
 }
 
 // =============================================================================
@@ -431,6 +464,7 @@ export function hcDeriveActiveIncidents(result, countries) {
         countryCode: row.country,
         countryName: config?.name || row.country,
         iso2: config?.iso2 || "",
+        partner: config?.partner || "",
         status: row.status,
         endpoint: failedStep?.endpoint || "-",
         httpStatus: failedStep?.httpStatus ?? 0,

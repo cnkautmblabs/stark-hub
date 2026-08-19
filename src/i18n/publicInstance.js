@@ -1,5 +1,4 @@
 import i18next from "i18next";
-import { initReactI18next } from "react-i18next";
 import ptBR from "./locales/ptBR.js";
 import en from "./locales/en.js";
 import es from "./locales/es.js";
@@ -29,8 +28,16 @@ function detectPublicLanguage() {
   return "en";
 }
 
+// NAO usar .use(initReactI18next) aqui — isso registraria esta instancia
+// como o fallback GLOBAL do react-i18next pra qualquer useTranslation() sem
+// Provider explicito (efeito colateral real detectado: o restante do app,
+// incluindo a pagina /healthcheck autenticada, passou a abrir em ingles
+// depois de visitar a status page publica, mesmo sem nenhuma relacao entre
+// as duas). O <I18nextProvider i18n={publicI18n}> em PublicHealthStatus.jsx
+// ja e suficiente pra ligar esta instancia ao React só na sua propria
+// subarvore, sem essa inicializacao.
 const publicI18n = i18next.createInstance();
-publicI18n.use(initReactI18next).init({
+publicI18n.init({
   resources: {
     "pt-BR": { translation: ptBR },
     en: { translation: en },

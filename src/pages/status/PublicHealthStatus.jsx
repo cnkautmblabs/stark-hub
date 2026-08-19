@@ -6,6 +6,9 @@ import {
   AutoRefreshCountdown,
   HcFlag,
   Heatmap,
+  HttpStatusNote,
+  PartnerBadge,
+  StatusLegendDetails,
   StatusPill,
   SystemStatusBanner,
   formatDateTime
@@ -18,6 +21,7 @@ import {
   hcDownsampleBlocks,
   hcLiveBlocksForRange,
   hcNormalizeLiveResult,
+  hcPeriodPresets,
   hcRefreshIntervalSeconds,
   hcSeedCountries,
   hcUptimeForBlocks
@@ -25,7 +29,7 @@ import {
 
 const FUNCTIONS_URL = `${import.meta.env.VITE_SUPABASE_URL || ""}/functions/v1/healthcheckPublicStatus`;
 const countries = hcSeedCountries();
-const ninetyDayRange = hcDateRangeForPreset("90d");
+const defaultRange = hcDateRangeForPreset("90d");
 
 async function fetchPublicStatus() {
   try {
@@ -70,7 +74,31 @@ function WhatWeMonitor({ t }) {
           </div>
         ))}
       </div>
+      <StatusLegendDetails t={t} />
     </section>
+  );
+}
+
+function PeriodFilter({ preset, from, to, onPreset, onCustom, t }) {
+  return (
+    <div className="stark-hc-period-filter">
+      <div className="stark-hc-period-presets">
+        {hcPeriodPresets.filter((entry) => entry !== "custom").map((entry) => (
+          <button key={entry} type="button" className={`stark-hc-period-preset ${preset === entry ? "active" : ""}`} onClick={() => onPreset(entry)}>
+            {t(`healthCheck.periodPreset.${entry}`)}
+          </button>
+        ))}
+        <button type="button" className={`stark-hc-period-preset ${preset === "custom" ? "active" : ""}`} onClick={() => onPreset("custom")}>
+          {t("healthCheck.periodPreset.custom")}
+        </button>
+      </div>
+      {preset === "custom" && (
+        <div className="stark-hc-period-custom">
+          <label>{t("healthCheck.periodFrom")}<input type="date" value={from} max={to} onChange={(event) => onCustom(event.target.value, to)} /></label>
+          <label>{t("healthCheck.periodTo")}<input type="date" value={to} min={from} onChange={(event) => onCustom(from, event.target.value)} /></label>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -78,6 +106,9 @@ function PublicHealthStatusContent() {
   const { t, i18n } = useTranslation();
   const [state, setState] = useState({ loading: true, enabled: true, rows: [] });
   const [nextRefreshAt, setNextRefreshAt] = useState(() => Date.now() + hcRefreshIntervalSeconds * 1000);
+  const [periodPreset, setPeriodPreset] = useState("90d");
+  const [periodFrom, setPeriodFrom] = useState(defaultRange.from);
+  const [periodTo, setPeriodTo] = useState(defaultRange.to);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,6 +122,20 @@ function PublicHealthStatusContent() {
     const timer = window.setInterval(load, hcRefreshIntervalSeconds * 1000);
     return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
+
+  function applyPreset(preset) {
+    setPeriodPreset(preset);
+    if (preset === "custom") return;
+    const range = hcDateRangeForPreset(preset);
+    setPeriodFrom(range.from);
+    setPeriodTo(range.to);
+  }
+
+  function applyCustom(from, to) {
+    setPeriodPreset("custom");
+    if (from) setPeriodFrom(from);
+    if (to) setPeriodTo(to);
+  }
 
   const blocks = useMemo(() => hcBlocksFromLiveRows(state.rows), [state.rows]);
   const latestRow = state.rows[0];
@@ -155,27 +200,31 @@ function PublicHealthStatusContent() {
               </div>
               {activeIncidents.map((incident) => (
                 <div key={incident.id} className="stark-hc-active-incident-row">
-                  <span className="stark-hc-country-row-main"><HcFlag iso2={incident.iso2} code={incident.countryCode} /> <strong>{incident.countryName}</strong></span>
+                  <div className="stark-hc-active-incident-row-top">
+                    <span className="stark-hc-country-row-main"><HcFlag iso2={incident.iso2} code={incident.countryCode} /> <strong>{incident.countryName}</strong> <PartnerBadge partner={incident.partner} /></span>
+                  </div>
                   <span>{t("healthCheck.failedEndpoint")}: <code>{incident.endpoint}</code></span>
+                  <HttpStatusNote httpStatus={incident.httpStatus} t={t} />
                 </div>
               ))}
             </div>
           )}
 
+          <PeriodFilter preset={periodPreset} from={periodFrom} to={periodTo} onPreset={applyPreset} onCustom={applyCustom} t={t} />
+
           <section className="stark-public-status-components">
             {countries.map((country) => {
-              const countryBlocks = hcDownsampleBlocks(hcLiveBlocksForRange(blocks, ninetyDayRange.from, ninetyDayRange.to, country.code));
-              const uptime = hcUptimeForBlocks(hcLiveBlocksForRange(blocks, ninetyDayRange.from, ninetyDayRange.to, country.code));
+              const countryBlocks = hcDownsampleBlocks(hcLiveBlocksForRange(blocks, periodFrom, periodTo, country.code));
+              const uptime = hcUptimeForBlocks(hcLiveBlocksForRange(blocks, periodFrom, periodTo, country.code));
               const countryResult = resultByCountry.get(country.code);
               return (
                 <div key={country.id} className="stark-public-status-row">
                   <div className="stark-public-status-row-top">
-                    <span className="stark-hc-country-row-main"><HcFlag iso2={country.iso2} code={country.code} /> <strong>{country.name}</strong></span>
+                    <span className="stark-hc-country-row-main"><HcFlag iso2={country.iso2} code={country.code} /> <strong>{country.name}</strong> <PartnerBadge partner={country.partner} /></span>
                     <StatusPill status={countryResult?.status || "unknown"} t={t} />
                   </div>
                   <Heatmap blocks={countryBlocks} t={t} language={i18n.language} compact />
                   <div className="stark-public-status-row-bottom">
-                    <span>{t("healthCheck.periodPreset.90d")}</span>
                     <span>{uptime.toFixed(2)}% {t("publicStatus.uptimeLabel")}</span>
                   </div>
                 </div>

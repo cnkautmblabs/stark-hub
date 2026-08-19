@@ -6,6 +6,7 @@ import { useHealthcheck } from "../../../hooks/useHealthcheck.js";
 import { flagUrl, hasManagementAccess } from "../../../utils/constants.js";
 import {
   hcEnvironments,
+  hcPartnerOptions,
   hcPeriodPresets,
   hcScenarios,
   hcStatusOrder
@@ -15,7 +16,10 @@ import {
   AutoRefreshCountdown,
   HcFlag,
   Heatmap,
+  HttpStatusNote,
+  PartnerBadge,
   StatusDot,
+  StatusLegendDetails,
   StatusPill,
   SystemStatusBanner,
   formatDateTime
@@ -52,6 +56,7 @@ function CountryRow({ country, countryResult, t, onOpen }) {
       <span className="stark-hc-country-row-main">
         <HcFlag iso2={country.iso2} code={country.code} />
         <span className="stark-hc-country-name">{country.name}</span>
+        <PartnerBadge partner={country.partner} />
       </span>
       <span className="stark-hc-country-row-meta">
         {typeof durationMs === "number" && <small>{durationMs} ms</small>}
@@ -71,6 +76,7 @@ function CountryDetailDrawer({ country, countryResult, t, language, onClose }) {
           <span className="stark-hc-country-row-main">
             <HcFlag iso2={country.iso2} code={country.code} size={24} />
             <h3>{country.name}</h3>
+            <PartnerBadge partner={country.partner} />
           </span>
           <IconButton title={t("common.close")} onClick={onClose}><i className="bi bi-x-lg" /></IconButton>
         </header>
@@ -79,6 +85,7 @@ function CountryDetailDrawer({ country, countryResult, t, language, onClose }) {
           <dl className="stark-hc-drawer-links">
             <div><dt>{t("healthCheck.detailBffLabel")}</dt><dd>{country.bffUrl ? <a href={country.bffUrl} target="_blank" rel="noreferrer">{country.bffUrl}</a> : "-"}</dd></div>
             <div><dt>{t("healthCheck.detailWebLabel")}</dt><dd>{country.webUrl ? <a href={country.webUrl} target="_blank" rel="noreferrer">{country.webUrl}</a> : "-"}</dd></div>
+            <div><dt>{t("healthCheck.partnerLabel")}</dt><dd>{country.partner || "-"}</dd></div>
           </dl>
           <h4>{t("healthCheck.detailEndpointsTitle")}</h4>
           <div className="stark-hc-endpoint-list">
@@ -89,6 +96,7 @@ function CountryDetailDrawer({ country, countryResult, t, language, onClose }) {
                   <div>
                     <strong>{step.name}</strong>
                     <small>{step.endpoint}</small>
+                    {!step.ok && <HttpStatusNote httpStatus={step.httpStatus} t={t} />}
                   </div>
                   <StatusPill status={stepStatus} t={t} />
                   <div className="stark-hc-endpoint-metrics">
@@ -101,6 +109,7 @@ function CountryDetailDrawer({ country, countryResult, t, language, onClose }) {
             })}
             {!countryResult && <EmptyState title={t("healthCheck.noHealthcheckData")} />}
           </div>
+          <StatusLegendDetails t={t} />
         </div>
       </section>
     </div>
@@ -110,16 +119,16 @@ function CountryDetailDrawer({ country, countryResult, t, language, onClose }) {
 function ManageCountriesPanel({ hc, t, onClose }) {
   const [editing, setEditing] = useState(null); // country object or "new"
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
-  const [form, setForm] = useState({ name: "", code: "", iso2: "", webUrl: "", bffUrl: "", active: true });
+  const [form, setForm] = useState({ name: "", code: "", iso2: "", webUrl: "", bffUrl: "", partner: "", active: true });
 
   function startEdit(country) {
     setEditing(country.id);
-    setForm({ name: country.name, code: country.code, iso2: country.iso2, webUrl: country.webUrl, bffUrl: country.bffUrl, active: country.active });
+    setForm({ name: country.name, code: country.code, iso2: country.iso2, webUrl: country.webUrl, bffUrl: country.bffUrl, partner: country.partner || "", active: country.active });
   }
 
   function startNew() {
     setEditing("new");
-    setForm({ name: "", code: "", iso2: "", webUrl: "", bffUrl: "", active: true });
+    setForm({ name: "", code: "", iso2: "", webUrl: "", bffUrl: "", partner: "", active: true });
   }
 
   function cancelEdit() {
@@ -150,6 +159,7 @@ function ManageCountriesPanel({ hc, t, onClose }) {
                 <tr>
                   <th>{t("healthCheck.fieldName")}</th>
                   <th>{t("healthCheck.fieldCode")}</th>
+                  <th>{t("healthCheck.fieldPartner")}</th>
                   <th>{t("healthCheck.fieldActive")}</th>
                   <th>{t("healthCheck.maintenanceLabel")}</th>
                   <th aria-hidden="true" />
@@ -160,6 +170,7 @@ function ManageCountriesPanel({ hc, t, onClose }) {
                   <tr key={country.id}>
                     <td><span className="stark-hc-admin-name-cell"><HcFlag iso2={country.iso2} code={country.code} size={16} /> {country.name}</span></td>
                     <td>{country.code}</td>
+                    <td><PartnerBadge partner={country.partner} /></td>
                     <td>
                       <button type="button" className={`stark-hc-toggle ${country.active ? "on" : ""}`} onClick={() => hc.toggleCountryActive(country.id)} aria-pressed={country.active}>
                         {country.active ? t("common.on") : t("common.off")}
@@ -192,6 +203,12 @@ function ManageCountriesPanel({ hc, t, onClose }) {
                 <label>{t("healthCheck.fieldFlag")}<input value={form.iso2} maxLength={2} placeholder="co" onChange={(event) => setForm((current) => ({ ...current, iso2: event.target.value.toLowerCase() }))} /></label>
                 <label>{t("healthCheck.fieldWebUrl")}<input value={form.webUrl} onChange={(event) => setForm((current) => ({ ...current, webUrl: event.target.value }))} /></label>
                 <label>{t("healthCheck.fieldBffUrl")}<input value={form.bffUrl} onChange={(event) => setForm((current) => ({ ...current, bffUrl: event.target.value }))} /></label>
+                <label>{t("healthCheck.fieldPartner")}
+                  <select value={form.partner} onChange={(event) => setForm((current) => ({ ...current, partner: event.target.value }))}>
+                    <option value="">-</option>
+                    {hcPartnerOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </label>
                 <label className="stark-hc-form-check"><input type="checkbox" checked={form.active} onChange={(event) => setForm((current) => ({ ...current, active: event.target.checked }))} /> {t("healthCheck.fieldActive")}</label>
               </div>
               <div className="stark-hc-form-actions">
@@ -377,10 +394,13 @@ export function HealthCheckWorkbench() {
           </div>
           {hc.activeIncidents.map((incident) => (
             <div key={incident.id} className="stark-hc-active-incident-row">
-              <span className="stark-hc-country-row-main"><HcFlag iso2={incident.iso2} code={incident.countryCode} /> <strong>{incident.countryName}</strong></span>
+              <div className="stark-hc-active-incident-row-top">
+                <span className="stark-hc-country-row-main"><HcFlag iso2={incident.iso2} code={incident.countryCode} /> <strong>{incident.countryName}</strong> <PartnerBadge partner={incident.partner} /></span>
+                <span className="stark-hc-muted">{t("healthCheck.startedLabel")} {formatDateTime(incident.startedAt, i18n.language)}</span>
+              </div>
               <span>{t("healthCheck.failedEndpoint")}: <code>{incident.endpoint}</code></span>
               <span>{t("healthCheck.httpLabel")}: {incident.httpStatus || t("healthCheck.errorLabel")}</span>
-              <span className="stark-hc-muted">{t("healthCheck.startedLabel")} {formatDateTime(incident.startedAt, i18n.language)}</span>
+              <HttpStatusNote httpStatus={incident.httpStatus} t={t} />
             </div>
           ))}
         </div>

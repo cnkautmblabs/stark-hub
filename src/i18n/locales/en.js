@@ -1170,6 +1170,7 @@ export default {
     fieldFlag: "Flag (ISO2)",
     fieldWebUrl: "Web URL",
     fieldBffUrl: "BFF URL",
+    fieldPartner: "Responsible partner",
     fieldActive: "Active",
     maintenanceLabel: "Maintenance",
     addCountryButton: "Add Country",
@@ -1179,7 +1180,18 @@ export default {
     saveButton: "Save Country",
     deleteButton: "Delete",
     deleteConfirmTitle: "Delete {{name}}?",
-    deleteConfirmBody: "This will remove the country from local configuration."
+    deleteConfirmBody: "This will remove the country from local configuration.",
+    partnerLabel: "Partner",
+    statusLegendTitle: "What do these statuses mean?",
+    statusLegendIntro: "We can't always tell for certain whether an issue is on the partner's side or ours — here's what each response generally means:",
+    httpExplain: {
+      "2xx": { label: "Success", description: "The service responded normally." },
+      "3xx": { label: "Redirect", description: "The service redirected the request — sometimes expected, sometimes a sign of misconfiguration." },
+      "4xx": { label: "Client error", description: "The request was rejected (for example, a session or authentication issue). This can originate on either side — worth checking with the responsible partner." },
+      "5xx": { label: "Server error", description: "The backend failed to process the request — usually points to an issue in that country's service layer." },
+      timeout: { label: "No response", description: "The service didn't respond in time — could be a network, DNS, or infrastructure issue." },
+      unknown: { label: "Unexpected", description: "Unexpected response." }
+    }
   },
   publicStatus: {
     noDataYet: "No health check data published yet.",

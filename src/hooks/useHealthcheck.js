@@ -147,6 +147,7 @@ export function useHealthcheck() {
       iso2: String(data.iso2 || code).toLowerCase().trim(),
       webUrl: String(data.webUrl || "").trim(),
       bffUrl: String(data.bffUrl || "").trim(),
+      partner: String(data.partner || "").trim(),
       active: data.active !== false,
       maintenance: false,
       createdAt: now,
