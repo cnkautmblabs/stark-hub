@@ -453,7 +453,7 @@ export function envIconSrc(env) {
 
 export function TypeBadge({ type }) {
   const info = workItemTypes[type] || {};
-  return <span className="mbw-type" style={{ "--type-color": info.color || "#64748b", "--type-bg": info.background || "#f8fafc" }}><img className="mbw-type-icon" src={typeIconSrc(type)} alt="" />{type || "Work Item"}</span>;
+  return <span className="mbw-type" style={{ "--type-color": info.color || "var(--starkTypeDefault)", "--type-bg": info.background || "var(--starkTypeDefaultBg)" }}><img className="mbw-type-icon" src={typeIconSrc(type)} alt="" />{type || "Work Item"}</span>;
 }
 
 export function EnvBadge({ env }) {

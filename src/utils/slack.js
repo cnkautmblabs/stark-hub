@@ -4,9 +4,16 @@
 // menção por pessoa vem direto de collaborators.slackMemberId.
 
 export function resolveSlackWebhooks(getSetting, purpose = "testResult") {
+  // O rotulo em Configuracoes diz "Usar webhook de teste QUANDO DISPONIVEL"
+  // — ou seja, e pra cair de volta nos webhooks reais se o campo de teste
+  // estiver vazio. O código antigo nao fazia isso: com Modo teste ligado e
+  // Webhook de teste vazio, TODO envio (resultado de teste, criacao de
+  // item, etc.) saia silenciosamente vazio, mesmo com os webhooks reais
+  // preenchidos certinho em Configuracoes > Slack (bug real reportado pelo
+  // usuario: webhook "Resultado de testes" configurado, nada era enviado).
   if (getSetting("slackTestMode", false)) {
     const testUrl = getSetting("slackTestWebhookUrl", "");
-    return testUrl ? [testUrl] : [];
+    if (testUrl) return [testUrl];
   }
   const configured = getSetting("slackWebhooks", []) || [];
   const purposeUrls = configured

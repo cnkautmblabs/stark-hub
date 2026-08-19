@@ -4,36 +4,12 @@ import {
   evidenceEnvironmentOrder,
   evidenceEnvironments,
   normalizeEvidenceEnvironment,
-  normalizeFilterClass,
   resultInfo
 } from "../../../utils/workbench/formatters.js";
 
 export function ResultIcon({ result }) {
   const info = resultInfo(result);
   return <i className={`bi ${info.iconClass}`} aria-hidden="true" />;
-}
-
-export function EvidenceFilterBox({ label, value, onChange, options }) {
-  return (
-    <div className="mbaz-evidence-filter-box">
-      <div className="mbaz-evidence-filter-label">{label}</div>
-      <div className="mbaz-evidence-filter-options">
-        {options.map(([key, text]) => <button key={key} type="button" className={`mbaz-evidence-filter filter-${normalizeFilterClass(key)} ${value === key ? "active" : ""}`} onClick={() => onChange(key)}>{text}</button>)}
-      </div>
-    </div>
-  );
-}
-
-export function EvidenceMultiFilterBox({ label, values, onToggle, onAll, options }) {
-  return (
-    <div className="mbaz-evidence-filter-box">
-      <div className="mbaz-evidence-filter-label">{label}</div>
-      <div className="mbaz-evidence-filter-options">
-        <button type="button" className={`mbaz-evidence-filter filter-all ${values.length === options.length ? "active" : ""}`} onClick={onAll}>Todos</button>
-        {options.map(([key, text]) => <button key={key} type="button" className={`mbaz-evidence-filter filter-${normalizeFilterClass(key)} ${values.includes(key) ? "active" : ""}`} onClick={() => onToggle(key)}>{text}</button>)}
-      </div>
-    </div>
-  );
 }
 
 export function EvidenceCard({ group, profile, visibleEnvironments, resolveWorkItemUrl, onOpen }) {

@@ -79,22 +79,49 @@ function normalizeCountry(value) {
   return String(value || "").trim().toUpperCase();
 }
 
+// Pill inteiro desenhado como SVG e postado via <img src="data:...">, nao um
+// <span style="background:...;border-radius:..."> nem um <img> hotlinked
+// pra dominio externo (flagcdn.com) — era assim antes e o usuario reportou
+// vindo quebrado no Azure. O editor de discussion do Azure DevOps sanitiza
+// o HTML colado e pode descartar estilo inline de <span> (fundo, borda
+// arredondada somem) e imagem de dominio externo pode nao carregar/ficar
+// distorcida. Essa e exatamente a tecnica do stark-hub-script legado
+// (createEnvironmentPillSvg/createCountryPillSvg em app.js, ja validada
+// funcionando no Azure real): cor/forma "cozida" dentro do proprio SVG,
+// sem depender de CSS nem de imagem externa pra renderizar certo.
+const pillConfig = { width: 64, height: 18, borderRadius: 9, fontSize: 10, gap: 4, flagWidth: 18, flagHeight: 12 };
+
+function flagSvgContent(iso2, width, height) {
+  const third = height / 3;
+  const half = height / 2;
+  const flags = {
+    ar: `<rect width="${width}" height="${third}" fill="#74ACDF"/><rect y="${third}" width="${width}" height="${third}" fill="#FFFFFF"/><rect y="${third * 2}" width="${width}" height="${third}" fill="#74ACDF"/><circle cx="${width / 2}" cy="${height / 2}" r="1.5" fill="#F6B40E"/>`,
+    bo: `<rect width="${width}" height="${third}" fill="#D52B1E"/><rect y="${third}" width="${width}" height="${third}" fill="#F9E300"/><rect y="${third * 2}" width="${width}" height="${third}" fill="#007A3D"/>`,
+    cl: `<rect width="${width}" height="${height}" fill="#FFFFFF"/><rect y="${half}" width="${width}" height="${half}" fill="#D52B1E"/><rect width="${width * 0.42}" height="${half}" fill="#0039A6"/>`,
+    pe: `<rect width="${width / 3}" height="${height}" fill="#D91023"/><rect x="${width / 3}" width="${width / 3}" height="${height}" fill="#FFFFFF"/><rect x="${(width / 3) * 2}" width="${width / 3}" height="${height}" fill="#D91023"/>`,
+    py: `<rect width="${width}" height="${third}" fill="#D52B1E"/><rect y="${third}" width="${width}" height="${third}" fill="#FFFFFF"/><rect y="${third * 2}" width="${width}" height="${third}" fill="#0038A8"/><circle cx="${width / 2}" cy="${height / 2}" r="1.4" fill="#F6B40E"/>`,
+    br: `<rect width="${width}" height="${height}" fill="#009739"/><polygon points="${width / 2},1 ${width - 1},${half} ${width / 2},${height - 1} 1,${half}" fill="#FEDD00"/><circle cx="${width / 2}" cy="${half}" r="${height / 4.2}" fill="#012169"/>`
+  };
+  return flags[iso2] || "";
+}
+
 function envPillHtml(env) {
   const key = normalizeEnv(env);
   const info = environmentCatalog[key.toLowerCase()] || { label: key, background: "#e2e8f0", color: "#0f172a" };
-  return `<span style="display:inline-block;vertical-align:middle;margin-left:5px;padding:2px 9px;border-radius:999px;background:${info.background};color:${info.color};font-weight:700;font-size:11px;line-height:16px;">${escapeHtml(info.label || key)}</span>`;
+  const { width, height, borderRadius, fontSize, gap } = pillConfig;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect x="0" y="0" width="${width}" height="${height}" rx="${borderRadius}" ry="${borderRadius}" fill="${info.background}" /><text x="${width / 2}" y="${height / 2 + 4}" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="${fontSize}" font-weight="700" fill="${info.color}">${escapeHtml(info.label || key)}</text></svg>`;
+  return `<img src="${svgToDataUri(svg)}" width="${width}" height="${height}" style="display:inline-block;vertical-align:middle;margin-left:${gap}px;border:0;" alt="${escapeHtml(info.label || key)}" />`;
 }
 
-// Bandeira real (.png via flagcdn, mesma fonte usada em CountryVisual no
-// app) em vez de um badge SVG generico — pedido explicito para bater com o
-// que aparece no resto do Stark Hub e no comentario postado no Azure.
 function countryPillHtml(country) {
   const key = normalizeCountry(country);
   const info = countryCatalog[key];
-  if (info?.iso2) {
-    return `<span style="display:inline-flex;vertical-align:middle;align-items:center;gap:4px;margin-left:5px;padding:2px 7px;border:1px solid #d7dde8;border-radius:999px;background:#f8fafc;color:#111827;font-weight:700;font-size:11px;line-height:16px;"><img src="https://flagcdn.com/h20/${info.iso2}.png" width="20" height="14" style="border:0;border-radius:2px;vertical-align:middle;" alt="${escapeHtml(key)}" />${escapeHtml(key)}</span>`;
-  }
-  return `<span style="display:inline-block;vertical-align:middle;margin-left:5px;padding:2px 7px;border:1px solid #d7dde8;border-radius:999px;background:#eef6ff;color:#005a9e;font-weight:800;font-size:11px;line-height:16px;">${escapeHtml(key)}</span>`;
+  const { width, height, borderRadius, fontSize, gap, flagWidth, flagHeight } = pillConfig;
+  const flagContent = info?.iso2 ? flagSvgContent(info.iso2, flagWidth, flagHeight) : "";
+  const flagGroup = flagContent ? `<g transform="translate(7, 3)">${flagContent}</g>` : "";
+  const labelX = flagGroup ? 40 : width / 2;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect x="0" y="0" width="${width}" height="${height}" rx="${borderRadius}" ry="${borderRadius}" fill="#f3f2f1" stroke="#d0d7de" />${flagGroup}<text x="${labelX}" y="13" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="${fontSize}" font-weight="700" fill="#000000">${escapeHtml(key)}</text></svg>`;
+  return `<img src="${svgToDataUri(svg)}" width="${width}" height="${height}" style="display:inline-block;vertical-align:middle;margin-left:${gap}px;border:0;" alt="${escapeHtml(key)}" />`;
 }
 
 function breakpointText(breakpoints = []) {
@@ -103,6 +130,15 @@ function breakpointText(breakpoints = []) {
   if (selected.includes("desktop")) labels.push("1280px");
   if (selected.includes("mobile")) labels.push("360px");
   return labels.length ? `Breakpoint ${labels.join(", ")}` : "";
+}
+
+// O comentario vira HTML puro postado no Azure, mas o sanitizador do editor
+// de discussion do Azure DevOps nao aceita <svg> inline — a tag some e o
+// markup fica visivel como texto cru pro leitor. Um <img> com o SVG como
+// data URI passa pelo sanitizador normalmente (mesma tecnica do
+// stark-hub-script legado, ver svgToDataUri em app.js).
+function svgToDataUri(svg) {
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
 function attachmentHtml(urls = []) {
@@ -115,11 +151,12 @@ export function buildQaResultDiscussionHtml({ resultKey, environments = [], coun
   const envHtml = environments.map(envPillHtml).join("");
   const countryHtml = countries.map(countryPillHtml).join("");
   const bpText = breakpointText(breakpoints);
-  // SVG de computador inline (nao um icon-font) porque isso vira HTML puro
-  // postado como comentario no Azure — sem a fonte de icones carregada la,
-  // um <i class="bi ..."> so mostraria um quadrado vazio/caractere quebrado.
-  const computerIconSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;display:inline-block;"><rect x="2" y="4" width="20" height="13" rx="1.5"></rect><line x1="8" y1="20" x2="16" y2="20"></line><line x1="12" y1="17" x2="12" y2="20"></line></svg>`;
-  const bpHtml = bpText ? `<p>${computerIconSvg}${escapeHtml(bpText)}</p>` : "";
+  // SVG de computador (nao um icon-font, ver svgToDataUri acima) porque isso
+  // vira HTML puro postado como comentario no Azure — sem a fonte de icones
+  // carregada la, um <i class="bi ..."> so mostraria um quadrado vazio.
+  const computerIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="1.5"></rect><line x1="8" y1="20" x2="16" y2="20"></line><line x1="12" y1="17" x2="12" y2="20"></line></svg>`;
+  const computerIconImg = `<img src="${svgToDataUri(computerIconSvg)}" width="16" height="16" style="vertical-align:middle;margin-right:6px;border:0;" alt="" />`;
+  const bpHtml = bpText ? `<p>${computerIconImg}${escapeHtml(bpText)}</p>` : "";
   // So mostra a linha de Contexto quando o campo foi preenchido de verdade —
   // com o rotulo "Context:" seguido de quebra de linha antes do texto.
   const contextHtml = context ? `<p><strong>Context:</strong><br>${escapeHtml(context).replace(/\n/g, "<br>")}</p>` : "";

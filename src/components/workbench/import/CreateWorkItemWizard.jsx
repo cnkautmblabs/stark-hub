@@ -227,10 +227,22 @@ export function CreateWorkItemWizard({ onClose, embedded = false, initialType = 
     setMissingFields((current) => current.filter((field) => field !== key));
   }
 
+  // Mesmo limite do modal de resultado de teste — o anexo vira base64 no
+  // corpo da Edge Function azureWorkItemAction, que a Supabase rejeita
+  // antes mesmo de chegar na nossa funcao quando passa do limite da
+  // plataforma (~6MB), sem essa checagem o upload falhava sem explicacao.
+  const maxAttachmentBytes = 5 * 1024 * 1024;
+
   async function addFiles(fileList) {
     const files = Array.from(fileList || []);
     if (!files.length) return;
-    const withData = await Promise.all(files.map(async (file) => ({ file, name: file.name, type: file.type, dataUrl: await readFileAsDataUrl(file) })));
+    const oversized = files.filter((file) => file.size > maxAttachmentBytes);
+    const accepted = files.filter((file) => file.size <= maxAttachmentBytes);
+    oversized.forEach((file) => {
+      pushToast({ title: t("wizard.attachmentsLabel"), body: t("workItemModal.evidenceTooLarge", { name: file.name, max: "5MB" }), tone: "danger" });
+    });
+    if (!accepted.length) return;
+    const withData = await Promise.all(accepted.map(async (file) => ({ file, name: file.name, type: file.type, dataUrl: await readFileAsDataUrl(file) })));
     setAttachments((current) => [...current, ...withData]);
     setConfirmPayload(null);
   }

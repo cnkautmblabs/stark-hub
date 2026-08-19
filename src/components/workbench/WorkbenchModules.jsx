@@ -28,12 +28,17 @@ import {
   QaPicker,
   RechartsTooltip,
   RoleBadgeIcon,
+  SearchBox,
   TextField,
   WorkbenchCardSkeleton,
   WorkbenchHeader,
   envIconSrc,
   typeIconSrc,
 } from "./ui/WorkbenchPrimitives.jsx";
+import { FilterBar } from "./ui/filters/FilterBar.jsx";
+import { FilterField } from "./ui/filters/FilterField.jsx";
+import { SprintRangeFilter } from "./ui/filters/SprintRangeFilter.jsx";
+import { optionsFromStrings } from "./ui/filters/adapters.js";
 import { AzureWorkItemModal, workItemUrl } from "./ui/AzureWorkItemModal.jsx";
 import { CreateWorkItemWizard } from "./import/CreateWorkItemWizard.jsx";
 import { CollaboratorCountryMatrix, CountryStateMatrix } from "./ui/MatrixCharts.jsx";
@@ -291,14 +296,18 @@ function PipelineEnvPill({ item, pipeline }) {
 export function QaBoardWorkbench() {
   const { t } = useTranslation();
   const { profile, demoMode } = useAuth();
-  const { items, updateItem, reload, loading, refreshing, needsAzureIntegration, error } = useWorkItems();
+  const { items, sprints: scopedSprints, updateItem, reload, loading, refreshing, needsAzureIntegration, error } = useWorkItems();
   const { collaborators } = useCollaborators();
   const { evidence, reload: reloadEvidence } = useTestEvidence();
   const { getSetting } = useAppSettings();
   const [search, setSearch] = usePersistentState("starkHubFilters:qaBoard:search", "");
   const [showCreate, setShowCreate] = useState(false);
   const [viewMode, setViewMode] = usePersistentState("starkHubFilters:qaBoard:viewMode", "grid");
-  const [filtersOpen, setFiltersOpen] = usePersistentState("starkHubFilters:qaBoard:filtersOpen", false);
+  // filtersOpen (chave "starkHubFilters:qaBoard:filtersOpen") agora e
+  // gerenciado direto pelo FilterBar via persistKey — nao duplica mais o
+  // hook aqui (duas instancias de usePersistentState na MESMA chave e
+  // dessincronizam: uma so leria o valor inicial, a outra escreveria,
+  // nenhuma refletiria a outra depois do primeiro toggle).
   const [showExcluded, setShowExcluded] = usePersistentState("starkHubFilters:qaBoard:showExcluded", false);
   const [personFilter, setPersonFilter] = usePersistentState("starkHubFilters:qaBoard:person", []);
   const [countryFilter, setCountryFilter] = usePersistentState("starkHubFilters:qaBoard:country", []);
@@ -346,7 +355,17 @@ export function QaBoardWorkbench() {
   const pipelineNames = getSetting("azurePipelines", {});
   const { byWorkItemId: pipelineByWorkItemId } = usePipelineStatus(boardItems.map((item) => item.id), pipelineNames);
 
-  const sprintOptions = Array.from(new Set(boardItems.map((item) => item.sprint || item.iteration).filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b), "pt-BR"));
+  // Prioriza a lista de sprints REAL devolvida pelo servidor (escopo de
+  // iterations de verdade, ver useWorkItems.js/azureWorkItems) — derivar
+  // dos work items carregados (fallback so pro modo demo, sem servidor)
+  // escondia qualquer sprint sem nenhum item Bug/US em estado de QA no
+  // momento, mesmo ela existindo de verdade no Azure (bug real reportado:
+  // seletor de sprint incompleto, ex. faltava Aug26). Ordenacao cronologica
+  // real (sprintSortValue), nao alfabetica.
+  const sprintOptions = (scopedSprints && scopedSprints.length
+    ? scopedSprints
+    : Array.from(new Set(boardItems.map((item) => item.sprint || item.iteration).filter(Boolean)))
+  ).slice().sort((a, b) => sprintSortValue(a) - sprintSortValue(b));
   const currentSprint = findCurrentSprint(sprintOptions);
   const filteredSprintOptions = sprintOptions.filter((sprint) => normalize(sprint).includes(normalize(sprintSearch)));
   const personOptions = devPeople.map((person) => ({ value: person.id, label: person.azureName, person }));
@@ -370,7 +389,17 @@ export function QaBoardWorkbench() {
     return sprintOptions.slice(start, end + 1);
   }, [iterationFrom, iterationTo, sprintOptions]);
 
-  const effectiveSprintFilter = sprintFilter.length ? sprintFilter : activeSprintRange.length ? activeSprintRange : currentSprint ? [currentSprint] : [];
+  // sprintFilter persiste no localStorage entre sessoes — se o conjunto de
+  // sprints disponiveis mudar (ex.: escopo de iteration do time mudou do
+  // lado do servidor), os valores salvos podem nao existir mais em
+  // sprintOptions. Sem filtrar isso, a interseção ficava vazia pra sempre
+  // (board inteiro sumia, "Nenhum work item encontrado") sem nenhum aviso —
+  // bug real reportado em producao logo depois de um ajuste no escopo de
+  // iterations. Descarta so os valores que nao existem mais; se sobrar
+  // pelo menos 1 valido, usa so esses; se nenhum sobreviver, cai pro
+  // comportamento padrao (range ativo ou sprint atual) em vez de "nada".
+  const validSprintFilter = sprintFilter.filter((value) => sprintOptions.includes(value));
+  const effectiveSprintFilter = validSprintFilter.length ? validSprintFilter : activeSprintRange.length ? activeSprintRange : currentSprint ? [currentSprint] : [];
   const filterCount = [personFilter, countryFilter, qaFilter, statusFilter, resultFilter, effectiveSprintFilter].filter((value) => value.length).length + (showExcluded ? 1 : 0);
 
   const filtered = boardItems
@@ -413,7 +442,15 @@ export function QaBoardWorkbench() {
     pass: { label: "Approved", color: "#16a34a" },
     fail: { label: "Fail", color: "#dc2626" },
     limitation: { label: "Limitation", color: "#d97706" },
-    pending: { label: "Pending", color: "#64748b" }
+    // Cor fixa #64748b ficava um cinza escuro demais/sem contraste no tema
+    // dark. var(--starkMuted) parecia a solucao obvia (o eixo X do mesmo
+    // grafico, logo abaixo, usa essa variavel como fill de SVG e funciona
+    // fina para TEXTO) — mas o Recharts processa a prop `fill` de <Cell>
+    // internamente (d3-color) pra calcular estados de hover/opacidade, e
+    // isso nao entende `var(...)`, entao a barra renderizava sem cor
+    // nenhuma. #94a3b8 e um cinza medio que funciona liso nos dois temas
+    // sem depender de variavel resolvida em tempo de render do SVG.
+    pending: { label: "Pending", color: "#94a3b8" }
   };
   const testResultOrder = ["pass", "fail", "limitation", "pending"];
   const testResultCounts = filtered.reduce((acc, item) => {
@@ -613,69 +650,99 @@ export function QaBoardWorkbench() {
         </div>
         <div className="mbaz-content">
           <ConnectionGate needsAzureIntegration={needsAzureIntegration} error={error}>
-            <details id="mbaz-filter-acc" className="mbaz-filter-acc" open={filtersOpen} onToggle={(event) => setFiltersOpen(event.currentTarget.open)}>
-              <summary><span>{t("qaBoard.filters")} <small id="mbaz-filter-summary">{filterCount ? t("qaBoard.filtersApplied", { count: filterCount }) : ""}</small></span><span id="mbaz-filter-count">{t("qaBoard.filtersActive", { count: filterCount })}</span></summary>
-              <div className="mbaz-filter-body">
-                <div id="mbaz-normal-filters" className="mbaz-filters">
-                  <FilterCombobox label={t("qaBoard.personLabel")} options={personOptions} values={personFilter} onChange={setPersonFilter} placeholder={t("qaBoard.personPlaceholder")} renderOption={(option) => option.person ? <AvatarDot person={option.person} name={option.label} /> : option.label} />
-                  <FilterCombobox label={t("qaBoard.countryLabel")} options={countryOptions} values={countryFilter} onChange={setCountryFilter} placeholder={t("qaBoard.countryPlaceholder")} renderOption={(option) => <span className="mbw-combobox-country"><CountryVisual code={option.value} compact /> {option.label}</span>} />
-                  <FilterCombobox label={t("qaBoard.qaLabel")} options={qaOptions} values={qaFilter} onChange={setQaFilter} placeholder={t("qaBoard.qaPlaceholder")} renderOption={(option) => option.person ? <AvatarDot person={option.person} name={option.label} /> : option.label} />
-                  <FilterCombobox label={t("qaBoard.statusLabel")} options={statusOptions} values={statusFilter} onChange={setStatusFilter} placeholder={t("qaBoard.statusPlaceholder")} />
-                  <FilterCombobox label={t("qaBoard.resultLabel")} options={resultOptions} values={resultFilter} onChange={setResultFilter} placeholder={t("qaBoard.resultPlaceholder")} />
-                  <FilterCombobox label={t("qaBoard.groupLabel")} options={[{ value: "none", label: t("qaBoard.groupNone") }, { value: "ambiente", label: t("qaBoard.groupEnvironment") }, { value: "qa", label: t("qaBoard.groupQa") }, { value: "assignee", label: t("qaBoard.groupAssignee") }, { value: "country", label: t("qaBoard.groupCountry") }]} values={[groupBy]} multiple={false} onChange={(value) => setGroupBy(value || "none")} />
-                  <div className="mbaz-sort-wrap"><label>{t("qaBoard.testDetailsLabel")}</label><button id="mbaz-toggle-all-tests" className="mbaz-btn" type="button" aria-pressed={expandedIds.size > 0} onClick={toggleAllTests}>{expandedIds.size === filtered.length && filtered.length ? t("qaBoard.collapseAll") : t("qaBoard.expandAll")}</button></div>
-                  <div className="mbaz-sort-wrap"><label>{t("qaBoard.sortLabel")}</label><select id="mbaz-sort" className="mbaz-select" value={sort} onChange={(event) => setSort(event.target.value)}><option value="changed_desc">{t("qaBoard.sortRecent")}</option><option value="title_asc">{t("qaBoard.sortTitleAsc")}</option><option value="title_desc">{t("qaBoard.sortTitleDesc")}</option><option value="bug_first">{t("qaBoard.sortBugFirst")}</option><option value="story_first">{t("qaBoard.sortStoryFirst")}</option></select></div>
-                  <div id="mbaz-sprint-filter" ref={sprintFilterRef} className={`mbw-combobox ${sprintOpen ? "open" : ""}`} data-kind="sprint">
-                    <button type="button" className="mbw-combobox-trigger" onClick={() => setSprintOpen((value) => !value)}>
-                      <span>{t("qaBoard.boardLabel")}</span>
-                      <b>{effectiveSprintFilter.length ? t("qaBoard.sprintCount", { count: effectiveSprintFilter.length }) : t("qaBoard.selectPlaceholder")}</b>
-                      <i className={`bi ${sprintOpen ? "bi-chevron-up" : "bi-chevron-down"}`} />
-                    </button>
-                    {sprintOpen && (
-                      <div className="mbw-combobox-menu">
-                        <input id="mbaz-sprint-search" value={sprintSearch} onChange={(event) => setSprintSearch(event.target.value)} placeholder={t("qaBoard.sprintSearchPlaceholder")} autoFocus />
-                        <div className="mbaz-dd-grid">
-                          <div>
-                            <label htmlFor="mbaz-iteration-from">{t("qaBoard.fromLabel")}</label>
-                            <select id="mbaz-iteration-from" className="mbaz-select" value={iterationFrom} onChange={(event) => { setIterationFrom(event.target.value); setSprintFilter([]); }}>
-                              <option value="">{t("qaBoard.firstOption")}</option>
-                              {sprintOptions.map((sprint) => <option key={sprint} value={sprint}>{compactSprintLabel(sprint)}</option>)}
-                            </select>
+            <FilterBar
+              persistKey="starkHubFilters:qaBoard"
+              defaultOpen={false}
+              title={t("qaBoard.filters")}
+              groups={[
+                {
+                  label: t("qaBoard.filterGroupLabel"),
+                  fields: [
+                    { key: "person", active: personFilter.length > 0, node: (
+                      <FilterField label={t("qaBoard.personLabel")} variant="person" options={personOptions} values={personFilter} onChange={setPersonFilter} placeholder={t("qaBoard.personPlaceholder")} />
+                    ) },
+                    { key: "country", active: countryFilter.length > 0, node: (
+                      <FilterField label={t("qaBoard.countryLabel")} variant="country" options={countryOptions} values={countryFilter} onChange={setCountryFilter} placeholder={t("qaBoard.countryPlaceholder")} />
+                    ) },
+                    { key: "qa", active: qaFilter.length > 0, node: (
+                      <FilterField label={t("qaBoard.qaLabel")} variant="person" options={qaOptions} values={qaFilter} onChange={setQaFilter} placeholder={t("qaBoard.qaPlaceholder")} />
+                    ) },
+                    { key: "status", active: statusFilter.length > 0, node: (
+                      <FilterField label={t("qaBoard.statusLabel")} options={statusOptions} values={statusFilter} onChange={setStatusFilter} placeholder={t("qaBoard.statusPlaceholder")} />
+                    ) },
+                    { key: "result", active: resultFilter.length > 0, node: (
+                      <FilterField label={t("qaBoard.resultLabel")} options={resultOptions} values={resultFilter} onChange={setResultFilter} placeholder={t("qaBoard.resultPlaceholder")} />
+                    ) },
+                    // Hibrido busca+range+checklist, nao um FilterField — forcar
+                    // ele no componente padrao de range perderia a checklist
+                    // (ver plano da migracao). Estrutura original, intocada.
+                    { key: "sprint", active: Boolean(sprintFilter.length || iterationFrom || iterationTo), node: (
+                      <div id="mbaz-sprint-filter" ref={sprintFilterRef} className={`mbw-combobox ${sprintOpen ? "open" : ""}`} data-kind="sprint">
+                        <button type="button" className="mbw-combobox-trigger" onClick={() => setSprintOpen((value) => !value)}>
+                          <span>{t("qaBoard.boardLabel")}</span>
+                          <b>{effectiveSprintFilter.length ? t("qaBoard.sprintCount", { count: effectiveSprintFilter.length }) : t("qaBoard.selectPlaceholder")}</b>
+                          <i className={`bi ${sprintOpen ? "bi-chevron-up" : "bi-chevron-down"}`} />
+                        </button>
+                        {sprintOpen && (
+                          <div className="mbw-combobox-menu">
+                            <input id="mbaz-sprint-search" value={sprintSearch} onChange={(event) => setSprintSearch(event.target.value)} placeholder={t("qaBoard.sprintSearchPlaceholder")} autoFocus />
+                            <div className="mbaz-dd-grid">
+                              <div>
+                                <label htmlFor="mbaz-iteration-from">{t("qaBoard.fromLabel")}</label>
+                                <select id="mbaz-iteration-from" className="mbaz-select" value={iterationFrom} onChange={(event) => { setIterationFrom(event.target.value); setSprintFilter([]); }}>
+                                  <option value="">{t("qaBoard.firstOption")}</option>
+                                  {sprintOptions.map((sprint) => <option key={sprint} value={sprint}>{compactSprintLabel(sprint)}</option>)}
+                                </select>
+                              </div>
+                              <div>
+                                <label htmlFor="mbaz-iteration-to">{t("qaBoard.toLabel")}</label>
+                                <select id="mbaz-iteration-to" className="mbaz-select" value={iterationTo} onChange={(event) => { setIterationTo(event.target.value); setSprintFilter([]); }}>
+                                  <option value="">{t("qaBoard.lastOption")}</option>
+                                  {sprintOptions.map((sprint) => <option key={sprint} value={sprint}>{compactSprintLabel(sprint)}</option>)}
+                                </select>
+                              </div>
+                            </div>
+                            <div id="mbaz-sprint-list" className="mbw-combobox-options">
+                              {filteredSprintOptions.map((sprint) => {
+                                const checked = sprintFilter.includes(sprint);
+                                return (
+                                  <button key={sprint} type="button" className={`mbw-combobox-option ${checked ? "active" : ""}`} onClick={() => { setIterationFrom(""); setIterationTo(""); setSprintFilter((current) => current.includes(sprint) ? current.filter((item) => item !== sprint) : [...current, sprint]); }}>
+                                    <span className="mbw-combobox-check">{checked && <i className="bi bi-check-lg" />}</span>
+                                    <span className="mbw-combobox-label">{compactSprintLabel(sprint)}</span>
+                                  </button>
+                                );
+                              })}
+                              {!filteredSprintOptions.length && <span className="mbw-combobox-empty">{t("qaBoard.noSprints")}</span>}
+                            </div>
+                            <div className="mbw-combobox-actions">
+                              <button id="mbaz-sprint-all" type="button" onClick={() => { setSprintFilter(sprintOptions); setIterationFrom(""); setIterationTo(""); }}>{t("qaBoard.allSprints")}</button>
+                              <button id="mbaz-sprint-clear" type="button" onClick={() => { setSprintFilter([]); setIterationFrom(""); setIterationTo(""); }}>{t("qaBoard.clear")}</button>
+                            </div>
                           </div>
-                          <div>
-                            <label htmlFor="mbaz-iteration-to">{t("qaBoard.toLabel")}</label>
-                            <select id="mbaz-iteration-to" className="mbaz-select" value={iterationTo} onChange={(event) => { setIterationTo(event.target.value); setSprintFilter([]); }}>
-                              <option value="">{t("qaBoard.lastOption")}</option>
-                              {sprintOptions.map((sprint) => <option key={sprint} value={sprint}>{compactSprintLabel(sprint)}</option>)}
-                            </select>
-                          </div>
-                        </div>
-                        <div id="mbaz-sprint-list" className="mbw-combobox-options">
-                          {filteredSprintOptions.map((sprint) => {
-                            const checked = sprintFilter.includes(sprint);
-                            return (
-                              <button key={sprint} type="button" className={`mbw-combobox-option ${checked ? "active" : ""}`} onClick={() => { setIterationFrom(""); setIterationTo(""); setSprintFilter((current) => current.includes(sprint) ? current.filter((item) => item !== sprint) : [...current, sprint]); }}>
-                                <span className="mbw-combobox-check">{checked && <i className="bi bi-check-lg" />}</span>
-                                <span className="mbw-combobox-label">{compactSprintLabel(sprint)}</span>
-                              </button>
-                            );
-                          })}
-                          {!filteredSprintOptions.length && <span className="mbw-combobox-empty">{t("qaBoard.noSprints")}</span>}
-                        </div>
-                        <div className="mbw-combobox-actions">
-                          <button id="mbaz-sprint-all" type="button" onClick={() => { setSprintFilter(sprintOptions); setIterationFrom(""); setIterationTo(""); }}>{t("qaBoard.allSprints")}</button>
-                          <button id="mbaz-sprint-clear" type="button" onClick={() => { setSprintFilter([]); setIterationFrom(""); setIterationTo(""); }}>{t("qaBoard.clear")}</button>
-                        </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </div>
-                <div className="mbaz-filter-actions">
-                  <label className="mbaz-filter-checkbox"><input type="checkbox" checked={showExcluded} onChange={(event) => setShowExcluded(event.target.checked)} /><span>{t("qaBoard.showUntestable")}</span></label>
-                  <button id="mbaz-clear-filters" className="mbaz-btn" type="button" onClick={clearFilters}>{t("qaBoard.clearFilters")}</button>
-                </div>
-              </div>
-            </details>
+                    ) }
+                  ]
+                },
+                {
+                  label: t("qaBoard.displayGroupLabel"),
+                  countable: false,
+                  fields: [
+                    { key: "groupBy", node: (
+                      <FilterField label={t("qaBoard.groupLabel")} options={[{ value: "none", label: t("qaBoard.groupNone") }, { value: "ambiente", label: t("qaBoard.groupEnvironment") }, { value: "qa", label: t("qaBoard.groupQa") }, { value: "assignee", label: t("qaBoard.groupAssignee") }, { value: "country", label: t("qaBoard.groupCountry") }]} values={[groupBy]} multiple={false} onChange={(value) => setGroupBy(value || "none")} />
+                    ) },
+                    { key: "sort", node: (
+                      <div className="mbaz-sort-wrap"><label>{t("qaBoard.sortLabel")}</label><select id="mbaz-sort" className="mbaz-select" value={sort} onChange={(event) => setSort(event.target.value)}><option value="changed_desc">{t("qaBoard.sortRecent")}</option><option value="title_asc">{t("qaBoard.sortTitleAsc")}</option><option value="title_desc">{t("qaBoard.sortTitleDesc")}</option><option value="bug_first">{t("qaBoard.sortBugFirst")}</option><option value="story_first">{t("qaBoard.sortStoryFirst")}</option></select></div>
+                    ) },
+                    { key: "expandAll", node: (
+                      <div className="mbaz-sort-wrap"><label>{t("qaBoard.testDetailsLabel")}</label><button id="mbaz-toggle-all-tests" className="mbaz-btn" type="button" aria-pressed={expandedIds.size > 0} onClick={toggleAllTests}>{expandedIds.size === filtered.length && filtered.length ? t("qaBoard.collapseAll") : t("qaBoard.expandAll")}</button></div>
+                    ) }
+                  ]
+                }
+              ]}
+              onClear={clearFilters}
+              extra={<label className="mbaz-filter-checkbox"><input type="checkbox" checked={showExcluded} onChange={(event) => setShowExcluded(event.target.checked)} /><span>{t("qaBoard.showUntestable")}</span></label>}
+            />
             <div id="mbaz-dashboard" className={`mbaz-dashboard ${chartsCollapsed ? "collapsed" : ""}`}>
               {!loading && !chartsCollapsed && (
                 <div className="mbaz-insight-strip">
@@ -829,7 +896,7 @@ export function QaBoardWorkbench() {
 export function MyItemsWorkbench() {
   const { t } = useTranslation();
   const { profile, user, demoMode } = useAuth();
-  const { items, loading, refreshing, updateItem, addItem, reload, needsAzureIntegration, error } = useWorkItems();
+  const { items, sprints: scopedSprints, loading, refreshing, updateItem, addItem, reload, needsAzureIntegration, error } = useWorkItems();
   const { collaborators } = useCollaborators();
   const { evidence } = useTestEvidence();
   const { getSetting } = useAppSettings();
@@ -840,7 +907,13 @@ export function MyItemsWorkbench() {
   const [countryFilter, setCountryFilter] = usePersistentState("starkHubFilters:myItems:country", []);
   const [tagFilter, setTagFilter] = usePersistentState("starkHubFilters:myItems:tag", []);
   const [statusFilter, setStatusFilter] = usePersistentState("starkHubFilters:myItems:status", []);
-  const [sprintFilter, setSprintFilter] = usePersistentState("starkHubFilters:myItems:sprint", []);
+  // Antes um checkbox multi-select preso a poucas sprints visiveis por vez —
+  // por padrao so mostrava a sprint atual, escondendo itens meus (atribuidos
+  // ou testados por mim) de qualquer outra sprint sem eu perceber que era o
+  // filtro (bug real reportado pelo usuario). Mesmo componente De/Ate ja
+  // usado em Gestao da equipe (ver HoursWorkbench).
+  const [sprintFrom, setSprintFrom] = usePersistentState("starkHubFilters:myItems:sprintFrom", "");
+  const [sprintTo, setSprintTo] = usePersistentState("starkHubFilters:myItems:sprintTo", "");
   const [environmentFilter, setEnvironmentFilter] = usePersistentState("starkHubFilters:myItems:environment", []);
   const [testResultFilter, setTestResultFilter] = usePersistentState("starkHubFilters:myItems:result", []);
   const [groupBy, setGroupBy] = usePersistentState("starkHubFilters:myItems:groupBy", "none");
@@ -917,9 +990,32 @@ export function MyItemsWorkbench() {
   const countryOptions = Array.from(new Set(allMine.flatMap((item) => item.countries || []))).sort();
   const tagOptions = Array.from(new Set(allMine.flatMap((item) => item.tags || []).filter((tag) => !/^0-[A-Z]{2}$/i.test(String(tag))))).sort((a, b) => a.localeCompare(b, "pt-BR"));
   const statusOptions = Array.from(new Set(allMine.map((item) => item.state).filter(Boolean))).sort((a, b) => a.localeCompare(b, "pt-BR"));
-  const sprintOptions = Array.from(new Set(allMine.map((item) => item.sprint || item.iteration).filter(Boolean))).sort((a, b) => String(b).localeCompare(String(a), "pt-BR"));
+  // Ordenacao cronologica real (ver sprintSortValue), nao alfabetica —
+  // senao "Aug26" vem antes de "Jan26" so porque "A" < "J", quebrando o
+  // range De/Ate abaixo.
+  // Prioriza a lista de sprints REAL do servidor (ver useWorkItems.js);
+  // cai pra derivar de `items` (universo inteiro, nao `allMine`) so no modo
+  // demo/sem servidor. Usar allMine deixava o seletor De/Ate preso as
+  // poucas sprints onde essa pessoa JA tem algo reconhecido como "meu",
+  // escondendo sprints antigas que ela precisava alcancar justamente pra
+  // investigar itens sumidos; derivar so de items ainda escondia sprints
+  // reais sem nenhum item qualificado no momento (bug real reportado:
+  // seletor "so mostra essas sprints" / sprint faltando).
+  const sprintOptions = (scopedSprints && scopedSprints.length
+    ? scopedSprints
+    : Array.from(new Set(items.map((item) => item.sprint || item.iteration).filter(Boolean)))
+  ).slice().sort((a, b) => sprintSortValue(a) - sprintSortValue(b));
   const currentSprint = findCurrentSprint(sprintOptions);
-  const effectiveSprintFilter = sprintFilter.length ? sprintFilter : currentSprint ? [currentSprint] : [];
+  const sprintFromDefault = currentSprint || sprintOptions[sprintOptions.length - 1] || "";
+  const sprintFromValue = sprintFrom || sprintFromDefault;
+  const sprintToValue = sprintTo || sprintFromDefault;
+  const effectiveSprintFilter = useMemo(() => {
+    if (!sprintOptions.length) return [];
+    const fromIndex = sprintOptions.indexOf(sprintFromValue);
+    const toIndex = sprintOptions.indexOf(sprintToValue);
+    if (fromIndex === -1 || toIndex === -1) return sprintOptions;
+    return sprintOptions.slice(Math.min(fromIndex, toIndex), Math.max(fromIndex, toIndex) + 1);
+  }, [sprintOptions, sprintFromValue, sprintToValue]);
   const testResultOptions = [
     { key: "pass", label: "Approved", icon: "bi-check-lg" },
     { key: "fail", label: "Fail", icon: "bi-x-lg" },
@@ -1013,22 +1109,14 @@ export function MyItemsWorkbench() {
     pushToast({ title: t("myItems.qaReportTitle"), body: t("myItems.qaReportCopied"), tone: "success" });
   }
 
-  function toggleType(type) {
-    setTypes((current) => current.includes(type) ? current.filter((value) => value !== type) : [...current, type]);
-  }
-
-  function toggleFilter(kind, value) {
-    const setter = { country: setCountryFilter, tag: setTagFilter, status: setStatusFilter, sprint: setSprintFilter, environment: setEnvironmentFilter, result: setTestResultFilter }[kind];
-    setter((current) => current.includes(value) ? current.filter((entry) => entry !== value) : [...current, value]);
-  }
-
   function resetMyItemsFilters() {
     setHoursFilter("all");
     setTypes(isQa ? ["Task", "Bug", "User Story"] : ["Task", "Bug"]);
     setCountryFilter([]);
     setTagFilter([]);
     setStatusFilter([]);
-    setSprintFilter([]);
+    setSprintFrom("");
+    setSprintTo("");
     setEnvironmentFilter([]);
     setTestResultFilter([]);
     setGroupBy("none");
@@ -1215,23 +1303,62 @@ export function MyItemsWorkbench() {
               </div>}
             </section>
           )}
-          <div className="mb-my-filter-heading"><strong>{t("myItems.filtersHeading")}</strong><span>{t("myItems.filtersSubtitle")}</span></div>
-          <div className="mb-my-items-filter-row">
-            <div className="mb-my-type-toggles">
-              <button type="button" data-my-type="Task" className={`${types.includes("Task") ? "active" : ""} task`} onClick={() => toggleType("Task")}><img src={typeIconSrc("Task")} alt="" /> Task</button>
-              <button type="button" data-my-type="Bug" className={`${types.includes("Bug") ? "active" : ""} bug`} onClick={() => toggleType("Bug")}><img src={typeIconSrc("Bug")} alt="" /> Bug</button>
-              {isQa && <button type="button" data-my-type="User Story" className={`${types.includes("User Story") ? "active" : ""} story`} onClick={() => toggleType("User Story")}><img src={typeIconSrc("User Story")} alt="" /> User Story</button>}
-            </div>
-            <FilterCombobox label={t("qaBoard.countryLabel")} options={countryOptions} values={countryFilter} onChange={setCountryFilter} placeholder={t("qaBoard.countryPlaceholder")} renderOption={(option) => <span className="mbw-combobox-country"><CountryVisual code={option} compact /> {countries[option]?.label || option}</span>} />
-            <FilterCombobox label={t("myItems.tagLabel")} options={tagOptions} values={tagFilter} onChange={setTagFilter} placeholder={t("myItems.tagPlaceholder")} />
-            <FilterCombobox label={t("qaBoard.statusLabel")} options={statusOptions} values={statusFilter} onChange={setStatusFilter} placeholder={t("qaBoard.statusPlaceholder")} />
-            <FilterCombobox label={t("myItems.sprintLabel")} options={sprintOptions} values={effectiveSprintFilter} onChange={setSprintFilter} placeholder={t("qaBoard.sprintSearchPlaceholder")} allLabel={t("myItems.currentSprintLabel")} renderOption={(option) => compactSprintLabel(option)} />
-            {isQa && <div className="mb-my-filter-pills"><strong>{t("myItems.environmentLabel")}</strong>{environmentOptions.map((env) => <button key={env} type="button" className={environmentFilter.includes(env) ? "active" : ""} onClick={() => toggleFilter("environment", env)}><img src={envIconSrc(env)} alt="" /> {env}</button>)}</div>}
-            {isQa && <div className="mb-my-filter-pills"><strong>{t("myItems.testLabel")}</strong>{testResultOptions.map((option) => <button key={option.key} type="button" className={`${testResultFilter.includes(option.key) ? "active" : ""} ${option.key}`} onClick={() => toggleFilter("result", option.key)}><i className={`bi ${option.icon}`} /> {option.label}</button>)}</div>}
-            <FilterCombobox label={t("qaBoard.groupLabel")} options={[{ value: "none", label: t("qaBoard.groupNone") }, { value: "hours", label: t("myItems.groupHours") }, { value: "source", label: t("myItems.groupSource") }]} values={[groupBy]} multiple={false} onChange={(value) => setGroupBy(value || "none")} />
-            <button type="button" className="mb-my-clear-filters" onClick={resetMyItemsFilters}>{t("qaBoard.clearFilters")}</button>
-          </div>
-          <label className="mb-my-items-search"><FiSearch /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("myItems.searchPlaceholder")} /></label>
+          <FilterBar
+            title={t("myItems.filtersHeading")}
+            resultCountLabel={t("myItems.filtersSubtitle")}
+            defaultOpen
+            groups={[
+              {
+                label: t("qaBoard.filterGroupLabel"),
+                fields: [
+                  { key: "type", active: types.length !== (isQa ? 3 : 2), node: (
+                    <FilterField label={t("governance.typeLabel")} mode="chips" multiple variant="type" options={["Task", "Bug", isQa && "User Story"].filter(Boolean).map((value) => ({ value, label: value }))} values={types} onChange={setTypes} />
+                  ) },
+                  { key: "country", active: countryFilter.length > 0, node: (
+                    <FilterField label={t("qaBoard.countryLabel")} variant="country" options={optionsFromStrings(countryOptions)} values={countryFilter} onChange={setCountryFilter} placeholder={t("qaBoard.countryPlaceholder")} />
+                  ) },
+                  { key: "tag", active: tagFilter.length > 0, node: (
+                    <FilterField label={t("myItems.tagLabel")} options={optionsFromStrings(tagOptions)} values={tagFilter} onChange={setTagFilter} placeholder={t("myItems.tagPlaceholder")} />
+                  ) },
+                  { key: "status", active: statusFilter.length > 0, node: (
+                    <FilterField label={t("qaBoard.statusLabel")} options={optionsFromStrings(statusOptions)} values={statusFilter} onChange={setStatusFilter} placeholder={t("qaBoard.statusPlaceholder")} />
+                  ) },
+                  { key: "sprint", active: Boolean(sprintFrom || sprintTo), node: (
+                    <SprintRangeFilter
+                      sprintOptions={sprintOptions}
+                      fromValue={sprintFromValue}
+                      toValue={sprintToValue}
+                      effective={effectiveSprintFilter}
+                      onFromChange={setSprintFrom}
+                      onToChange={setSprintTo}
+                      fromLabel={t("myItems.sprintFromLabel")}
+                      toLabel={t("myItems.sprintToLabel")}
+                      hintLabel={(effective) => t("myItems.rangeHint", { count: effective.length, sprints: effective.map(compactSprintLabel).join(", ") || "-" })}
+                    />
+                  ) },
+                  ...(isQa ? [
+                    { key: "environment", active: environmentFilter.length > 0, node: (
+                      <FilterField label={t("myItems.environmentLabel")} mode="chips" multiple variant="environment" options={optionsFromStrings(environmentOptions)} values={environmentFilter} onChange={setEnvironmentFilter} />
+                    ) },
+                    { key: "result", active: testResultFilter.length > 0, node: (
+                      <FilterField label={t("myItems.testLabel")} mode="chips" multiple variant="result" options={testResultOptions.map((option) => ({ value: option.key, label: option.label }))} values={testResultFilter} onChange={setTestResultFilter} />
+                    ) }
+                  ] : [])
+                ]
+              },
+              {
+                label: t("qaBoard.displayGroupLabel"),
+                countable: false,
+                fields: [
+                  { key: "groupBy", node: (
+                    <FilterField label={t("qaBoard.groupLabel")} options={[{ value: "none", label: t("qaBoard.groupNone") }, { value: "hours", label: t("myItems.groupHours") }, { value: "source", label: t("myItems.groupSource") }]} values={[groupBy]} multiple={false} onChange={(value) => setGroupBy(value || "none")} />
+                  ) }
+                ]
+              }
+            ]}
+            onClear={resetMyItemsFilters}
+            extra={<SearchBox value={search} onChange={setSearch} placeholder={t("myItems.searchPlaceholder")} />}
+          />
         </section>}
         <main className="mb-my-items-content">
           {loading && <WorkbenchCardSkeleton rows={viewMode === "grid" ? 8 : 5} mode={viewMode} />}
@@ -1496,7 +1623,7 @@ export function HoursWorkbench() {
   // sprint ja encerrada aparecia com uma fracao dos cards reais (so os que
   // por algum motivo ainda nao foram fechados no Azure), dando a impressao
   // de que a equipe entregou muito menos do que entregou de fato.
-  const { items, error, loading, refreshing, reload } = useWorkItems({ includeClosed: true });
+  const { items, sprints: scopedSprints, error, loading, refreshing, reload } = useWorkItems({ includeClosed: true });
   const { collaborators } = useCollaborators();
   const { evidence } = useTestEvidence();
   const { getSetting } = useAppSettings();
@@ -1519,10 +1646,17 @@ export function HoursWorkbench() {
   const goalDefault = getSetting("defaultGoalHours", defaultGoalHours);
   const peopleById = useMemo(() => new Map(collaborators.map((person) => [person.id, person])), [collaborators]);
   const peopleByName = useMemo(() => buildCollaboratorNameIndex(collaborators), [collaborators]);
-  // Ordenacao cronologica real (ver sprintSortValue) — nao alfabetica, senao
-  // "Aug26" vem antes de "Jan26" so porque "A" < "J", quebrando o range
-  // De/Ate abaixo (ex.: selecionar Jun26..Ago26 cortava o meio errado).
-  const sprintOptions = Array.from(new Set(items.map((item) => item.sprint || item.iteration).filter(Boolean))).sort((a, b) => sprintSortValue(a) - sprintSortValue(b));
+  // Prioriza a lista de sprints REAL do servidor; cai pra derivar de
+  // `items` so no modo demo/sem servidor. Ordenacao cronologica real (ver
+  // sprintSortValue) — nao alfabetica, senao "Aug26" vem antes de "Jan26"
+  // so porque "A" < "J", quebrando o range De/Ate abaixo (ex.: selecionar
+  // Jun26..Ago26 cortava o meio errado). Antes tambem escondia sprints
+  // reais sem nenhum item qualificado no momento (mesmo bug do QA Board e
+  // de Meus Itens: sprint some do seletor de filtro).
+  const sprintOptions = (scopedSprints && scopedSprints.length
+    ? scopedSprints
+    : Array.from(new Set(items.map((item) => item.sprint || item.iteration).filter(Boolean)))
+  ).slice().sort((a, b) => sprintSortValue(a) - sprintSortValue(b));
   const currentSprint = findCurrentSprint(sprintOptions);
   // Pedido do usuario: antes so dava pra ver 1 sprint por vez. De/Ate
   // igual ao Dashboard de Gerenciamento — os dois campos sempre mostram um
@@ -1956,21 +2090,47 @@ export function HoursWorkbench() {
         : <EmptyState title={t("governance.accountNotLinked")} />)}
       {!ownIsQaOnly && (
       <>
-      <details className="mbdhc-filters" open>
-        <summary><span>{t("governance.filtersLabel")} <small>{t("governance.collaboratorsCount", { count: filteredDevelopers.length })}</small></span><b>{t("governance.activeCount", { count: [search, collaboratorFilter.length, typeFilter !== "all", hourStatus !== "all", goalFilter !== "all", roleGroup !== "all"].filter(Boolean).length })}</b></summary>
-        <div className="mbdhc-filter-grid">
-          <label className="mbdhc-field"><span>{t("governance.searchLabel")}</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("governance.searchPlaceholder")} /></label>
-          <ProfileCombobox label={t("governance.collaboratorLabel")} people={developers.map((dev) => ({ id: dev.key, azureName: dev.displayName, color: dev.color }))} values={collaboratorFilter} multiple onChange={setCollaboratorFilter} />
-          <FilterCombobox label={t("governance.roleLabel")} options={[{ value: accessLevels.dev, label: "Dev" }, { value: accessLevels.qa, label: "QA" }, { value: accessLevels.gestao, label: "Gestao" }, { value: accessLevels.gerente, label: "Gerente" }]} values={roleGroup === "all" ? [] : [roleGroup]} multiple={false} onChange={(value) => setRoleGroup(value || "all")} />
-          <FilterCombobox label={t("governance.typeLabel")} options={["Task", "Bug", "User Story", "Feature"].map((value) => ({ value, label: value }))} values={typeFilter === "all" ? [] : [typeFilter]} multiple={false} onChange={(value) => setTypeFilter(value || "all")} />
-          <FilterCombobox label={t("governance.sprintFromLabel")} options={sprintOptions.map((sprint) => ({ value: sprint, label: compactSprintLabel(sprint) }))} values={fromValue ? [fromValue] : []} multiple={false} onChange={(value) => setSprintFrom(value || "")} />
-          <FilterCombobox label={t("governance.sprintToLabel")} options={sprintOptions.map((sprint) => ({ value: sprint, label: compactSprintLabel(sprint) }))} values={toValue ? [toValue] : []} multiple={false} onChange={(value) => setSprintTo(value || "")} />
-          <span className="mbdhc-sprint-range-hint">{t("governance.rangeHint", { count: effectiveSprintFilter.length, sprints: effectiveSprintFilter.map(compactSprintLabel).join(", ") || "-" })}</span>
-          <FilterCombobox label={t("governance.hoursFilterLabel")} options={[{ value: "with", label: t("governance.withHours") }, { value: "without", label: t("governance.withoutHours") }]} values={hourStatus === "all" ? [] : [hourStatus]} multiple={false} onChange={(value) => setHourStatus(value || "all")} />
-          <FilterCombobox label={t("governance.goalStatusLabel")} options={[{ value: "below", label: t("governance.below") }, { value: "met", label: t("governance.met") }, { value: "above", label: t("governance.above") }]} values={goalFilter === "all" ? [] : [goalFilter]} multiple={false} onChange={(value) => setGoalFilter(value || "all")} />
-          <div className="mbdhc-filter-actions"><button className="mbdhc-button secondary" type="button" onClick={resetFilters}>{t("qaBoard.clearFilters")}</button></div>
-        </div>
-      </details>
+      <FilterBar
+        persistKey="starkHubFilters:governance"
+        defaultOpen
+        title={t("governance.filtersLabel")}
+        resultCountLabel={t("governance.collaboratorsCount", { count: filteredDevelopers.length })}
+        groups={[{
+          fields: [
+            { key: "collaborator", active: collaboratorFilter.length > 0, node: (
+              <FilterField label={t("governance.collaboratorLabel")} variant="person" people={developers.map((dev) => ({ id: dev.key, azureName: dev.displayName, color: dev.color, imageUrl: dev.avatarUrl }))} values={collaboratorFilter} multiple onChange={setCollaboratorFilter} />
+            ) },
+            { key: "role", active: roleGroup !== "all", node: (
+              <FilterField label={t("governance.roleLabel")} options={[{ value: accessLevels.dev, label: "Dev" }, { value: accessLevels.qa, label: "QA" }, { value: accessLevels.gestao, label: "Gestao" }, { value: accessLevels.gerente, label: "Gerente" }]} values={roleGroup === "all" ? [] : [roleGroup]} multiple={false} onChange={(value) => setRoleGroup(value || "all")} />
+            ) },
+            { key: "type", active: typeFilter !== "all", node: (
+              <FilterField label={t("governance.typeLabel")} options={["Task", "Bug", "User Story", "Feature"].map((value) => ({ value, label: value }))} values={typeFilter === "all" ? [] : [typeFilter]} multiple={false} onChange={(value) => setTypeFilter(value || "all")} />
+            ) },
+            { key: "sprint", active: Boolean(sprintFrom || sprintTo), node: (
+              <SprintRangeFilter
+                sprintOptions={sprintOptions}
+                fromValue={fromValue}
+                toValue={toValue}
+                effective={effectiveSprintFilter}
+                onFromChange={setSprintFrom}
+                onToChange={setSprintTo}
+                fromLabel={t("governance.sprintFromLabel")}
+                toLabel={t("governance.sprintToLabel")}
+                hintLabel={(effective) => t("governance.rangeHint", { count: effective.length, sprints: effective.map(compactSprintLabel).join(", ") || "-" })}
+              />
+            ) },
+            { key: "hours", active: hourStatus !== "all", node: (
+              <FilterField label={t("governance.hoursFilterLabel")} options={[{ value: "with", label: t("governance.withHours") }, { value: "without", label: t("governance.withoutHours") }]} values={hourStatus === "all" ? [] : [hourStatus]} multiple={false} onChange={(value) => setHourStatus(value || "all")} />
+            ) },
+            { key: "goal", active: goalFilter !== "all", node: (
+              <FilterField label={t("governance.goalStatusLabel")} options={[{ value: "below", label: t("governance.below") }, { value: "met", label: t("governance.met") }, { value: "above", label: t("governance.above") }]} values={goalFilter === "all" ? [] : [goalFilter]} multiple={false} onChange={(value) => setGoalFilter(value || "all")} />
+            ) }
+          ]
+        }]}
+        onClear={resetFilters}
+        clearLabel={t("qaBoard.clearFilters")}
+        extra={<SearchBox value={search} onChange={setSearch} placeholder={t("governance.searchPlaceholder")} />}
+      />
       {/* Eram 8 cards KPI soltos e identicos em peso visual — o usuario
           pediu menos quantidade e melhor apresentacao. Agrupados em 2
           clusters (Equipe/Entregas e Horas), no mesmo estilo compacto ja
@@ -2493,6 +2653,7 @@ export function SettingsWorkbench() {
   }, [settingsLoading]);
 
   const featureLabels = {
+    showHealthCheck: [t("featureFlags.showHealthCheck"), t("featureFlags.showHealthCheckDesc")],
     showQaBoard: [t("featureFlags.showQaBoard"), t("featureFlags.showQaBoardDesc")],
     showMyItems: [t("featureFlags.showMyItems"), t("featureFlags.showMyItemsDesc")],
     showTestResults: [t("featureFlags.showTestResults"), t("featureFlags.showTestResultsDesc")],

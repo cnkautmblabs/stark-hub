@@ -17,6 +17,7 @@ import Faq from "../pages/Faq.jsx";
 import About from "../pages/About.jsx";
 import ProtectedRoute from "./ProtectedRoute.jsx";
 import WorkbenchHome from "../pages/WorkbenchHome.jsx";
+import HealthCheck from "../pages/healthcheck/HealthCheck.jsx";
 
 export default function AppRouter() {
   return (
@@ -28,6 +29,7 @@ export default function AppRouter() {
 
       <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route path="/" element={<WorkbenchHome />} />
+        <Route path="/healthcheck" element={<HealthCheck />} />
         <Route path="/dev" element={<ProtectedRoute allow={["dev", "qa", "gestao", "gerente"]}><DevDashboard /></ProtectedRoute>} />
         <Route path="/qa" element={<ProtectedRoute allow={["qa", "gestao", "gerente"]}><QaBoard /></ProtectedRoute>} />
         <Route path="/tests" element={<Navigate to="/dev" replace />} />

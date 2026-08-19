@@ -87,11 +87,11 @@ export function csvCell(value) {
 // verdade tambem usada pela Home (atualizacoes recentes) pra decidir se um
 // item "entrou em teste" de verdade, em vez de duplicar a lista de aliases.
 export const qaStatusConfig = {
-  inQa: { label: "In QA", color: "#2563eb", bg: "#eff6ff", icon: "bi-check2-circle" },
-  inBeta: { label: "In BETA", color: "#7c3aed", bg: "#f5f3ff", icon: "bi-flask" },
-  readyBeta: { label: "Ready Beta", color: "#d97706", bg: "#fffbeb", icon: "bi-rocket-takeoff" },
-  hmgCnk: { label: "HMG CNK", color: "#0891b2", bg: "#ecfeff", icon: "bi-flask" },
-  readyProd: { label: "Ready Prod", color: "#16a34a", bg: "#f0fdf4", icon: "bi-shield-check" }
+  inQa: { label: "In QA", color: "var(--starkStatusInQa)", bg: "var(--starkStatusInQaBg)", icon: "bi-check2-circle" },
+  inBeta: { label: "In BETA", color: "var(--starkStatusInBeta)", bg: "var(--starkStatusInBetaBg)", icon: "bi-flask" },
+  readyBeta: { label: "Ready Beta", color: "var(--starkStatusReadyBeta)", bg: "var(--starkStatusReadyBetaBg)", icon: "bi-rocket-takeoff" },
+  hmgCnk: { label: "HMG CNK", color: "var(--starkStatusHmgCnk)", bg: "var(--starkStatusHmgCnkBg)", icon: "bi-flask" },
+  readyProd: { label: "Ready Prod", color: "var(--starkStatusReadyProd)", bg: "var(--starkStatusReadyProdBg)", icon: "bi-shield-check" }
 };
 
 export const qaStatusOrder = ["inQa", "inBeta", "readyBeta", "hmgCnk", "readyProd"];
@@ -113,7 +113,7 @@ export function qaStatusInfo(state) {
     readytoproduction: "readyProd"
   };
   const statusKeyValue = aliases[key] || "";
-  return statusKeyValue ? { key: statusKeyValue, ...qaStatusConfig[statusKeyValue] } : { key: "", label: state || "-", color: "#64748b", bg: "#f8fafc", icon: "bi-list-check" };
+  return statusKeyValue ? { key: statusKeyValue, ...qaStatusConfig[statusKeyValue] } : { key: "", label: state || "-", color: "var(--starkStatusDefault)", bg: "var(--starkStatusDefaultBg)", icon: "bi-list-check" };
 }
 
 export function itemAgeDays(item) {

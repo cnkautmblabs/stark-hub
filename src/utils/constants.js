@@ -66,26 +66,27 @@ export const environments = {
 // Resultado de um ciclo de teste, registrado como evidência no work item.
 // Cores herdadas do padrão original (evidenceStatusConfig / testResultTemplates).
 export const testResultTypes = {
-  pass: { label: "Pass", color: "#166534", background: "#dcfce7", icon: "✓" },
-  fail: { label: "Fail", color: "#991b1b", background: "#fee2e2", icon: "✕" },
-  limitation: { label: "Limitation", color: "#9a6700", background: "#fff3cd", icon: "⚠" }
+  pass: { label: "Pass", color: "var(--starkResultPass)", background: "var(--starkResultPassBg)", icon: "✓" },
+  fail: { label: "Fail", color: "var(--starkResultFail)", background: "var(--starkResultFailBg)", icon: "✕" },
+  limitation: { label: "Limitation", color: "var(--starkResultLimitation)", background: "var(--starkResultLimitationBg)", icon: "⚠" }
 };
 
 // Tipo de work item do Azure DevOps — cores herdadas de workTypeInfo(), ícone
 // segue a convenção do próprio Azure DevOps (martelo=Task, livro=User Story,
 // quebra-cabeça=Feature, raio=Epic).
-// Bug/Task/User Story usam var(--stark-type-*) — mesmos tokens exatos do
-// sistema de tema definitivo do userscript (reagem a claro/escuro sozinhos).
-// Feature/Epic não tinham variante dark documentada no legado, então mantêm
-// a cor fixa original (workTypeInfo()).
+// Todos os tipos (incluindo Feature/Epic, que nao tinham variante dark
+// documentada no legado) usam var(--stark-type-*) — mesmos tokens do
+// sistema de tema definitivo, reagem a claro/escuro sozinhos. Antes Feature/
+// Epic ficavam com a cor fixa original em qualquer tema (bug real: badge
+// claro sobre fundo escuro).
 export const workItemTypes = {
   Bug: { color: "var(--starkTypeBug)", background: "var(--starkTypeBugBg)", icon: "bi-bug-fill", prefix: "BUG" },
   Task: { color: "var(--starkTypeTask)", background: "var(--starkTypeTaskBg)", icon: "bi-hammer", prefix: "TASK" },
   "User Story": { color: "var(--starkTypeStory)", background: "var(--starkTypeStoryBg)", icon: "bi-book-fill", prefix: "US" },
-  Feature: { color: "#7c3aed", background: "#f5f3ff", icon: "bi-puzzle-fill", prefix: "FEAT" },
-  Epic: { color: "#ea580c", background: "#fff7ed", icon: "bi-lightning-charge-fill", prefix: "EPIC" }
+  Feature: { color: "var(--starkTypeFeature)", background: "var(--starkTypeFeatureBg)", icon: "bi-puzzle-fill", prefix: "FEAT" },
+  Epic: { color: "var(--starkTypeEpic)", background: "var(--starkTypeEpicBg)", icon: "bi-lightning-charge-fill", prefix: "EPIC" }
 };
-export const defaultWorkItemTypeStyle = { color: "#64748b", background: "#f8fafc", icon: "bi-card-checklist", prefix: "WI" };
+export const defaultWorkItemTypeStyle = { color: "var(--starkTypeDefault)", background: "var(--starkTypeDefaultBg)", icon: "bi-card-checklist", prefix: "WI" };
 
 export function workItemTypePrefix(type) {
   return (workItemTypes[type] || defaultWorkItemTypeStyle).prefix;
@@ -99,14 +100,14 @@ export function formatWorkItemCode(id, type) {
 // Pill de estado do work item — cores herdadas de CONFIG.statusConfig.
 // Chave normalizada (minúscula, sem espaço) para casar variações de grafia.
 export const statusConfig = {
-  inqa: { label: "In QA", color: "#2563eb", background: "#eff6ff" },
-  inbeta: { label: "In BETA", color: "#7c3aed", background: "#f5f3ff" },
-  readybeta: { label: "Ready Beta", color: "#d97706", background: "#fffbeb" },
-  readytobeta: { label: "Ready Beta", color: "#d97706", background: "#fffbeb" },
-  readytoprod: { label: "Ready Prod", color: "#16a34a", background: "#f0fdf4" },
-  hmgcnk: { label: "HMG CNK", color: "#0891b2", background: "#ecfeff" }
+  inqa: { label: "In QA", color: "var(--starkStatusInQa)", background: "var(--starkStatusInQaBg)" },
+  inbeta: { label: "In BETA", color: "var(--starkStatusInBeta)", background: "var(--starkStatusInBetaBg)" },
+  readybeta: { label: "Ready Beta", color: "var(--starkStatusReadyBeta)", background: "var(--starkStatusReadyBetaBg)" },
+  readytobeta: { label: "Ready Beta", color: "var(--starkStatusReadyBeta)", background: "var(--starkStatusReadyBetaBg)" },
+  readytoprod: { label: "Ready Prod", color: "var(--starkStatusReadyProd)", background: "var(--starkStatusReadyProdBg)" },
+  hmgcnk: { label: "HMG CNK", color: "var(--starkStatusHmgCnk)", background: "var(--starkStatusHmgCnkBg)" }
 };
-export const defaultStatusStyle = { color: "#64748b", background: "#f8fafc" };
+export const defaultStatusStyle = { color: "var(--starkStatusDefault)", background: "var(--starkStatusDefaultBg)" };
 
 export function normalizeStatusKey(state) {
   return String(state || "").toLowerCase().replace(/\s+/g, "");

@@ -151,6 +151,11 @@ export function useWorkItems({ includeClosed = false, enabled = true } = {}) {
   const [loading, setLoading] = useState(!demoMode && !initialCache?.data);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  // Lista real de sprints escopadas no servidor (ver azureWorkItems/
+  // index.ts) — nao deriva mais dos work items carregados, que so mostra
+  // sprints com pelo menos 1 item qualificado no momento (sprint real
+  // sumia do seletor de filtro sem nenhum item ativo hoje).
+  const [sprints, setSprints] = useState([]);
   // So a PRIMEIRA carga mostra skeleton de tela cheia. Atualizacoes depois
   // disso (manual ou automatica a cada `azureAutoRefreshSeconds`) mantem a
   // ultima lista boa visivel e so acendem `refreshing` — sem isso, cada
@@ -202,15 +207,20 @@ export function useWorkItems({ includeClosed = false, enabled = true } = {}) {
     let data = null;
     let invokeError = null;
     // `Promise.race` nao cancela a promise perdedora — se a chamada ao
-    // Supabase vencer (caso comum, resposta rapida), o timer de 45s
-    // continuava rodando e disparava um reject() sem handler la na frente,
-    // virando "Uncaught (in promise)" no console minutos depois de toda
-    // busca bem-sucedida. `clearTimeout` no fim garante que o timer nunca
-    // dispara quando ja nao importa mais.
+    // Supabase vencer (caso comum, resposta rapida), o timer continuava
+    // rodando e disparava um reject() sem handler la na frente, virando
+    // "Uncaught (in promise)" no console minutos depois de toda busca
+    // bem-sucedida. `clearTimeout` no fim garante que o timer nunca dispara
+    // quando ja nao importa mais.
+    // 60s (era 45s) pra dar folga real ao teto bem maior de discussionCap
+    // na Edge Function (ver azureWorkItems/index.ts) — o board so ficava
+    // rapido antes porque checava a discussion de poucas dezenas de itens;
+    // agora que cobre o board inteiro pra Pass rate/Pending saírem certos,
+    // precisa de mais tempo de ponta a ponta.
     let timeoutId;
     try {
       const timeoutPromise = new Promise((_, reject) => {
-        timeoutId = window.setTimeout(() => reject(new Error("Tempo limite ao consultar o Azure DevOps. Tente atualizar novamente.")), 45000);
+        timeoutId = window.setTimeout(() => reject(new Error("Tempo limite ao consultar o Azure DevOps. Tente atualizar novamente.")), 60000);
       });
       ({ data, error: invokeError } = await withInflight(cacheKey, () => Promise.race([
         supabase.functions.invoke("azureWorkItems", {
@@ -242,6 +252,10 @@ export function useWorkItems({ includeClosed = false, enabled = true } = {}) {
       if (!hasLoadedRef.current) setItems([]);
       setError(data?.error || invokeError?.message || "Falha ao consultar o Azure DevOps.");
     } else {
+      if (data.warning) {
+        pushToast({ title: "Azure DevOps", body: data.warning, tone: "danger" });
+      }
+      if (Array.isArray(data.sprints)) setSprints(data.sprints);
       if (!includeClosed) {
         notifyTransitions({ previousStateById: previousStateByIdRef.current, freshItems: data.items, pushToast, profile, user });
         previousStateByIdRef.current = new Map(data.items.map((item) => [item.id, String(item.state || "").toLowerCase()]));
@@ -347,6 +361,10 @@ export function useWorkItems({ includeClosed = false, enabled = true } = {}) {
             orgUrl: profile.azureOrgUrl,
             project: profile.azureProject,
             pat: profile.azurePat,
+            // Sem o id, a Edge Function so sobe o arquivo pro blob store da
+            // organizacao sem vincular ao item (relation "AttachedFile") — a
+            // imagem existe mas o Azure nao serve o conteudo no comentario.
+            id,
             fileName: attachment.name || `evidence-${id}.png`,
             contentType: attachment.type || "image/png",
             dataUrl: attachment.dataUrl
@@ -354,6 +372,9 @@ export function useWorkItems({ includeClosed = false, enabled = true } = {}) {
         });
         if (attachmentData?.ok && attachmentData.url) {
           attachmentUrls.push(attachmentData.url);
+          if (attachmentData.warning) {
+            pushToast({ title: "Resultado de teste", body: attachmentData.warning, tone: "danger" });
+          }
         } else {
           pushToast({ title: "Resultado de teste", body: `Falha ao anexar evidencia "${attachment.name || "imagem"}": ${attachmentData?.error || attachmentError?.message || ""}`, tone: "danger" });
         }
@@ -433,23 +454,43 @@ export function useWorkItems({ includeClosed = false, enabled = true } = {}) {
       }
       if (!demoMode && patch.notifySlack !== false) {
         const webhooks = resolveSlackWebhooks(getSetting);
-        // "Tested by" mostra o QA Responsavel cadastrado no Work Item (Stark
-        // Hub), nao quem esta logado registrando o resultado — pedido
-        // explicito do usuario, ja que quem clica em "Registrar resultado"
-        // pode nao ser o QA oficialmente responsavel pelo item.
-        const text = buildLegacyQaResultSlackText({
-          item,
-          resultKey: patch.lastTestResult,
-          resultLabel,
-          environments,
-          countries: testedCountries,
-          authorName: mentionNameForSlack(qaResponsible),
-          assignee,
-          fyi: fyiPeople
-        });
-        webhooks.forEach((webhookUrl) => {
-          supabase.functions.invoke("slackNotify", { body: { webhooks: [webhookUrl], text } }).catch(() => {});
-        });
+        // Sem webhook resolvido pra "testResult", o forEach abaixo simplesmente
+        // nao roda — nada e enviado e, antes desta checagem, nada avisava
+        // o usuario disso (parecia que tinha enviado e nao tinha).
+        if (!webhooks.length) {
+          pushToast({ title: "Resultado de teste", body: "Nenhum webhook do Slack configurado para resultado de teste (Configuracoes > Slack).", tone: "danger" });
+        } else {
+          // "Tested by" mostra o QA Responsavel cadastrado no Work Item (Stark
+          // Hub), nao quem esta logado registrando o resultado — pedido
+          // explicito do usuario, ja que quem clica em "Registrar resultado"
+          // pode nao ser o QA oficialmente responsavel pelo item.
+          const text = buildLegacyQaResultSlackText({
+            item,
+            resultKey: patch.lastTestResult,
+            resultLabel,
+            environments,
+            countries: testedCountries,
+            authorName: mentionNameForSlack(qaResponsible),
+            assignee,
+            fyi: fyiPeople
+          });
+          webhooks.forEach((webhookUrl) => {
+            // Antes o .catch(() => {}) engolia qualquer falha (webhook
+            // invalido, Edge Function fora do ar, rate limit do Slack) sem
+            // nenhum sinal pro usuario — "enviei e nao chegou" era
+            // indistinguivel de "enviei com sucesso".
+            supabase.functions.invoke("slackNotify", { body: { webhooks: [webhookUrl], text } })
+              .then(({ data, error }) => {
+                if (error || data?.ok === false) {
+                  const detail = data?.results?.find((r) => !r.ok)?.error || data?.results?.find((r) => !r.ok)?.body || data?.error || error?.message || "";
+                  pushToast({ title: "Resultado de teste", body: `Falha ao enviar para o Slack: ${detail}`, tone: "danger" });
+                }
+              })
+              .catch((err) => {
+                pushToast({ title: "Resultado de teste", body: `Falha ao enviar para o Slack: ${err?.message || ""}`, tone: "danger" });
+              });
+          });
+        }
       }
       const nextPatch = { lastTestResult: patch.lastTestResult, ...(patch.state ? { state: patch.state } : {}) };
       setItems((current) => {
@@ -528,5 +569,5 @@ export function useWorkItems({ includeClosed = false, enabled = true } = {}) {
     return error ? { ok: false, error: error.message } : data;
   }
 
-  return { items, loading, refreshing, error, updateItem, addItem, reload: () => loadItems({ force: true }), needsAzureIntegration: !demoMode && !azureReady };
+  return { items, sprints, loading, refreshing, error, updateItem, addItem, reload: () => loadItems({ force: true }), needsAzureIntegration: !demoMode && !azureReady };
 }

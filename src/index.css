@@ -17,6 +17,40 @@
   --starkTypeTaskBg: #fff8dc;
   --starkTypeBug: #c62828;
   --starkTypeBugBg: #fff0f0;
+  --starkTypeFeature: #7c3aed;
+  --starkTypeFeatureBg: #f5f3ff;
+  --starkTypeEpic: #ea580c;
+  --starkTypeEpicBg: #fff7ed;
+  --starkTypeDefault: #64748b;
+  --starkTypeDefaultBg: #f8fafc;
+  --starkStatusInQa: #2563eb;
+  --starkStatusInQaBg: #eff6ff;
+  --starkStatusInBeta: #7c3aed;
+  --starkStatusInBetaBg: #f5f3ff;
+  --starkStatusReadyBeta: #d97706;
+  --starkStatusReadyBetaBg: #fffbeb;
+  --starkStatusHmgCnk: #0891b2;
+  --starkStatusHmgCnkBg: #ecfeff;
+  --starkStatusReadyProd: #16a34a;
+  --starkStatusReadyProdBg: #f0fdf4;
+  --starkStatusDefault: #64748b;
+  --starkStatusDefaultBg: #f8fafc;
+  --starkResultPass: #166534;
+  --starkResultPassBg: #dcfce7;
+  --starkResultFail: #991b1b;
+  --starkResultFailBg: #fee2e2;
+  --starkResultLimitation: #9a6700;
+  --starkResultLimitationBg: #fff3cd;
+  --starkHcOperational: #16a34a;
+  --starkHcOperationalBg: #f0fdf4;
+  --starkHcDegraded: #d97706;
+  --starkHcDegradedBg: #fffbeb;
+  --starkHcOutage: #dc2626;
+  --starkHcOutageBg: #fef2f2;
+  --starkHcMaintenance: #2563eb;
+  --starkHcMaintenanceBg: #eff6ff;
+  --starkHcUnknown: #64748b;
+  --starkHcUnknownBg: #f8fafc;
   color-scheme: light;
 }
 
@@ -36,6 +70,45 @@
   --starkTypeTaskBg: #352f12;
   --starkTypeBug: #ff8181;
   --starkTypeBugBg: #3a2028;
+  /* Tom "400" do Tailwind, nao "300" — o 300 (ex.: #c4b5fd) e legivel como
+     texto de pill, mas usado como bolinha/segmento de grafico contra o fundo
+     escuro fica pastel/lavado. 400 e visivelmente mais saturado/vivo sem
+     perder contraste como texto (pedido real do usuario ao ver o donut de
+     status quase sem cor). */
+  --starkTypeFeature: #a78bfa;
+  --starkTypeFeatureBg: #2e1a47;
+  --starkTypeEpic: #fb923c;
+  --starkTypeEpicBg: #4a2210;
+  --starkTypeDefault: #94a3b8;
+  --starkTypeDefaultBg: #1f2937;
+  --starkStatusInQa: #60a5fa;
+  --starkStatusInQaBg: #13294d;
+  --starkStatusInBeta: #a78bfa;
+  --starkStatusInBetaBg: #2e1a47;
+  --starkStatusReadyBeta: #fbbf24;
+  --starkStatusReadyBetaBg: #3a2a0f;
+  --starkStatusHmgCnk: #22d3ee;
+  --starkStatusHmgCnkBg: #0e3a42;
+  --starkStatusReadyProd: #4ade80;
+  --starkStatusReadyProdBg: #143a24;
+  --starkStatusDefault: #94a3b8;
+  --starkStatusDefaultBg: #1f2937;
+  --starkResultPass: #4ade80;
+  --starkResultPassBg: #143a24;
+  --starkResultFail: #f87171;
+  --starkResultFailBg: #3a1414;
+  --starkResultLimitation: #fbbf24;
+  --starkResultLimitationBg: #3a2a0f;
+  --starkHcOperational: #4ade80;
+  --starkHcOperationalBg: #143a24;
+  --starkHcDegraded: #fbbf24;
+  --starkHcDegradedBg: #3a2a0f;
+  --starkHcOutage: #f87171;
+  --starkHcOutageBg: #3a1414;
+  --starkHcMaintenance: #60a5fa;
+  --starkHcMaintenanceBg: #13294d;
+  --starkHcUnknown: #94a3b8;
+  --starkHcUnknownBg: #1f2937;
   color-scheme: dark;
 }
 
@@ -110,6 +183,19 @@ body {
 .workbench-content {
   position: relative;
   min-width: 0;
+  /* height:auto sozinho encolhia pro tamanho do conteudo mesmo com pouca
+     coisa na tela (ex.: board com so 2 cards), deixando um vao morto entre
+     o painel e o rodape em vez do painel acompanhar a viewport (pedido real
+     do usuario: "ancorado nos 4 cantos", responsivo). min-height da o piso
+     (preenche a linha 1fr do grid do layout quando o conteudo e curto) sem
+     reintroduzir o corte de conteudo alto que existia antes com height fixo
+     + overflow:hidden — ainda cresce e rola normalmente com mais conteudo.
+     Precisa descontar os 24px da propria margem vertical (12px em cima +
+     12px embaixo): min-height:100% sozinho ignora a margem do proprio box,
+     entao a caixa ficava 24px mais alta que a linha do grid e vazava por
+     cima do rodape (bug real reportado pelo usuario logo depois do fix
+     anterior). */
+  min-height: calc(100% - 24px);
   height: auto;
   margin: 12px 18px;
   padding: 16px;
@@ -654,6 +740,7 @@ body {
   cursor: pointer;
 }
 .stark-badge-demo { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: #fef3c7; color: #92400e; }
+:root[data-theme="dark"] .stark-badge-demo { background: #3a2a0f; color: #fcd34d; }
 
 .stark-onboarding-hint {
   margin-top: 8px;
@@ -1070,6 +1157,28 @@ body {
 }
 .stark-login-terms-modal footer button.secondary {
   background: #f8fafc;
+}
+:root[data-theme="dark"] .stark-login-terms-modal {
+  background: #111827;
+  color: #e5e7eb;
+  border-color: #334155;
+}
+:root[data-theme="dark"] .stark-login-terms-modal header,
+:root[data-theme="dark"] .stark-login-terms-modal footer {
+  border-color: #334155;
+}
+:root[data-theme="dark"] .stark-login-terms-modal header span {
+  background: #3a2a0f;
+  color: #fcd34d;
+}
+:root[data-theme="dark"] .stark-login-terms-modal header button,
+:root[data-theme="dark"] .stark-login-terms-modal footer button {
+  background: #172033;
+  color: #e5e7eb;
+  border-color: #334155;
+}
+:root[data-theme="dark"] .stark-login-terms-modal footer button.secondary {
+  background: #172033;
 }
 .stark-login-terms-body {
   padding: 20px;
@@ -2210,6 +2319,10 @@ body {
 .mb-home-note-color:hover {
   background: #fff;
 }
+:root[data-theme="dark"] .mb-home-note-toolbar button:hover,
+:root[data-theme="dark"] .mb-home-note-color:hover {
+  background: #334155;
+}
 .mb-home-note-color {
   position: relative;
   overflow: hidden;
@@ -2772,6 +2885,228 @@ body {
   font-size: 11px;
   font-weight: 800;
 }
+
+/* ==========================================================================
+   FilterBar / FilterField / SprintRangeFilter — componente unico de filtro,
+   substitui as 4 implementacoes divergentes que existiam por tela (grade
+   fixa que orfanava item, combobox reimplementado 3x, pill reimplementado
+   4x). So usa var(--stark*) — funciona nos dois temas sem bloco de override
+   separado (a fragilidade que .mbaz-filter-acc tinha, dependendo de uma
+   regra ~2800 linhas depois so pra funcionar no escuro, nao se repete aqui).
+   Sem `.mbaz-react-shell`/`.mbdhc-governance` como ancestral exigido —
+   funciona em qualquer tela, incluindo as que nao tem esses wrappers hoje
+   (Colaboradores, Gerenciamento). ========================================== */
+.stark-filterbar {
+  border: 1px solid var(--starkBorder);
+  border-radius: 8px;
+  background: var(--starkSurface);
+  overflow: visible;
+}
+.stark-filterbar > summary {
+  list-style: none;
+  min-height: 38px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  color: var(--starkText);
+  font-size: 12px;
+  font-weight: 800;
+}
+.stark-filterbar > summary::-webkit-details-marker {
+  display: none;
+}
+.stark-filterbar-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  overflow: hidden;
+}
+.stark-filterbar-title small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--starkMuted);
+  font-weight: 600;
+  font-size: 11px;
+}
+.stark-filterbar-count {
+  color: var(--starkMuted);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+/* Marcador nativo do <summary> escondido acima sem nada visivel no lugar
+   deixava dificil reconhecer que aquilo era um filtro clicavel/expansivel
+   (feedback real de usabilidade) — chevron proprio, chip de fundo pra
+   ficar destacado, gira 180deg olhando o atributo nativo [open]. */
+.stark-filterbar-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--starkSurfaceAlt);
+  border: 1px solid var(--starkBorder);
+  color: var(--starkAccent);
+  font-size: 12px;
+  transition: transform .18s ease;
+  flex: none;
+}
+.stark-filterbar[open] .stark-filterbar-chevron {
+  transform: rotate(180deg);
+}
+.stark-filterbar-body {
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--starkBorder);
+}
+.stark-filterbar-group {
+  padding-top: 10px;
+  margin-top: 10px;
+  border-top: 1px dashed var(--starkBorder);
+}
+.stark-filterbar-group:first-child {
+  padding-top: 0;
+  margin-top: 0;
+  border-top: none;
+}
+.stark-filterbar-group-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--starkMuted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.stark-filterbar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  align-items: start;
+}
+.stark-filterbar-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 10px;
+  margin-top: 10px;
+  border-top: 1px dashed var(--starkBorder);
+}
+.stark-filterbar-clear-btn {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--starkBorder);
+  border-radius: 8px;
+  background: var(--starkSurfaceAlt);
+  color: var(--starkText);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.stark-filterbar-clear-btn:hover {
+  border-color: var(--starkAccent);
+  color: var(--starkAccent);
+}
+
+/* FilterField em modo chips — rotulo + fileira de pills sempre visiveis,
+   pro conjunto pequeno e fixo (Status/Ambiente/Resultado/Tipo). Mesma
+   altura minima de linha (34px) do trigger do FilterCombobox ao lado —
+   nao repete o bug de alinhamento desta mesma noite (rotulo empilhado
+   sobre o controle ficando mais alto que o vizinho de uma linha so). */
+.stark-filter-field.chips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  justify-content: center;
+  min-height: 34px;
+}
+.stark-filter-field-label {
+  color: var(--starkText);
+  font-size: 12px;
+  font-weight: 900;
+}
+.stark-filter-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.stark-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--starkBorder);
+  border-radius: 999px;
+  background: var(--starkSurfaceAlt);
+  color: var(--starkText);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.stark-filter-chip.active {
+  border-color: var(--starkAccent);
+  background: var(--starkAccentSoft);
+  color: var(--starkAccent);
+}
+.stark-filter-chip-empty {
+  color: var(--starkMuted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Icones/dots reaproveitados tanto no chip quanto na linha do dropdown. */
+.stark-filter-icon {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  flex: none;
+}
+.stark-filter-status-icon {
+  font-size: 12px;
+  flex: none;
+}
+.stark-filter-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: none;
+}
+
+/* Range de sprint (De/Ate) — implementacao unica pros lugares que hoje
+   reimplementam isso quase identico (ver SprintRangeFilter.jsx). Um unico
+   botao-gatilho (herda de .mbw-combobox/.mbw-combobox-trigger) que abre um
+   menu com os dois campos — mesmo padrao visual do combobox "Board" do
+   Quadro de qualidade. Antes eram 2 campos sempre abertos lado a lado
+   espremidos numa unica celula da grade (~160px), truncando o rotulo pra
+   1 letra só — dentro do menu (~300px+) os dois campos tem espaco de
+   verdade (bug real reportado pelo usuario). */
+.stark-sprint-range-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.stark-sprint-range-fields {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+.stark-sprint-range-fields > * {
+  flex: 1;
+  min-width: 0;
+}
+.stark-sprint-range-hint {
+  color: var(--starkMuted);
+  font-size: 11px;
+}
+
 .mbw-toolbar {
   display: flex;
   align-items: end;
@@ -3140,6 +3475,11 @@ body {
   font-weight: 900;
   box-shadow: 0 0 0 1px rgba(22,101,52,.15);
 }
+:root[data-theme="dark"] .mbw-country-visual.fallback span {
+  background: #143a24;
+  color: #86efac;
+  box-shadow: 0 0 0 1px rgba(134,239,172,.18);
+}
 .mbw-country-visual.compact {
   justify-content: center;
 }
@@ -3326,8 +3666,14 @@ body {
   --mbdhc-blue: #0078d4;
   --mbdhc-red: #d14343;
   --mbdhc-gold: #c99a00;
-  --mbdhc-border: #d7dde8;
-  --mbdhc-muted: #64748b;
+  /* Duplicavam --starkBorder/--starkMuted com o MESMO hex fixo, sem
+     variante propria pro tema escuro em lugar nenhum — qualquer elemento
+     usando var(--mbdhc-border/muted) ficava com a mesma cor clara nos dois
+     temas (bug real de paridade escura, alem da duplicacao). Alias direto
+     pros tokens globais: resolve os dois de uma vez, sem precisar tocar
+     nos ~24 lugares que ja referenciam var(--mbdhc-border)/var(--mbdhc-muted). */
+  --mbdhc-border: var(--starkBorder);
+  --mbdhc-muted: var(--starkMuted);
 }
 .mbdhc-governance .mbdhc-button,
 .mbdhc-governance .mbdhc-icon-button {
@@ -3357,70 +3703,11 @@ body {
   display: inline-grid;
   place-items: center;
 }
-.mbdhc-governance .mbdhc-filters,
 .mbdhc-governance .mbdhc-section,
 .mbdhc-governance .mbdhc-chart-card {
   background: #fff;
   border: 1px solid var(--mbdhc-border);
   border-radius: 7px;
-}
-.mbdhc-governance .mbdhc-filters summary {
-  list-style: none;
-  min-height: 38px;
-  padding: 0 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  color: #172033;
-  font-weight: 800;
-}
-.mbdhc-governance .mbdhc-filters summary::-webkit-details-marker { display: none; }
-.mbdhc-governance .mbdhc-filters summary small {
-  margin-left: 6px;
-  color: var(--mbdhc-muted);
-  font-weight: 500;
-}
-.mbdhc-governance .mbdhc-filter-grid {
-  border-top: 1px solid var(--mbdhc-border);
-  padding: 12px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
-  gap: 10px;
-  align-items: end;
-}
-.mbdhc-governance .mbdhc-sprint-range-hint {
-  align-self: center;
-  color: var(--mbdhc-muted);
-  font-size: 12px;
-}
-.mbdhc-governance .mbdhc-filter-actions {
-  display: flex;
-  align-items: flex-end;
-}
-.mbdhc-governance .mbdhc-filter-actions .mbdhc-button {
-  width: 100%;
-}
-.mbdhc-governance .mbdhc-field {
-  min-width: 0;
-  display: grid;
-  gap: 6px;
-}
-.mbdhc-governance .mbdhc-field > span {
-  color: #344054;
-  font-size: 11px;
-  font-weight: 800;
-}
-.mbdhc-governance .mbdhc-field input,
-.mbdhc-governance .mbdhc-field select {
-  width: 100%;
-  min-height: 34px;
-  border: 1px solid #cfd6df;
-  border-radius: 7px;
-  padding: 7px 9px;
-  background: #fff;
-  color: #172033;
-  font: 12px "Segoe UI", Arial, sans-serif;
 }
 .mbdhc-governance .mbdhc-kpi-grid {
   display: grid;
@@ -3437,6 +3724,9 @@ body {
   border-radius: 12px;
   padding: 10px 12px;
   gap: 8px;
+}
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-kpi-clusters .mbdhc-metric-cluster {
+  background: #111827;
 }
 .mbdhc-governance .mbdhc-kpi-clusters .mbdhc-metric-cluster > strong {
   flex: 1 0 100%;
@@ -3592,6 +3882,10 @@ body {
 .mbdhc-governance .mbdhc-segment-track .pass { background: #16a34a; }
 .mbdhc-governance .mbdhc-segment-track .fail { background: #dc2626; }
 .mbdhc-governance .mbdhc-segment-track .limitation { background: #d97706; }
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-overview-track,
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-segment-track {
+  background: #1f2937;
+}
 @keyframes mbdhcBarGrow {
   from { transform: scaleX(.08); transform-origin: left; opacity: .45; }
   to { transform: scaleX(1); transform-origin: left; opacity: 1; }
@@ -3669,6 +3963,9 @@ body {
   border-radius: 8px;
   overflow: hidden;
 }
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-bar-row > div {
+  background: #1f2937;
+}
 .mbdhc-governance .mbdhc-bar-row b {
   display: block;
   height: 100%;
@@ -3725,6 +4022,9 @@ body {
   border-radius: 7px;
   overflow: hidden;
 }
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-country-bar i {
+  background: #1f2937;
+}
 .mbdhc-governance .mbdhc-country-bar b {
   display: block;
   height: 100%;
@@ -3750,6 +4050,10 @@ body {
   background: #fff;
   color: var(--mbdhc-blue);
   box-shadow: 0 1px 3px rgba(15,23,42,.12);
+}
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-view-controls button.active {
+  background: #172033;
+  box-shadow: 0 1px 3px rgba(0,0,0,.3);
 }
 .mbdhc-governance .mbdhc-dev-grid {
   display: grid;
@@ -3914,6 +4218,11 @@ body {
   font-weight: 900;
   border: 1px solid #cbd5e1;
 }
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-country-pill.more {
+  background: #1f2937;
+  color: #cbd5e1;
+  border-color: #334155;
+}
 .mbdhc-governance .mbdhc-country-pill.more::after,
 .mbdhc-governance .mbdhc-work-test-toggle::after {
   content: attr(data-tooltip);
@@ -3949,6 +4258,9 @@ body {
   border-radius: 999px;
   overflow: hidden;
   position: relative;
+}
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-dev-card .mbdhc-progress {
+  background: #1f2937;
 }
 .mbdhc-governance .mbdhc-dev-card .mbdhc-progress span {
   display: block;
@@ -4185,7 +4497,7 @@ body {
   margin-top: 6px;
 }
 
-:root[data-theme="dark"] .mbdhc-governance :is(.mbdhc-filters,.mbdhc-section,.mbdhc-chart-card,.mbdhc-dev-card,.mbdhc-work-card,.mbdhc-metric-cluster,.mbdhc-dev-env-details,.mbdhc-dev-env-details > div > span) {
+:root[data-theme="dark"] .mbdhc-governance :is(.mbdhc-section,.mbdhc-chart-card,.mbdhc-dev-card,.mbdhc-work-card,.mbdhc-metric-cluster,.mbdhc-dev-env-details,.mbdhc-dev-env-details > div > span) {
   background: #111827;
   border-color: #334155;
   color: #e5e7eb;
@@ -4216,6 +4528,10 @@ body {
 :root[data-theme="dark"] .mbdhc-governance .mbdhc-role-pill.role-qa { background: rgba(124,58,237,.2); color: #c4b5fd; }
 :root[data-theme="dark"] .mbdhc-governance .mbdhc-role-pill.role-gestao { background: rgba(22,163,74,.18); color: #86efac; }
 :root[data-theme="dark"] .mbdhc-governance .mbdhc-role-pill.role-gerente { background: rgba(217,119,6,.2); color: #fdba74; }
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-work-kind.role-qa { background: rgba(124,58,237,.2); color: #c4b5fd; }
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-work-kind.role-dev { background: rgba(37,99,235,.18); color: #93c5fd; }
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-work-kind.role-gestao,
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-work-kind.role-gerente { background: rgba(22,163,74,.18); color: #86efac; }
 :root[data-theme="dark"] .mbdhc-governance .mbdhc-country-pill {
   background: #172033;
   border-color: #334155;
@@ -4246,6 +4562,10 @@ body {
 .mbdhc-governance .mbdhc-work-card.missing-hours {
   border-color: #dc2626;
   background: #fffaf9;
+}
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-work-card.missing-hours {
+  border-color: #dc2626;
+  background: linear-gradient(90deg, rgba(220,38,38,.14), #111827);
 }
 .mbdhc-governance .mbdhc-work-card:hover { box-shadow: 0 7px 18px rgba(15,23,42,.09); }
 .mbdhc-governance .mbdhc-work-main { min-width: 0; }
@@ -4331,6 +4651,9 @@ body {
   background: #e8eef7;
   position: relative;
 }
+:root[data-theme="dark"] .mbdhc-governance .mbdhc-work-hour-progress {
+  background: #1f2937;
+}
 .mbdhc-governance .mbdhc-work-hour-progress::before {
   content: "";
   display: block;
@@ -4350,7 +4673,7 @@ body {
 .mbdhc-governance .mbdhc-dev-grid.mode-compact .mbdhc-dev-metric-clusters { grid-template-columns: 1fr; }
 .mbdhc-governance .mbdhc-dev-grid.mode-compact .mbdhc-dev-env-details,
 .mbdhc-governance .mbdhc-dev-grid.mode-compact .mbdhc-dev-actions { display: none; }
-:root[data-theme="dark"] .mbdhc-governance :is(.mbdhc-filters,.mbdhc-kpi,.mbdhc-section,.mbdhc-chart-card,.mbdhc-dev-card,.mbdhc-work-card,.mbdhc-country-pill,.mbdhc-work-test-panel,.mbdhc-overview-card,.mbdhc-dev-env-details) {
+:root[data-theme="dark"] .mbdhc-governance :is(.mbdhc-kpi,.mbdhc-section,.mbdhc-chart-card,.mbdhc-dev-card,.mbdhc-work-card,.mbdhc-country-pill,.mbdhc-work-test-panel,.mbdhc-overview-card,.mbdhc-dev-env-details) {
   background: #111827;
   color: #e5e7eb;
   border-color: #334155;
@@ -4358,7 +4681,7 @@ body {
 :root[data-theme="dark"] .mbdhc-governance :is(.mbdhc-section-header h3,.mbdhc-kpi strong,.mbdhc-dev-status strong,.mbdhc-dev-metrics strong,.mbdhc-metric-cluster b,.mbdhc-overview-card header strong,.mbdhc-work-main h4,.mbdhc-work-hours strong) { color: #f8fafc; }
 :root[data-theme="dark"] .mbdhc-governance .mbdhc-work-test-toggle { color: #e5e7eb; border-top-color: #334155; }
 :root[data-theme="dark"] .mbdhc-governance .mbdhc-work-test-toggle span { background: #172033; border-color: #334155; }
-:root[data-theme="dark"] .mbdhc-governance :is(.mbdhc-field input,.mbdhc-field select,.mbdhc-button.secondary,.mbdhc-icon-button,.mbdhc-view-controls,.mbdhc-dev-metrics>div,.mbdhc-metric-cluster,.mbdhc-metric-cluster span,.mbdhc-dev-env-details > div > span) {
+:root[data-theme="dark"] .mbdhc-governance :is(.mbdhc-button.secondary,.mbdhc-icon-button,.mbdhc-view-controls,.mbdhc-dev-metrics>div,.mbdhc-metric-cluster,.mbdhc-metric-cluster span,.mbdhc-dev-env-details > div > span) {
   background: #172033;
   color: #e5e7eb;
   border-color: #334155;
@@ -5165,23 +5488,6 @@ body {
   color: var(--starkText);
   font-size: 14px;
 }
-.mb-collaborators-filters {
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(160px, 220px);
-  gap: 8px;
-}
-.mb-collaborators-filters input,
-.mb-collaborators-filters select {
-  width: 100%;
-  min-height: 36px;
-  border: 1px solid var(--starkBorder);
-  border-radius: 8px;
-  background: var(--starkSurface);
-  color: var(--starkText);
-  padding: 0 10px;
-  font-size: 12px;
-  font-weight: 700;
-}
 .mb-settings-switches label {
   display: flex;
   align-items: center;
@@ -5541,7 +5847,6 @@ body {
   .mbwi-grid-react,
   .mb-settings-grid-react,
   .mb-collaborators-metrics,
-  .mb-collaborators-filters,
   .mb-my-layout {
     grid-template-columns: 1fr;
   }
@@ -5579,11 +5884,16 @@ body {
      (vao gigante em branco embaixo dos graficos) E cortava/escondia
      qualquer coisa que ultrapassasse essa altura (donut e matriz por pais
      ficavam cortados) sempre que o conteudo crescia com mais graficos —
-     bug real reportado em producao. Cresce com o proprio conteudo agora. */
+     bug real reportado em producao. Cresce com o proprio conteudo agora.
+     min-height:100% (adicionado depois) preenche a altura disponivel do
+     layout quando o conteudo real e curto (ex.: board com poucos cards) sem
+     repetir o bug antigo — so um piso, nao um teto, entao ainda cresce e
+     rola normalmente com mais conteudo. */
   position: relative;
   inset: auto;
   right: auto;
   width: 100%;
+  min-height: 100%;
   height: auto;
   z-index: 1;
   background: #f6f8fb;
@@ -5775,14 +6085,66 @@ body {
 .mbaz-react-shell .mbaz-filter-acc summary::-webkit-details-marker {
   display: none;
 }
+/* O marcador nativo do <summary> foi escondido acima (list-style/webkit
+   marker) sem nada visivel no lugar — usuarios nao reconheciam isso como um
+   filtro clicavel/expansivel (feedback real de usabilidade). Chevron
+   proprio, com chip de fundo pra ficar bem destacado, que gira 180deg
+   olhando o atributo nativo [open] do <details> (funciona mesmo quando o
+   estado de aberto/fechado nao passa pelo React, como em .mbdhc-filters). */
+.mbaz-react-shell .mbaz-filter-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--starkSurfaceAlt, #eef2f7);
+  border: 1px solid var(--starkBorder, #d7dde8);
+  color: var(--starkAccent, #0078d4);
+  font-size: 12px;
+  transition: transform .18s ease;
+  flex: none;
+}
+.mbaz-filter-acc[open] .mbaz-filter-chevron {
+  transform: rotate(180deg);
+}
 .mbaz-react-shell .mbaz-filter-body {
   padding: 0 11px 11px;
 }
+/* Antes um unico grid de 2 colunas misturando filtros de verdade (Pessoa,
+   Pais, QA...) com opcoes de exibicao (Agrupar, Ordenar, Expandir todos) em
+   quantidade impar de itens — sobrava sempre um item sozinho numa linha
+   vazia, e nada distinguia visualmente "isso filtra o board" de "isso so
+   muda como os cards aparecem". Usuario relatou como "confuso e feio". Cada
+   grupo agora tem seu proprio rotulo + grid auto-fit (sem coluna fixa, sem
+   linha orfa) e uma trilha superior separando um grupo do outro. */
+.mbaz-react-shell .mbaz-filter-group {
+  padding-top: 10px;
+  margin-top: 10px;
+  border-top: 1px dashed #e2e8f0;
+}
+.mbaz-react-shell .mbaz-filter-group:first-child {
+  padding-top: 0;
+  margin-top: 0;
+  border-top: none;
+}
+.mbaz-react-shell .mbaz-filter-group-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
 .mbaz-react-shell .mbaz-filters {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+}
+.mbaz-react-shell .mbaz-filters-display {
+  margin-bottom: 0;
 }
 .mbaz-react-shell .mbw-field {
   color: #475569;
@@ -5792,30 +6154,50 @@ body {
 }
 .mbaz-react-shell .mbaz-filter-actions {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  padding-top: 10px;
+  margin-top: 10px;
+  border-top: 1px dashed #e2e8f0;
 }
 .mbaz-react-shell .mbaz-filter-checkbox {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   min-height: 32px;
+  margin-top: 2px;
   color: #334155;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
 }
+/* Empilhado (rotulo em cima, controle embaixo) ficava mais alto que o
+   trigger de 1 linha do FilterCombobox (Pessoa/Pais/QA/.../Agrupar) —
+   mesma grade, alturas diferentes, itens desalinhados entre si (bug real
+   reportado pelo usuario: "exibicao pra cima, os demais pra baixo"). Vira
+   1 linha so, mesma altura minima dos triggers ao lado. */
 .mbaz-react-shell .mbaz-sort-wrap {
-  display: grid;
-  gap: 5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
 }
 .mbaz-react-shell .mbaz-sort-wrap label {
-  color: #475569;
-  font-size: 10px;
-  font-weight: 850;
-  text-transform: uppercase;
+  flex: none;
+  color: #172033;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+.mbaz-react-shell .mbaz-sort-wrap .mbaz-select {
+  flex: 1;
+  min-width: 0;
+}
+.mbaz-react-shell .mbaz-sort-wrap .mbaz-btn {
+  flex: 1;
+  min-width: 0;
 }
 .mbaz-react-shell .mbaz-dd-wrap {
   position: relative;
@@ -6853,6 +7235,17 @@ body {
   color: #005a9e;
   box-shadow: inset 0 0 0 1px rgba(0,120,212,.16);
 }
+:root[data-theme="dark"] .mbaz-new-modal-toggle-pill {
+  background: #172033;
+  border-color: #334155;
+  color: #e5e7eb;
+}
+:root[data-theme="dark"] .mbaz-new-modal-toggle-pill.active {
+  border-color: #2563eb;
+  background: rgba(37,99,235,.18);
+  color: #93c5fd;
+  box-shadow: inset 0 0 0 1px rgba(96,165,250,.25);
+}
 .mbaz-new-modal-toggle-pill img {
   width: 18px;
   height: 18px;
@@ -6888,6 +7281,10 @@ body {
 .mbaz-new-modal-dropzone.active {
   border-color: #0078d4;
   background: #dbeafe;
+}
+:root[data-theme="dark"] .mbaz-new-modal-dropzone.active {
+  border-color: #2563eb;
+  background: rgba(37,99,235,.18);
 }
 .mbaz-new-modal-dropzone i {
   font-size: 22px;
@@ -6970,6 +7367,11 @@ body {
   background: #fee2e2;
   color: #991b1b;
 }
+:root[data-theme="dark"] .mbaz-new-modal-attachment-list button {
+  border-color: #7a2626;
+  background: #3a1414;
+  color: #fca5a5;
+}
 .mbaz-new-modal-preview {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, .75fr);
@@ -7022,6 +7424,11 @@ body {
   background: #fee2e2;
   color: #991b1b;
   padding: 0;
+}
+:root[data-theme="dark"] .mbaz-new-modal-evidence-grid button {
+  border-color: #7a2626;
+  background: #3a1414;
+  color: #fca5a5;
 }
 .mbaz-new-modal-result-empty {
   min-height: 92px;
@@ -7097,6 +7504,34 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
+}
+/* Anexos ainda nao enviados usam o dataUrl bruto do arquivo (resolucao
+   nativa) — sem limite de tamanho aqui, uma evidencia grande empurrava a
+   coluna inteira do preview e criava rolagem horizontal no modal. */
+.mbaz-slack-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  min-width: 0;
+}
+.mbaz-slack-attachment {
+  display: block;
+  flex: 0 0 auto;
+}
+.mbaz-slack-attachment img {
+  display: block;
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  background: #fff;
+}
+:root[data-theme="dark"] .mbaz-slack-attachment img {
+  background: #172033;
+  border-color: #334155;
 }
 .mbaz-slack-preview-block > small {
   display: block;
@@ -8225,6 +8660,10 @@ body {
   border-radius: 8px;
   background: #fff;
 }
+:root[data-theme="dark"] .mbaz-new-modal-rich-html img {
+  background: #172033;
+  border-color: #334155;
+}
 .mbaz-new-modal-rich-html a.mbaz-broken-attachment {
   display: inline-flex;
   align-items: center;
@@ -8236,6 +8675,11 @@ body {
   color: #005a9e;
   font-size: 12px;
   font-weight: 800;
+}
+:root[data-theme="dark"] .mbaz-new-modal-rich-html a.mbaz-broken-attachment {
+  border-color: #3b82f6;
+  background: rgba(37,99,235,.14);
+  color: #93c5fd;
 }
 .mbaz-new-modal-rich-html a.mbaz-broken-attachment img {
   display: none;
@@ -8258,6 +8702,11 @@ body {
   border-radius: 6px;
   background: #eef2f7;
   color: #0f172a;
+}
+:root[data-theme="dark"] .mbaz-new-modal-rich-html pre,
+:root[data-theme="dark"] .mbaz-new-modal-rich-html code {
+  background: #0f172a;
+  color: #e5e7eb;
 }
 .mbaz-new-modal-rich-html pre {
   padding: 8px;
@@ -8325,6 +8774,9 @@ body {
   flex: 1;
   border: 0;
   background: #fff;
+}
+:root[data-theme="dark"] .mbaz-new-modal-iframe {
+  background: #111827;
 }
 .mbaz-new-modal-fallback {
   min-height: 38px;
@@ -8402,10 +8854,22 @@ body {
 :root[data-theme="dark"] .mbaz-react-shell .mbaz-insight-card small {
   color: #94a3b8;
 }
-:root[data-theme="dark"] .mbaz-react-shell :is(.mbaz-header,.mbaz-tabs,.mbaz-filter-acc,.mbaz-dd-panel,.mbaz-chart,.mbaz-qa-metrics,.mbaz-country-state,.mbaz-card,.mbaz-create,.mbaz-card-test-env,.mbaz-empty) {
+:root[data-theme="dark"] .mbaz-react-shell :is(.mbaz-header,.mbaz-tabs,.mbaz-filter-acc,.mbaz-dd-panel,.mbaz-chart,.mbaz-qa-metrics,.mbaz-country-state,.mbaz-card,.mbaz-create,.mbaz-card-test-env,.mbaz-empty,.mbaz-loading-box,.mbaz-stat) {
   background: #111827;
   color: #e5e7eb;
   border-color: #334155;
+}
+:root[data-theme="dark"] .mbaz-react-shell .mbaz-stat.active {
+  background: var(--stat-bg, #172033);
+}
+:root[data-theme="dark"] .mbaz-react-shell :is(.mbaz-stacked,.mbaz-qa-bar) {
+  background: #1f2937;
+}
+:root[data-theme="dark"] .mbaz-react-shell :is(.mbaz-filter-group,.mbaz-filter-actions) {
+  border-top-color: #334155;
+}
+:root[data-theme="dark"] .mbaz-react-shell .mbaz-filter-checkbox {
+  color: #e5e7eb;
 }
 :root[data-theme="dark"] .mbaz-react-shell :is(.mbaz-title strong,.mbaz-item-title,.mbaz-stat b,.mbaz-chart-head h3) {
   color: #f8fafc;
@@ -8414,6 +8878,11 @@ body {
   color: #94a3b8;
 }
 :root[data-theme="dark"] .mbaz-react-shell :is(.mbaz-input,.mbaz-select,.mbaz-btn,.mbaz-icon-btn,.mbaz-card-qa-select,.mbaz-card-result-select,.mbaz-dd-trigger,.mbw-field select,.mbw-field input) {
+  background: #172033;
+  color: #e5e7eb;
+  border-color: #334155;
+}
+:root[data-theme="dark"] .mbaz-react-shell .mbaz-dd-actions .mbaz-btn {
   background: #172033;
   color: #e5e7eb;
   border-color: #334155;
@@ -8431,7 +8900,7 @@ body {
   border-color: #334155;
   color: #94a3b8;
 }
-:root[data-theme="dark"] .mbaz-react-shell :is(.mbaz-test-summary,.mbaz-pr-env-pill) {
+:root[data-theme="dark"] .mbaz-react-shell :is(.mbaz-test-summary,.mbaz-pr-env-pill,.mbaz-pill,.mbw-env,.mbw-country) {
   background: #172033;
   border-color: #334155;
   color: #94a3b8;
@@ -8441,10 +8910,19 @@ body {
   border-color: #1f5c37;
   color: #86efac;
 }
-:root[data-theme="dark"] .mbaz-react-shell :is(.mbaz-test-summary.fail,.mbaz-pr-env-pill.prod,.mbaz-evidence-run-group.fail) {
+:root[data-theme="dark"] .mbaz-react-shell :is(.mbaz-test-summary.fail,.mbaz-pr-env-pill.prod,.mbaz-evidence-run-group.fail,.mbaz-pill.hot) {
   background: #3a1414;
   border-color: #7a2626;
   color: #fca5a5;
+}
+:root[data-theme="dark"] .mbaz-react-shell .mbaz-qa-legend-item.active {
+  background: rgba(37,99,235,.18);
+  border-color: #2563eb;
+  color: #93c5fd;
+}
+:root[data-theme="dark"] .mbaz-react-shell .mbaz-evidence-env-count {
+  background: #263244;
+  color: #f8fafc;
 }
 :root[data-theme="dark"] .mbaz-react-shell :is(.mbaz-test-summary.limitation,.mbaz-evidence-run-group.limitation) {
   background: #3a2a0f;
@@ -8738,6 +9216,10 @@ body {
   background: #f5f7fa;
   color: #64748b;
 }
+:root[data-theme="dark"] .mb-settings-workbench input:disabled {
+  background: #0f172a;
+  color: #64748b;
+}
 .mb-settings-workbench .mb-settings-subtitle,
 .mb-settings-workbench .mb-inline-heading {
   margin-top: 16px;
@@ -8830,6 +9312,9 @@ body {
   border-radius: 999px;
   cursor: pointer;
   transition: .18s;
+}
+:root[data-theme="dark"] .mb-settings-workbench .mb-switch-slider {
+  background: #334155;
 }
 .mb-settings-workbench .mb-switch-slider::before {
   content: "";
@@ -9199,6 +9684,16 @@ body {
   text-transform: uppercase;
 }
 .mb-my-summary-card-kpis .mb-my-metric-cluster.quality span { background: #eef6ff; }
+:root[data-theme="dark"] .mb-my-summary-card-kpis .mb-my-metric-cluster {
+  background: #172033;
+  border-color: #334155;
+}
+:root[data-theme="dark"] .mb-my-summary-card-kpis .mb-my-metric-cluster span {
+  background: #1f2937;
+}
+:root[data-theme="dark"] .mb-my-summary-card-kpis .mb-my-metric-cluster.quality span {
+  background: rgba(37,99,235,.18);
+}
 .mb-my-summary-links {
   display: inline-grid;
   grid-template-columns: repeat(3, minmax(82px, 1fr));
@@ -9208,6 +9703,10 @@ body {
   border-radius: 10px;
   background: #fff;
   min-width: 235px;
+}
+:root[data-theme="dark"] .mb-my-summary-links {
+  background: #172033;
+  border-color: #334155;
 }
 .mb-my-summary-links button {
   min-height: 42px;
@@ -9249,6 +9748,10 @@ body {
 .mb-my-summary-links button.active {
   background: #eaf4ff;
   box-shadow: inset 0 -3px 0 #0078d4;
+}
+:root[data-theme="dark"] .mb-my-summary-links button.active {
+  background: rgba(37,99,235,.18);
+  box-shadow: inset 0 -3px 0 #2563eb;
 }
 .mb-my-bulk-bar {
   min-height: 42px;
@@ -9341,88 +9844,6 @@ body {
 .mb-my-insights.is-collapsed {
   padding: 7px 8px;
 }
-.mb-my-filter-heading {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 10px;
-  padding-top: 2px;
-}
-.mb-my-filter-heading strong {
-  color: #0f172a;
-  font-size: 12px;
-  font-weight: 900;
-}
-.mb-my-filter-heading span {
-  color: #64748b;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.mb-my-items-filter-row {
-  display: grid;
-  grid-template-columns: auto repeat(4, minmax(130px, 1fr));
-  gap: 8px;
-  align-items: start;
-}
-.mb-my-type-toggles {
-  display: flex;
-  gap: 5px;
-}
-.mb-my-type-toggles button {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 32px;
-  padding: 0 11px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: #fff;
-  color: #64748b;
-  font-size: 11px;
-  font-weight: 900;
-  cursor: pointer;
-}
-:root[data-theme="dark"] .mb-my-type-toggles button {
-  background: #172033;
-  border-color: #334155;
-  color: #94a3b8;
-}
-.mb-my-type-toggles button img {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-}
-.mb-my-type-toggles .task.active {
-  background: #fff8dc;
-  border-color: #c99a00;
-  color: #8a6500;
-}
-.mb-my-type-toggles .bug.active {
-  background: #fff1f2;
-  border-color: #d13438;
-  color: #a4262c;
-}
-.mb-my-type-toggles .story.active {
-  background: #eef6ff;
-  border-color: #0078d4;
-  color: #005a9e;
-}
-:root[data-theme="dark"] .mb-my-type-toggles .task.active {
-  background: #3a3410;
-  border-color: #c99a00;
-  color: #fde68a;
-}
-:root[data-theme="dark"] .mb-my-type-toggles .bug.active {
-  background: #3a1414;
-  border-color: #d13438;
-  color: #fca5a5;
-}
-:root[data-theme="dark"] .mb-my-type-toggles .story.active {
-  background: #132a4a;
-  border-color: #2563eb;
-  color: #93c5fd;
-}
 .mb-my-test-dashboard {
   display: grid;
   grid-template-columns: minmax(260px, 1.1fr) minmax(280px, 1fr);
@@ -9511,167 +9932,6 @@ body {
   font-style: normal;
   font-weight: 800;
 }
-.mb-my-filter-pills {
-  min-height: 32px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex-wrap: wrap;
-  padding: 2px 0;
-}
-.mb-my-filter-pills strong {
-  color: #64748b;
-  font-size: 10px;
-  text-transform: uppercase;
-}
-.mb-my-filter-pills button,
-.mb-my-clear-filters,
-.mb-my-group-select select {
-  min-height: 30px;
-  border: 1px solid #cbd5e1;
-  border-radius: 999px;
-  background: #fff;
-  color: #334155;
-  padding: 0 9px;
-  font-size: 10px;
-  font-weight: 900;
-}
-.mb-my-filter-pills button {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.mb-my-filter-pills button img {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-}
-.mb-my-filter-pills button.active {
-  background: #0f172a;
-  border-color: #0f172a;
-  color: #fff;
-}
-.mb-my-filter-pills button.pass.active { background: #16a34a; border-color: #16a34a; }
-.mb-my-filter-pills button.fail.active { background: #dc2626; border-color: #dc2626; }
-.mb-my-filter-pills button.limitation.active { background: #d97706; border-color: #d97706; }
-.mb-my-group-select {
-  display: grid;
-  gap: 4px;
-  min-width: 180px;
-  color: #64748b;
-  font-size: 9px;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-.mb-my-group-select select {
-  border-radius: 8px;
-}
-.mb-my-clear-filters {
-  border-radius: 8px;
-  cursor: pointer;
-}
-.mb-my-filter {
-  position: relative;
-}
-.mb-my-filter-trigger {
-  min-height: 32px;
-  padding: 0 9px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: #fff;
-  color: #334155;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  list-style: none;
-  cursor: pointer;
-  font-size: 11px;
-  font-weight: 900;
-}
-.mb-my-filter-trigger::-webkit-details-marker {
-  display: none;
-}
-.mb-my-filter-trigger b {
-  color: #64748b;
-  font-size: 9px;
-}
-.mb-my-filter-panel {
-  position: absolute;
-  z-index: 500;
-  top: calc(100% + 4px);
-  left: 0;
-  width: min(300px, 80vw);
-  display: grid;
-  gap: 6px;
-  padding: 8px;
-  border: 1px solid #cbd5e1;
-  border-radius: 9px;
-  background: #fff;
-  box-shadow: 0 12px 34px rgba(15,23,42,.18);
-}
-.mb-my-filter-search,
-.mb-my-items-search input {
-  width: 100%;
-  min-height: 34px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: #fff;
-  color: #172033;
-  padding: 0 10px;
-  font-size: 12px;
-  outline: none;
-}
-.mb-my-filter-list {
-  display: grid;
-  gap: 2px;
-  max-height: 170px;
-  overflow: auto;
-}
-.mb-my-filter-option {
-  min-height: 24px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: #0f172a;
-  font-size: 12px;
-  cursor: pointer;
-}
-.mb-my-filter-option input {
-  width: 13px;
-  height: 13px;
-  margin: 0;
-}
-.mb-my-filter-empty {
-  color: #64748b;
-  font-size: 11px;
-}
-.mb-my-filter-actions {
-  display: flex;
-  gap: 5px;
-}
-.mb-my-filter-actions button {
-  min-height: 28px;
-  border: 1px solid #cbd5e1;
-  border-radius: 7px;
-  background: #fff;
-  color: #0f172a;
-  font-size: 10px;
-  font-weight: 800;
-}
-.mb-my-items-search {
-  position: relative;
-  display: block;
-}
-.mb-my-items-search svg {
-  position: absolute;
-  left: 10px;
-  top: 9px;
-  color: #64748b;
-}
-.mb-my-items-search input {
-  padding-left: 32px;
-}
 .mb-my-items-content {
   flex: 1;
   min-height: 300px;
@@ -9732,6 +9992,10 @@ body {
   background: #eef6ff;
   color: #005a9e;
   font-size: 10px;
+}
+:root[data-theme="dark"] .mb-my-group > summary b {
+  background: rgba(37,99,235,.18);
+  color: #93c5fd;
 }
 .mb-my-group-body {
   display: grid;
@@ -9908,6 +10172,9 @@ body {
 .mb-my-qa-board-card[data-work-item-type="bug"] {
   background: #fff5f5;
 }
+:root[data-theme="dark"] .mb-my-qa-board-card[data-work-item-type="bug"] {
+  background: linear-gradient(90deg, rgba(220,38,38,.12), #111827);
+}
 .mb-my-qa-board-card .mbaz-card-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -9945,6 +10212,11 @@ body {
   font-weight: 900;
   white-space: nowrap;
 }
+:root[data-theme="dark"] .mb-my-qa-board-card :is(.mbaz-pill,.mbaz-card-qa-select) {
+  background: #172033;
+  border-color: #334155;
+  color: #94a3b8;
+}
 .mb-my-qa-board-card .mbaz-pill.state {
   border: 0;
 }
@@ -9952,6 +10224,11 @@ body {
   background: #fee2e2;
   border-color: #fecaca;
   color: #991b1b;
+}
+:root[data-theme="dark"] .mb-my-qa-board-card .mbaz-pill.hot {
+  background: #3a1414;
+  border-color: #7a2626;
+  color: #fca5a5;
 }
 .mb-my-qa-board-card .mbaz-type-icon {
   width: 18px;
@@ -9998,6 +10275,11 @@ body {
 .mb-my-qa-board-card .mbaz-pr-env-pill.beta { background: #dcfce7; border-color: #86efac; color: #166534; }
 .mb-my-qa-board-card .mbaz-pr-env-pill.prod { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
 .mb-my-qa-board-card .mbaz-pr-env-pill.none { background: #f8fafc; color: #64748b; }
+:root[data-theme="dark"] .mb-my-qa-board-card .mbaz-pr-env-pill.none {
+  background: #172033;
+  border-color: #334155;
+  color: #94a3b8;
+}
 .mb-my-qa-board-card .mbaz-card-qa-select {
   max-width: 124px;
   padding: 0 7px;
@@ -10070,6 +10352,10 @@ body {
   border-radius: 999px;
   background: #e2e8f0;
   font-weight: 900;
+}
+:root[data-theme="dark"] .mb-my-qa-board-card .mbaz-evidence-env-count {
+  background: #263244;
+  color: #f8fafc;
 }
 .mb-my-qa-board-card .mbaz-evidence-help {
   color: #64748b;
@@ -10321,6 +10607,11 @@ body {
   background: #fee2e2;
   color: #991b1b;
 }
+:root[data-theme="dark"] .mb-my-item-tags span.critical {
+  border-color: #7a2626;
+  background: #3a1414;
+  color: #fca5a5;
+}
 .mb-my-source-pill {
   min-height: 19px;
   display: inline-flex;
@@ -10481,6 +10772,11 @@ body {
   border-radius: 8px;
   background: #fff;
 }
+:root[data-theme="dark"] .mb-my-hours-modal header button {
+  background: #172033;
+  border-color: #334155;
+  color: #e5e7eb;
+}
 .mb-my-hours-body {
   display: grid;
   gap: 10px;
@@ -10557,6 +10853,11 @@ body {
   font-size: 12px;
   font-weight: 800;
 }
+:root[data-theme="dark"] .mb-my-hours-modal footer button {
+  background: #172033;
+  border-color: #334155;
+  color: #e5e7eb;
+}
 .mb-my-hours-modal footer button.primary {
   background: #0078d4;
   border-color: #0078d4;
@@ -10581,17 +10882,9 @@ body {
 :root[data-theme="dark"] .mb-my-summary-card-kpis span,
 :root[data-theme="dark"] .mb-my-summary-hour-kpis span,
 :root[data-theme="dark"] .mb-my-summary-links button,
-:root[data-theme="dark"] .mb-my-filter-trigger,
-:root[data-theme="dark"] .mb-my-filter-panel,
-:root[data-theme="dark"] .mb-my-filter-actions button,
-:root[data-theme="dark"] .mb-my-items-search input,
-:root[data-theme="dark"] .mb-my-filter-search,
 :root[data-theme="dark"] .mb-my-item-status,
 :root[data-theme="dark"] .mb-country-pill,
 :root[data-theme="dark"] .mb-my-item-tags span,
-:root[data-theme="dark"] .mb-my-filter-pills button,
-:root[data-theme="dark"] .mb-my-group-select select,
-:root[data-theme="dark"] .mb-my-clear-filters,
 :root[data-theme="dark"] .mb-my-env-kpis > span,
 :root[data-theme="dark"] .mb-my-group > summary,
 :root[data-theme="dark"] .mb-my-group-body,
@@ -10619,8 +10912,7 @@ body {
 :root[data-theme="dark"] .mb-my-summary-hour-kpis b,
 :root[data-theme="dark"] .mb-my-qa-board-card .mbaz-item-title,
 :root[data-theme="dark"] .mb-my-env-kpis strong,
-:root[data-theme="dark"] .mb-my-insights > header strong,
-:root[data-theme="dark"] .mb-my-filter-heading strong {
+:root[data-theme="dark"] .mb-my-insights > header strong {
   color: #f8fafc;
 }
 :root[data-theme="dark"] .mb-my-item-title-link {
@@ -10642,15 +10934,12 @@ body {
 :root[data-theme="dark"] .mb-my-summary-card-kpis small,
 :root[data-theme="dark"] .mb-my-summary-hour-kpis small,
 :root[data-theme="dark"] .mb-my-item-meta,
-:root[data-theme="dark"] .mb-my-filter-trigger b,
-:root[data-theme="dark"] .mb-my-filter-pills strong,
 :root[data-theme="dark"] .mb-my-test-legend,
 :root[data-theme="dark"] .mb-my-env-kpis small,
 :root[data-theme="dark"] .mb-my-env-kpis em,
 :root[data-theme="dark"] .mb-my-qa-board-card .mbaz-sprint-pill,
 :root[data-theme="dark"] .mb-my-qa-board-card .mbaz-meta,
-:root[data-theme="dark"] .mb-my-insights > header small,
-:root[data-theme="dark"] .mb-my-filter-heading span {
+:root[data-theme="dark"] .mb-my-insights > header small {
   color: #94a3b8;
 }
 :root[data-theme="dark"] .mb-my-qa-board-card :is(.mbaz-test-summary,.mbaz-pr-env-pill) {
@@ -10699,9 +10988,6 @@ body {
   color: #f87171;
 }
 @media (max-width: 900px) {
-  .mb-my-items-filter-row {
-    grid-template-columns: 1fr 1fr;
-  }
   .mb-my-test-dashboard {
     grid-template-columns: 1fr;
   }
@@ -10717,7 +11003,6 @@ body {
   }
 }
 @media (max-width: 620px) {
-  .mb-my-items-filter-row,
   .mb-my-summary-card-kpis,
   .mb-my-summary-hour-kpis,
   .mb-my-summary-links {
@@ -10930,6 +11215,36 @@ body {
   background: #dc2626;
   border-color: #dc2626;
 }
+:root[data-theme="dark"] .mbaz-tests-page :is(.mbaz-evidence-filter.filter-pass,.mbaz-evidence-filter.filter-approved,.mbaz-evidence-filter.filter-beta) {
+  color: #86efac;
+  border-color: #1f5c37;
+  background: #143a24;
+}
+:root[data-theme="dark"] .mbaz-tests-page :is(.mbaz-evidence-filter.filter-fail,.mbaz-evidence-filter.filter-prod) {
+  color: #fca5a5;
+  border-color: #7a2626;
+  background: #3a1414;
+}
+:root[data-theme="dark"] .mbaz-tests-page .mbaz-evidence-filter.filter-limitation {
+  color: #fcd34d;
+  border-color: #7a5a1f;
+  background: #3a2a0f;
+}
+:root[data-theme="dark"] .mbaz-tests-page .mbaz-evidence-filter.filter-dev {
+  color: #94a3b8;
+  border-color: #334155;
+  background: #1f2937;
+}
+:root[data-theme="dark"] .mbaz-tests-page .mbaz-evidence-filter.filter-dev.active {
+  color: #e5e7eb;
+  background: #334155;
+  border-color: #475569;
+}
+:root[data-theme="dark"] .mbaz-tests-page .mbaz-evidence-filter.filter-qa {
+  color: #fde68a;
+  border-color: #7a6a1f;
+  background: #3a3410;
+}
 .mbaz-tests-page .mbaz-evidence-summary {
   display: flex;
   gap: 12px;
@@ -10973,6 +11288,10 @@ body {
   border-radius: 9px;
   background: #eef2f7;
   box-shadow: inset 0 0 0 1px #dbe3ef;
+}
+:root[data-theme="dark"] .mbaz-tests-page .mbaz-evidence-chart-bar {
+  background: #1f2937;
+  box-shadow: inset 0 0 0 1px #334155;
 }
 .mbaz-tests-page .mbaz-evidence-chart-segment {
   min-width: 0;
@@ -11095,6 +11414,18 @@ body {
   border-left-color: #c99a00;
   background: #fffdf2;
 }
+:root[data-theme="dark"] .mbaz-tests-page .mbaz-evidence-card[data-work-item-type="user story"] {
+  border-left-color: #0078d4;
+  background: linear-gradient(90deg, rgba(0,120,212,.12), #111827);
+}
+:root[data-theme="dark"] .mbaz-tests-page .mbaz-evidence-card[data-work-item-type="bug"] {
+  border-left-color: #d13438;
+  background: linear-gradient(90deg, rgba(220,38,38,.12), #111827);
+}
+:root[data-theme="dark"] .mbaz-tests-page .mbaz-evidence-card[data-work-item-type="task"] {
+  border-left-color: #c99a00;
+  background: linear-gradient(90deg, rgba(201,154,0,.12), #111827);
+}
 .mbaz-tests-page .mbaz-evidence-card.has-approved {
   box-shadow: inset 0 0 0 1px rgba(22, 163, 74, .16), 0 2px 8px rgba(15,23,42,.05);
 }
@@ -11188,6 +11519,10 @@ body {
   border-radius: 999px;
   background: #e2e8f0;
   font-weight: 900;
+}
+:root[data-theme="dark"] .mbaz-tests-page .mbaz-evidence-env-count {
+  background: #263244;
+  color: #f8fafc;
 }
 .mbaz-tests-page .mbaz-evidence-journey {
   min-height: 40px;
@@ -11548,6 +11883,11 @@ body {
   border-radius: 8px;
   background: #f8fafc;
 }
+:root[data-theme="dark"] .mbdhc-work-test-panel {
+  background: #0f172a;
+  border-color: #334155;
+  color: #e5e7eb;
+}
 /* Mesmo componente de "1 QA / 1 BETA" com checkmark por ambiente usado em
    Meus itens/QA Board (.mb-my-qa-board-card), replicado aqui pro card de
    Governanca — antes o painel so mostrava um resumo achatado (ex.: "DEV: 2
@@ -11659,23 +11999,11 @@ body {
   background: #132a4a;
   border-color: #2563eb;
 }
-.mb-my-items-filter-row {
-  grid-template-columns: auto repeat(4, minmax(150px, 1fr));
-  align-items: start;
-}
-.mb-my-type-toggles,
-.mb-my-filter-pills {
-  align-self: stretch;
-  padding: 0;
-}
-.mb-my-clear-filters {
-  min-height: 34px;
-}
 .mb-my-items-content {
   background: #f4f7fb;
 }
 :root[data-theme="dark"] .mb-my-items-content {
-  background: var(--starkBg);
+  background: var(--starkBackground);
 }
 @media (max-width: 1180px) {
   .mb-my-summary-top,
@@ -11718,10 +12046,7 @@ body {
   align-items: center;
   gap: 12px;
   margin: 4px 0 16px;
-}
-.mb-mgmt-range-hint {
-  color: var(--starkMuted);
-  font-size: 12px;
+  max-width: 420px;
 }
 .mb-mgmt-kpis {
   display: grid;
@@ -12245,4 +12570,710 @@ body {
 }
 .stark-sidebar-pinned-close:hover {
   color: #dc2626;
+}
+
+/* ============================================================
+   Health Check — Cinemark LATAM Status (monitoramento sintetico)
+   ============================================================ */
+.stark-hc-flag {
+  width: 20px;
+  height: 14px;
+  border-radius: 2px;
+  object-fit: cover;
+  flex: none;
+  box-shadow: 0 0 0 1px var(--starkBorder);
+}
+.stark-hc-flag.fallback {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: .01em;
+  box-shadow: none;
+}
+.stark-hc-dot {
+  font-size: 12px;
+  line-height: 1;
+}
+.stark-hc-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* ---------- Banner de status geral ---------- */
+.stark-hc-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--starkBorder);
+  background: var(--starkSurface);
+  flex: 1;
+  min-width: 260px;
+}
+.stark-hc-banner .stark-hc-dot {
+  font-size: 22px;
+}
+.stark-hc-banner strong {
+  display: block;
+  font-size: 15px;
+}
+.stark-hc-banner span {
+  display: block;
+  color: var(--starkMuted);
+  font-size: 11.5px;
+  margin-top: 2px;
+}
+.stark-hc-banner.operational .stark-hc-dot { color: var(--starkHcOperational); }
+.stark-hc-banner.degraded .stark-hc-dot { color: var(--starkHcDegraded); }
+.stark-hc-banner.outage .stark-hc-dot { color: var(--starkHcOutage); }
+.stark-hc-banner.maintenance .stark-hc-dot { color: var(--starkHcMaintenance); }
+.stark-hc-banner.unknown .stark-hc-dot { color: var(--starkHcUnknown); }
+
+/* ---------- Toolbar (ambiente / cenario demo / auto refresh) ---------- */
+.stark-hc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: stretch;
+}
+.stark-hc-toolbar-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.stark-hc-select {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--starkMuted);
+  text-transform: uppercase;
+  letter-spacing: .02em;
+}
+.stark-hc-select select {
+  min-height: 34px;
+  border: 1px solid var(--starkBorder);
+  border-radius: 8px;
+  background: var(--starkSurface);
+  color: var(--starkText);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 8px;
+  text-transform: none;
+}
+.stark-hc-select.demo span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.stark-hc-autorefresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--starkBorder);
+  border-radius: 8px;
+  background: var(--starkSurface);
+  color: var(--starkMuted);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.stark-hc-autorefresh.on {
+  color: var(--starkAccent);
+  border-color: var(--starkAccent);
+}
+.stark-hc-autorefresh i {
+  font-size: 16px;
+}
+
+/* ---------- Incidente ativo ---------- */
+.stark-hc-active-incident {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--starkHcOutage);
+  background: var(--starkHcOutageBg);
+}
+.stark-hc-active-incident-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--starkHcOutage);
+  font-size: 13px;
+}
+.stark-hc-active-incident-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  font-size: 12px;
+  padding: 6px 0 0;
+  border-top: 1px dashed rgba(220, 38, 38, .25);
+}
+.stark-hc-active-incident-row code {
+  background: var(--starkSurfaceAlt);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 11px;
+}
+
+/* ---------- Filtros por status ---------- */
+.stark-hc-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.stark-hc-filter-chip {
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--starkBorder);
+  background: var(--starkSurface);
+  color: var(--starkMuted);
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.stark-hc-filter-chip.active {
+  color: var(--starkAccent);
+  border-color: var(--starkAccent);
+  background: var(--starkAccentSoft);
+}
+
+/* ---------- Cards genericos do modulo ---------- */
+.stark-hc-card {
+  background: var(--starkSurface);
+  border: 1px solid var(--starkBorder);
+  border-radius: 12px;
+  padding: 16px;
+}
+.stark-hc-card > header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+.stark-hc-card > header strong {
+  font-size: 14px;
+}
+.stark-hc-card > header small {
+  color: var(--starkMuted);
+  font-size: 11.5px;
+}
+.stark-hc-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.stark-hc-muted {
+  color: var(--starkMuted);
+  font-size: 12px;
+}
+
+/* ---------- Lista de paises (densidade de status page real) ---------- */
+.stark-hc-country-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.stark-hc-country-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--starkBorder);
+  border-radius: 10px;
+  background: var(--starkSurfaceAlt);
+  color: var(--starkText);
+  cursor: pointer;
+  text-align: left;
+}
+.stark-hc-country-row:hover {
+  border-color: var(--starkAccent);
+}
+.stark-hc-country-row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.stark-hc-country-name {
+  font-weight: 800;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stark-hc-country-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+}
+.stark-hc-country-row-meta small {
+  color: var(--starkMuted);
+  font-size: 11px;
+}
+
+/* ---------- Heatmap de historico ---------- */
+.stark-hc-heatmap {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+.stark-hc-heatmap-block {
+  flex: 1;
+  min-width: 5px;
+  height: 30px;
+  border-radius: 2px;
+  opacity: .92;
+}
+.stark-hc-heatmap-block:hover {
+  opacity: 1;
+  outline: 2px solid var(--starkAccent);
+}
+.stark-hc-heatmap.compact .stark-hc-heatmap-block {
+  height: 20px;
+  min-width: 3px;
+}
+
+/* ---------- Filtro de periodo (De/Ate) ---------- */
+.stark-hc-period-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.stark-hc-period-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.stark-hc-period-preset {
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--starkBorder);
+  background: var(--starkSurface);
+  color: var(--starkMuted);
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.stark-hc-period-preset.active {
+  color: var(--starkAccent);
+  border-color: var(--starkAccent);
+  background: var(--starkAccentSoft);
+}
+.stark-hc-period-custom {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.stark-hc-period-custom label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--starkMuted);
+}
+.stark-hc-period-custom input {
+  min-height: 28px;
+  border: 1px solid var(--starkBorder);
+  border-radius: 8px;
+  background: var(--starkSurface);
+  color: var(--starkText);
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+/* ---------- Historico por pais ---------- */
+.stark-hc-history-countries {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.stark-hc-history-country-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 64px;
+  align-items: center;
+  gap: 12px;
+}
+.stark-hc-history-country-row.overall {
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--starkBorder);
+}
+.stark-hc-history-country-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stark-hc-history-country-row strong {
+  text-align: right;
+  font-size: 12.5px;
+  flex: none;
+}
+
+/* ---------- Dashboard (graficos) ---------- */
+.stark-hc-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.stark-hc-dashboard-grid .stark-hc-card {
+  background: var(--starkSurfaceAlt);
+}
+
+/* ---------- Uptime ---------- */
+.stark-hc-uptime-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.stark-hc-uptime-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--starkSurfaceAlt);
+}
+.stark-hc-uptime-grid span {
+  color: var(--starkMuted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+  font-weight: 800;
+}
+.stark-hc-uptime-grid strong {
+  font-size: 18px;
+}
+
+/* ---------- Log de incidentes resolvidos ---------- */
+.stark-hc-incident-log {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.stark-hc-incident-log-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--starkBorder);
+}
+.stark-hc-incident-log-row:last-child {
+  border-bottom: 0;
+}
+.stark-hc-incident-log-row .stark-hc-dot {
+  color: var(--starkHcOperational);
+}
+
+/* ---------- Footer ---------- */
+.stark-hc-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 14px;
+  border-top: 1px solid var(--starkBorder);
+  color: var(--starkMuted);
+  font-size: 11.5px;
+}
+.stark-hc-footer strong {
+  color: var(--starkText);
+  font-size: 12.5px;
+}
+
+/* ---------- Drawer (detalhe de pais / gerenciar paises) ---------- */
+.stark-hc-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(7, 17, 31, .5);
+  display: flex;
+  justify-content: flex-end;
+  z-index: 60;
+}
+.stark-hc-drawer {
+  width: min(420px, 100%);
+  max-width: 100%;
+  height: 100%;
+  background: var(--starkSurface);
+  border-left: 1px solid var(--starkBorder);
+  display: flex;
+  flex-direction: column;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, .18);
+}
+.stark-hc-drawer.wide {
+  width: min(680px, 100%);
+}
+.stark-hc-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--starkBorder);
+}
+.stark-hc-drawer-header h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.stark-hc-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.stark-hc-drawer-links {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+.stark-hc-drawer-links > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stark-hc-drawer-links dt {
+  color: var(--starkMuted);
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+}
+.stark-hc-drawer-links dd {
+  margin: 0;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.stark-hc-drawer-body h4 {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+  color: var(--starkMuted);
+}
+
+/* ---------- Lista de healthchecks (dentro do drawer de pais) ---------- */
+.stark-hc-endpoint-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.stark-hc-endpoint-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--starkBorder);
+  border-radius: 10px;
+  background: var(--starkSurfaceAlt);
+}
+.stark-hc-endpoint-row > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.stark-hc-endpoint-row strong {
+  font-size: 12.5px;
+}
+.stark-hc-endpoint-row small {
+  color: var(--starkMuted);
+  font-size: 11px;
+  font-family: monospace;
+}
+.stark-hc-endpoint-metrics {
+  display: flex;
+  gap: 10px;
+  color: var(--starkMuted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ---------- Admin: Manage Countries ---------- */
+/* Tabela semantica de verdade (nao divs em grid independentes por linha) —
+   colunas SEMPRE alinham entre cabecalho e linhas, mesmo com nomes de
+   tamanhos bem diferentes (ex. "Argentina" vs "Chile"). A versao anterior
+   com um <div class="grid"> por linha recalculava as fracoes (fr) de forma
+   independente em CADA linha, entao a largura das colunas desalinhava
+   conforme o conteudo mudava — bug real reportado pelo usuario. */
+.stark-hc-admin-table-wrap {
+  overflow-x: auto;
+}
+.stark-hc-admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.stark-hc-admin-table th,
+.stark-hc-admin-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--starkBorder);
+  white-space: nowrap;
+}
+.stark-hc-admin-table th {
+  color: var(--starkMuted);
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+}
+.stark-hc-admin-table td:first-child,
+.stark-hc-admin-table th:first-child {
+  width: 40%;
+}
+.stark-hc-admin-name-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.stark-hc-admin-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.stark-hc-toggle {
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--starkBorder);
+  background: var(--starkSurface);
+  color: var(--starkMuted);
+  font-size: 10.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.stark-hc-toggle.on {
+  color: var(--starkHcOperational);
+  border-color: var(--starkHcOperational);
+  background: var(--starkHcOperationalBg);
+}
+
+.stark-hc-country-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px dashed var(--starkBorder);
+  border-radius: 10px;
+}
+.stark-hc-country-form h4 {
+  margin: 0;
+  font-size: 12.5px;
+}
+.stark-hc-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.stark-hc-form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--starkMuted);
+}
+.stark-hc-form-grid input {
+  min-height: 32px;
+  border: 1px solid var(--starkBorder);
+  border-radius: 8px;
+  background: var(--starkSurface);
+  color: var(--starkText);
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.stark-hc-form-check {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px !important;
+}
+.stark-hc-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.stark-hc-confirm {
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid var(--starkHcOutage);
+  background: var(--starkHcOutageBg);
+}
+.stark-hc-confirm p {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+}
+
+@media (max-width: 760px) {
+  .stark-hc-grid {
+    grid-template-columns: 1fr;
+  }
+  .stark-hc-uptime-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .stark-hc-country-row {
+    flex-wrap: wrap;
+  }
+  .stark-hc-admin-table th,
+  .stark-hc-admin-table td {
+    padding: 8px 6px;
+    font-size: 11.5px;
+  }
+  .stark-hc-admin-actions {
+    justify-content: flex-start;
+  }
+  .stark-hc-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .stark-hc-drawer {
+    width: 100%;
+  }
+  .stark-hc-heatmap-block {
+    height: 24px;
+  }
+  .stark-hc-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+  .stark-hc-history-country-row {
+    grid-template-columns: 90px 1fr 52px;
+    gap: 8px;
+  }
+  .stark-hc-history-country-label b,
+  .stark-hc-history-country-label {
+    font-size: 11px;
+  }
 }

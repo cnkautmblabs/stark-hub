@@ -80,9 +80,37 @@ function tagsList(tagsField) {
     .filter(Boolean);
 }
 
+// Sprints deste time terminam em "[yyyy] MB" (confirmado em producao) mas
+// tambem podem aparecer como "MB Labs"/"mb labs"/"Mb Labs"/"MBLabs" (mesma
+// equipe, grafia inconsistente entre sprints) — cobre qualquer maiuscula/
+// minuscula e com ou sem "Labs" (espaco opcional). O outro fornecedor no
+// MESMO Team do Azure DevOps usa "Lênio". "MB" como substring solta e
+// perigoso: "Nov-EM-B-er" contem "mb" no meio da palavra. Por isso o match
+// e sempre no ULTIMO segmento do path (a sprint em si, nao pastas
+// intermediarias) e exige "MB"(+ "Labs" opcional) como TOKEN FINAL —
+// fronteira de palavra ate o fim da string — nunca uma substring solta.
+function isMbSprintPath(path) {
+  const leaf = String(path || "").split("\\").pop() || "";
+  return /\bMB\s*(Labs)?\s*$/i.test(leaf.trim());
+}
+
 function isWebAppMbLabsIteration(path) {
   const text = String(path || "").toLowerCase();
-  return text.includes("webapp") && text.includes("mb labs");
+  return text.includes("webapp") && isMbSprintPath(path);
+}
+
+const sprintMonthOrder = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+// Mesma logica de src/utils/sprints.js (sprintSortValue) — duplicada aqui
+// porque a Edge Function roda isolada, sem import do bundle do cliente.
+// Ordena "Mon26" cronologicamente (ano*12+mes), nao alfabeticamente — senao
+// "Aug26" viria antes de "Jan26" so porque "A" < "J".
+function sprintSortValueServer(label) {
+  const match = String(label || "").match(/^([A-Za-z]{3})(\d{2})$/);
+  if (!match) return 0;
+  const monthIndex = sprintMonthOrder.indexOf(match[1].toLowerCase());
+  const year = 2000 + Number(match[2]);
+  return year * 12 + (monthIndex === -1 ? 0 : monthIndex);
 }
 
 function sprintFromIterationPath(path) {
@@ -465,39 +493,73 @@ Deno.serve(async (req) => {
     }
   }
 
-  // O filtro fixo "WebApp"+"MB Labs" (isWebAppMbLabsIteration) só existe
-  // pra evitar o vazamento entre times no fallback ABAIXO (projeto inteiro,
-  // sem time informado — ver comentário da Lenio Labs). Quando o time foi
-  // encontrado de verdade (usedTeamScope=true), o próprio endpoint
-  // teamsettings/iterations do Azure já devolve só as sprints DESSE time —
-  // aplicar o padrão fixo em cima disso não protege nada a mais, só descarta
-  // sprints reais sempre que a convenção de nome do time muda (ex.: time
-  // renomeado de "MB Labs" pra "WebApp Team"), devolvendo 0 itens sem
-  // nenhum erro visível (bug real reportado pelo usuário: PAT válido,
-  // conexão testada com sucesso, board sempre vazio).
+  // O time configurado no Azure DevOps (profile.azureTeam) pode ser um Team
+  // amplo do projeto inteiro (ex.: "WebApp Team"), nao um time exclusivo da
+  // MB Labs — teamsettings/iterations devolve TODAS as sprints desse Team,
+  // que podem incluir iterations de OUTROS grupos/fornecedores trabalhando
+  // sob o mesmo Team object (ex.: Lenio Labs). Uma tentativa anterior de
+  // filtrar isso com um erro rigido quando o padrao "MB Labs" nao batia com
+  // NADA quebrou o board inteiro em producao (path do time provavelmente
+  // usa outra convencao de nome que nao contem literalmente "mb labs") —
+  // pior que o vazamento que tentava resolver. Agora tenta o padrao, mas se
+  // nao bater com nada CAI DE VOLTA pras iterations do time sem filtro
+  // (nunca quebra o board) e sinaliza um aviso pro cliente investigar/
+  // configurar o padrao certo em vez de travar silenciosamente errado.
+  // Sem padrao customizado em Configuracoes, o DEFAULT e o filtro de
+  // verdade (isMbSprintPath: sprint termina em "MB") — nao mais a frase
+  // fixa "MB Labs", que nao existe em nenhum path real e fazia o filtro
+  // nao bater com NADA (era isso que vazava a Lenio quando caia no
+  // fallback, ou quebrava o board quando virava erro rigido). Um padrao
+  // customizado, se configurado, ainda funciona por substring simples —
+  // fica a criterio de quem configurou.
+  const customIterationPattern = String(iterationPattern || "").trim().toLowerCase();
   let scopedPaths;
+  let iterationScopeWarning = null;
   if (usedTeamScope) {
-    const customPattern = String(iterationPattern || "").trim().toLowerCase();
-    scopedPaths = customPattern ? allPaths.filter((path) => path.toLowerCase().includes(customPattern)) : allPaths;
-    if (customPattern && !scopedPaths.length) {
-      return json({ ok: false, error: `Nenhuma sprint do time "${team}" contém "${iterationPattern}".` });
+    const patternMatches = customIterationPattern
+      ? allPaths.filter((path) => path.toLowerCase().includes(customIterationPattern))
+      : allPaths.filter(isMbSprintPath);
+    if (!patternMatches.length) {
+      scopedPaths = allPaths;
+      iterationScopeWarning = customIterationPattern
+        ? `Nenhuma sprint do time "${team}" contém "${iterationPattern}" — mostrando todas as sprints do time sem filtro. Confira a convenção em Configurações > Consulta Azure DevOps.`
+        : `Nenhuma sprint do time "${team}" termina em "MB" — mostrando todas as sprints do time sem filtro. Configure o padrão certo em Configurações > Consulta Azure DevOps se esse time usa outra convenção.`;
+    } else {
+      scopedPaths = patternMatches;
     }
   } else {
-    const webAppMbLabsPaths = allPaths.filter(isWebAppMbLabsIteration);
-    const baseScopedPaths = webAppMbLabsPaths.length ? webAppMbLabsPaths : [];
-    const pattern = String(iterationPattern || "MB Labs").trim().toLowerCase();
-    scopedPaths = pattern ? baseScopedPaths.filter((path) => path.toLowerCase().includes(pattern)) : baseScopedPaths;
+    const baseScopedPaths = allPaths.filter(isWebAppMbLabsIteration);
+    scopedPaths = customIterationPattern ? baseScopedPaths.filter((path) => path.toLowerCase().includes(customIterationPattern)) : baseScopedPaths;
 
     // Um padrão configurado que não bate com NADA é quase sempre erro de
     // digitação — melhor travar aqui com um aviso claro do que devolver o
     // projeto inteiro sem avisar (foi esse silêncio que vazou a Lenio Labs).
-    if (pattern && !scopedPaths.length) {
-      return json({ ok: false, error: `Nenhuma sprint WebApp MB Labs contém "${iterationPattern || "MB Labs"}". A busca global foi limitada a WebApp + MB Labs.` });
+    if (customIterationPattern && !scopedPaths.length) {
+      return json({ ok: false, error: `Nenhuma sprint WebApp MB contém "${iterationPattern}". A busca global foi limitada a WebApp + sprints terminadas em "MB".` });
     }
     if (!scopedPaths.length) {
-      return json({ ok: false, error: "Não foi possível determinar sprints WebApp MB Labs no projeto." });
+      return json({ ok: false, error: "Não foi possível determinar sprints WebApp MB no projeto." });
     }
   }
+
+  // Lista de sprints REAL, derivada direto de scopedPaths (a arvore de
+  // iterations que a WIQL abaixo realmente busca) — nao dos work items
+  // devolvidos. Antes o cliente descobria as sprints disponiveis olhando o
+  // campo `sprint` dos itens ja carregados, o que so mostrava sprints com
+  // pelo menos 1 item HOJE qualificado pro board — uma sprint real (ex.:
+  // Aug26) sumia da lista de filtro sempre que, no momento da consulta,
+  // nao tinha nenhum Bug/User Story em estado de QA (bug real reportado
+  // pelo usuario: seletor de sprint incompleto). So inclui paths cujo nome
+  // final bate com o padrao mes+ano — descarta pastas intermediarias (ex.
+  // a propria "MB Labs") que nao sao sprint de verdade.
+  const sprints = Array.from(new Set(
+    scopedPaths
+      .map((path) => {
+        const leaf = String(path).split("\\").pop() || "";
+        return /[A-Za-zÀ-ÿ]+\s*\[?20\d{2}\]?/i.test(leaf) ? sprintFromIterationPath(path) : null;
+      })
+      .filter(Boolean)
+  )).sort((a, b) => sprintSortValueServer(a) - sprintSortValueServer(b));
 
   const iterationClause = `AND (${scopedPaths.map((path) => `[System.IterationPath] UNDER '${path.replace(/'/g, "''")}'`).join(" OR ")})`;
 
@@ -538,7 +600,7 @@ Deno.serve(async (req) => {
 
   const wiqlData = await wiqlResponse.json();
   const ids = (wiqlData.workItems || []).map((item) => item.id);
-  if (!ids.length) return json({ ok: true, items: [] });
+  if (!ids.length) return json({ ok: true, items: [], sprints, warning: iterationScopeWarning });
 
   const rawWorkItems = [];
   for (let offset = 0; offset < ids.length; offset += 200) {
@@ -703,8 +765,21 @@ Deno.serve(async (req) => {
   // test_evidence vazio e aparecia 0% mesmo com muitos testes registrados
   // em discussion. Agora sempre prioriza Bug/User Story (unicos tipos que
   // entram em pass rate) dentro do teto de itens buscados.
+  //
+  // O teto de 40/80 (e o timeout de 12s que descartava TUDO se estourasse,
+  // nao so o que faltava) ficou pequeno demais pra um board real (258 itens,
+  // 114 no filtro corrente): a maioria dos itens nunca tinha a discussion
+  // checada e caia em "Pending" por omissao, nao porque realmente estava sem
+  // resultado — Result rate/Pass rate/Pendentes apareciam completamente
+  // errados pro time (bug real reportado em producao, board de qualidade).
+  // Teto bem mais alto (cobre o board inteiro na pratica) + timeout bem mais
+  // generoso como rede de seguranca de verdade, nao como corte de rotina.
+  // 38s, nao os 60s do teto do cliente (ver useWorkItems.js) — sobra
+  // margem real pro resto do pipeline desta funcao (WIQL, workitemsbatch em
+  // lotes, consultas no Supabase, batch dos parents) que roda antes/depois
+  // deste bloco e tambem consome do mesmo orcamento de 60s do cliente.
   const testableTypes = new Set(["Bug", "User Story"]);
-  const discussionCap = includeClosed ? Math.min(items.length, 80) : Math.min(items.length, 40);
+  const discussionCap = includeClosed ? Math.min(items.length, 400) : Math.min(items.length, 300);
   const prioritizedItems = [
     ...items.filter((item) => testableTypes.has(item.type)),
     ...items.filter((item) => !testableTypes.has(item.type))
@@ -718,7 +793,7 @@ Deno.serve(async (req) => {
   const discussionResults = discussionCap
     ? await Promise.race([
         discussionsPromise,
-        new Promise((resolve) => setTimeout(() => resolve([]), 12000))
+        new Promise((resolve) => setTimeout(() => resolve([]), 38000))
       ])
     : [];
   for (const result of discussionResults) {
@@ -756,5 +831,5 @@ Deno.serve(async (req) => {
     );
   }
 
-  return json({ ok: true, items });
+  return json({ ok: true, items, sprints, warning: iterationScopeWarning });
 });

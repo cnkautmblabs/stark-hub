@@ -21,7 +21,10 @@ import {
 } from "../../../utils/workbench/formatters.js";
 import { AzureWorkItemModal, workItemUrl } from "../ui/AzureWorkItemModal.jsx";
 import { Button, ChartSkeleton, EmptyState, IconButton, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
-import { EvidenceCard, EvidenceFilterBox, EvidenceMultiFilterBox, ResultIcon } from "./EvidenceComponents.jsx";
+import { EvidenceCard, ResultIcon } from "./EvidenceComponents.jsx";
+import { FilterBar } from "../ui/filters/FilterBar.jsx";
+import { FilterField } from "../ui/filters/FilterField.jsx";
+import { optionsFromTuples, optionsFromStrings } from "../ui/filters/adapters.js";
 import { consumePendingWorkItemHighlight, highlightWorkItem, readWorkItemHash } from "../../../utils/workbench/highlight.js";
 
 export function TestsWorkbench() {
@@ -109,10 +112,6 @@ export function TestsWorkbench() {
     setDateTo(range.to);
   }
 
-  function toggleEnvironmentFilter(env) {
-    setEnvironmentsFilter((current) => current.includes(env) ? current.filter((value) => value !== env) : [...current, env]);
-  }
-
   function copyRows() {
     const lines = rows.map((entry) => {
       const item = entry.item || byId.get(entry.workItemId) || {};
@@ -150,13 +149,31 @@ export function TestsWorkbench() {
                 )}
               </div>
             </div>
-            <div className="mbaz-evidence-filter-grid">
-              <EvidenceFilterBox label="Resultado" value={result} onChange={setResult} options={[["all", "Todos"], ["pass", "Approved"], ["fail", "Fail"], ["limitation", "Limitation"]]} />
-              <EvidenceMultiFilterBox label="Ambiente" values={environmentsFilter} onToggle={toggleEnvironmentFilter} onAll={() => setEnvironmentsFilter(envOptions)} onClear={() => setEnvironmentsFilter([])} options={envOptions.map((value) => [value, value])} />
-              <EvidenceFilterBox label="Tipo" value={type} onChange={setType} options={[["all", "Todos"], ...typeOptions.map((value) => [value, value])]} />
-              <EvidenceFilterBox label="QA" value={qa} onChange={setQa} options={[["all", "Todos"], ...qaOptions.map((value) => [value, value])]} />
-              <EvidenceFilterBox label="Sprint" value={effectiveSprint} onChange={setSprint} options={[["all", "Todas"], ...sprintOptions.map((value) => [value, compactSprintLabel(value)])]} />
-            </div>
+            <FilterBar
+              persistKey="starkHubFilters:tests"
+              defaultOpen
+              title="Filtros"
+              groups={[{
+                fields: [
+                  { key: "result", active: result !== "all", node: (
+                    <FilterField label="Resultado" mode="chips" multiple={false} variant="result" options={optionsFromTuples([["all", "Todos"], ["pass", "Approved"], ["fail", "Fail"], ["limitation", "Limitation"]])} values={[result]} onChange={setResult} />
+                  ) },
+                  { key: "environment", active: environmentsFilter.length !== envOptions.length, node: (
+                    <FilterField label="Ambiente" mode="chips" multiple variant="environment" options={optionsFromStrings(envOptions)} values={environmentsFilter} onChange={setEnvironmentsFilter} />
+                  ) },
+                  { key: "type", active: type !== "all", node: (
+                    <FilterField label="Tipo" mode="chips" multiple={false} variant="type" options={optionsFromTuples([["all", "Todos"], ...typeOptions.map((value) => [value, value])])} values={[type]} onChange={setType} />
+                  ) },
+                  { key: "qa", active: qa !== "all", node: (
+                    <FilterField label="QA" mode="chips" multiple={false} options={optionsFromTuples([["all", "Todos"], ...qaOptions.map((value) => [value, value])])} values={[qa]} onChange={setQa} />
+                  ) },
+                  { key: "sprint", active: sprint !== "all", node: (
+                    <FilterField label="Sprint" mode="chips" multiple={false} options={optionsFromTuples([["all", "Todas"], ...sprintOptions.map((value) => [value, compactSprintLabel(value)])])} values={[effectiveSprint]} onChange={setSprint} />
+                  ) }
+                ]
+              }]}
+              onClear={() => { setResult("all"); setEnvironmentsFilter(envOptions); setType("all"); setQa("all"); setSprint("all"); }}
+            />
           </div>
         </div>
         <div className="mbaz-evidence-summary">

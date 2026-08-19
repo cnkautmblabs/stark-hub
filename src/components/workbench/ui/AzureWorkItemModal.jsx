@@ -633,9 +633,21 @@ export function AzureWorkItemModal({ profile, item, onClose, onTestResult, onUpd
     }
   }, [item?.id, result, state, context, selectedCountries, selectedEnvironments, selectedBreakpoints, attachments]);
 
+  // Vira base64 e viaja inteiro dentro do corpo JSON da Edge Function — a
+  // Supabase rejeita a requisicao ANTES dela chegar na nossa funcao quando o
+  // corpo passa do limite da plataforma (~6MB), o que aparece pro usuario
+  // como "Failed to send a request to the Edge Function" sem explicacao.
+  // Gravacoes de tela em GIF estouram isso facil, entao barra aqui com uma
+  // mensagem legivel em vez de deixar a chamada falhar silenciosamente.
+  const maxEvidenceBytes = 5 * 1024 * 1024;
+
   function readEvidenceFiles(fileList) {
     const files = Array.from(fileList || []).filter((file) => file.type.startsWith("image/") || /\.gif$/i.test(file.name));
     files.forEach((file) => {
+      if (file.size > maxEvidenceBytes) {
+        pushToast({ title: t("workItemModal.evidenceLabel"), body: t("workItemModal.evidenceTooLarge", { name: file.name, max: "5MB" }), tone: "danger" });
+        return;
+      }
       const reader = new FileReader();
       reader.onload = () => {
         setAttachments((current) => [

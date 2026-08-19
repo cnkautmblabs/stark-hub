@@ -9,7 +9,8 @@ import { usePersistentState } from "../../../hooks/usePersistentState.js";
 import { compactSprintLabel, sprintSortValue } from "../../../utils/sprints.js";
 import { dateStamp, downloadCsv } from "../../../utils/csvExport.js";
 import { buildCollaboratorNameIndex, evidenceDedupeKey, evidenceEnvironments, findCollaboratorByName, isQaEvidenceEntry, normalizeResult } from "../../../utils/workbench/formatters.js";
-import { AvatarDot, ChartSkeleton, CompactAxisTick, FilterCombobox, Kpi, KpiSkeleton, RechartsTooltip, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
+import { AvatarDot, ChartSkeleton, CompactAxisTick, Kpi, KpiSkeleton, RechartsTooltip, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
+import { SprintRangeFilter, resolveSprintRange } from "../ui/filters/SprintRangeFilter.jsx";
 
 const deliveredTypes = ["Feature", "User Story", "Task", "Bug"];
 
@@ -22,20 +23,19 @@ export function ManagementDashboardWorkbench() {
   const [sprintFrom, setSprintFrom] = usePersistentState("starkHubFilters:management:sprintFrom", "");
   const [sprintTo, setSprintTo] = usePersistentState("starkHubFilters:management:sprintTo", "");
 
-  const sprintOptions = useMemo(() => {
+  const rawSprintOptions = useMemo(() => {
     const unique = Array.from(new Set(items.map((item) => compactSprintLabel(item.sprint || item.iteration)).filter(Boolean)));
     return unique.sort((a, b) => sprintSortValue(a) - sprintSortValue(b));
   }, [items]);
 
-  const defaultRange = useMemo(() => sprintOptions.slice(-6), [sprintOptions]);
-  const fromValue = sprintFrom || defaultRange[0] || "";
-  const toValue = sprintTo || defaultRange[defaultRange.length - 1] || "";
-  const selectedSprints = useMemo(() => {
-    const fromIndex = sprintOptions.indexOf(fromValue);
-    const toIndex = sprintOptions.indexOf(toValue);
-    if (fromIndex === -1 || toIndex === -1) return sprintOptions;
-    return sprintOptions.slice(Math.min(fromIndex, toIndex), Math.max(fromIndex, toIndex) + 1);
-  }, [sprintOptions, fromValue, toValue]);
+  // Default proprio desta tela (ultimas 6 sprints, uma janela de tendencia)
+  // — nao o default de "so a sprint atual" que resolveSprintRange usa pra
+  // todo o resto do app, ver comentario em SprintRangeFilter.jsx.
+  const defaultRange = useMemo(() => rawSprintOptions.slice(-6), [rawSprintOptions]);
+  const { sprintOptions, fromValue, toValue, effective: selectedSprints } = useMemo(
+    () => resolveSprintRange(rawSprintOptions, sprintFrom, sprintTo, { defaultFrom: defaultRange[0], defaultTo: defaultRange[defaultRange.length - 1] }),
+    [rawSprintOptions, sprintFrom, sprintTo, defaultRange]
+  );
 
   const filteredItems = useMemo(
     () => items.filter((item) => selectedSprints.includes(compactSprintLabel(item.sprint || item.iteration))),
@@ -161,9 +161,17 @@ export function ManagementDashboardWorkbench() {
       />
 
       <div className="mb-mgmt-filters">
-        <FilterCombobox label={t("management.sprintFromLabel")} options={sprintOptions.map((value) => ({ value, label: value }))} values={fromValue ? [fromValue] : []} multiple={false} onChange={(value) => setSprintFrom(value || "")} />
-        <FilterCombobox label={t("management.sprintToLabel")} options={sprintOptions.map((value) => ({ value, label: value }))} values={toValue ? [toValue] : []} multiple={false} onChange={(value) => setSprintTo(value || "")} />
-        <span className="mb-mgmt-range-hint">{t("management.rangeHint", { count: selectedSprints.length, sprints: selectedSprints.join(", ") || "-" })}</span>
+        <SprintRangeFilter
+          sprintOptions={sprintOptions}
+          fromValue={fromValue}
+          toValue={toValue}
+          effective={selectedSprints}
+          onFromChange={setSprintFrom}
+          onToChange={setSprintTo}
+          fromLabel={t("management.sprintFromLabel")}
+          toLabel={t("management.sprintToLabel")}
+          hintLabel={(effective) => t("management.rangeHint", { count: effective.length, sprints: effective.join(", ") || "-" })}
+        />
       </div>
 
       <div className="mb-mgmt-kpis">
@@ -187,14 +195,17 @@ export function ManagementDashboardWorkbench() {
                 <XAxis type="number" hide domain={[0, maxFeatureValue]} />
                 <YAxis type="category" dataKey="sprint" width={78} tick={<CompactAxisTick width={72} formatter={compactSprintLabel} />} axisLine={false} tickLine={false} />
                 <Tooltip content={<RechartsTooltip />} cursor={{ fill: "var(--starkSurfaceAlt)" }} />
-                <Bar dataKey="total" name={t("management.totalLabel")} fill="#cbd5e1" radius={[0, 6, 6, 0]} barSize={10} />
+                {/* Recharts processa `fill` de <Bar>/<Cell> internamente (d3-color) pra
+                    hover/opacidade — var(...) nao resolve ali e a barra ficava sem cor
+                    nenhuma (bug real reportado pelo usuario). Cor literal, nao variavel. */}
+                <Bar dataKey="total" name={t("management.totalLabel")} fill="#94a3b8" radius={[0, 6, 6, 0]} barSize={10} />
                 <Bar dataKey="delivered" name={t("management.deliveredLabel")} fill="#16a34a" radius={[0, 6, 6, 0]} barSize={10}>
                   <LabelList dataKey="delivered" position="right" style={{ fill: "var(--starkMuted)", fontSize: 11 }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           ) : <span className="mb-mgmt-empty">{t("management.noDataInPeriod")}</span>}
-          {!loading && featuresPerSprint.length > 0 && <div className="mb-mgmt-chart-legend"><span><i style={{ background: "#cbd5e1" }} />{t("management.totalLabel")}</span><span><i style={{ background: "#16a34a" }} />{t("management.deliveredLabel")}</span></div>}
+          {!loading && featuresPerSprint.length > 0 && <div className="mb-mgmt-chart-legend"><span><i style={{ background: "var(--starkMuted)" }} />{t("management.totalLabel")}</span><span><i style={{ background: "#16a34a" }} />{t("management.deliveredLabel")}</span></div>}
         </section>
 
         <section className="mb-mgmt-card">

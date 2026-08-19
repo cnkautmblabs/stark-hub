@@ -6,7 +6,9 @@ import { usePersistentState } from "../../../hooks/usePersistentState.js";
 import { accessLevelLabels, accessLevels, defaultGoalHours, hasManagementAccess } from "../../../utils/constants.js";
 import { normalize } from "../../../utils/workbench/formatters.js";
 import { dateStamp, downloadCsv } from "../../../utils/csvExport.js";
-import { AvatarDot, Button, EmptyState, FilterCombobox, IdentityAvatar, RoleBadgeIcon, TextField, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
+import { AvatarDot, Button, EmptyState, IdentityAvatar, RoleBadgeIcon, SearchBox, TextField, WorkbenchCardSkeleton, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
+import { FilterBar } from "../ui/filters/FilterBar.jsx";
+import { FilterField } from "../ui/filters/FilterField.jsx";
 
 const roleDefs = [
   { key: "isDev", level: "dev", label: "Dev" },
@@ -423,10 +425,28 @@ export function CollaboratorsWorkbench() {
               <span><small>{t("collaborators.roleGestao")}</small><b>{metrics.gestao}</b></span>
               <span><small>{t("collaborators.linkedLabel")}</small><b>{metrics.linked}</b></span>
             </div>
-            <div className="mb-collaborators-filters">
-              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("collaborators.searchPlaceholder")} />
-              <FilterCombobox label={t("collaborators.roleLabel")} options={[{ value: "dev", label: "Dev" }, { value: "qa", label: "QA" }, { value: "gestao", label: t("collaborators.roleGestao") }, { value: "gerente", label: t("collaborators.roleGerente") }]} values={roleFilter === "all" ? [] : [roleFilter]} multiple={false} onChange={(value) => setRoleFilter(value || "all")} />
-            </div>
+            <FilterBar
+              persistKey="starkHubFilters:collaborators"
+              defaultOpen
+              title={t("collaborators.filtersLabel")}
+              groups={[{
+                fields: [{
+                  key: "role",
+                  active: roleFilter !== "all",
+                  node: (
+                    <FilterField
+                      label={t("collaborators.roleLabel")}
+                      options={[{ value: "dev", label: "Dev" }, { value: "qa", label: "QA" }, { value: "gestao", label: t("collaborators.roleGestao") }, { value: "gerente", label: t("collaborators.roleGerente") }]}
+                      values={roleFilter === "all" ? [] : [roleFilter]}
+                      multiple={false}
+                      onChange={(value) => setRoleFilter(value || "all")}
+                    />
+                  )
+                }]
+              }]}
+              onClear={() => { setSearch(""); setRoleFilter("all"); }}
+              extra={<SearchBox value={search} onChange={setSearch} placeholder={t("collaborators.searchPlaceholder")} />}
+            />
           </section>
         )}
         {loading && <WorkbenchCardSkeleton rows={3} mode="list" />}

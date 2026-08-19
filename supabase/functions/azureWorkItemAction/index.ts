@@ -140,8 +140,8 @@ async function createWorkItem(baseUrl, project, authHeader, item) {
   return { ok: true, id: data.id };
 }
 
-async function addWorkItemComment(baseUrl, authHeader, id, text) {
-  const response = await fetch(`${baseUrl}/_apis/wit/workItems/${id}/comments?api-version=7.1-preview.4`, {
+async function addWorkItemComment(baseUrl, project, authHeader, id, text) {
+  const response = await fetch(`${baseUrl}/${encodeURIComponent(project)}/_apis/wit/workItems/${id}/comments?api-version=7.1-preview.4`, {
     method: "POST",
     headers: { Authorization: authHeader, "Content-Type": "application/json" },
     body: JSON.stringify({ text })
@@ -163,6 +163,28 @@ function bytesFromDataUrl(dataUrl) {
   return bytes;
 }
 
+// POST /_apis/wit/attachments so guarda o arquivo no blob store da
+// organizacao — nao vincula nada ao work item. Sem essa relation
+// "AttachedFile", o Azure trata a imagem como orfa e nao serve o conteudo
+// quando o <img src="...url da attachment..."> e renderizado dentro do
+// comentario (fica com o icone de imagem quebrada), mesmo a URL "existindo".
+async function linkAttachmentToWorkItem(baseUrl, authHeader, id, attachmentUrl) {
+  const response = await fetch(`${baseUrl}/_apis/wit/workitems/${id}?api-version=7.1`, {
+    method: "PATCH",
+    headers: { Authorization: authHeader, "Content-Type": "application/json-patch+json" },
+    body: JSON.stringify([{
+      op: "add",
+      path: "/relations/-",
+      value: {
+        rel: "AttachedFile",
+        url: attachmentUrl,
+        attributes: { comment: "Evidencia anexada pelo Stark Hub" }
+      }
+    }])
+  });
+  return response.ok;
+}
+
 async function uploadAttachment(baseUrl, project, authHeader, payload) {
   const fileName = String(payload.fileName || "evidence.png").replace(/[\\/:*?"<>|]+/g, "-");
   const bytes = bytesFromDataUrl(payload.dataUrl || payload.dataBase64);
@@ -182,6 +204,10 @@ async function uploadAttachment(baseUrl, project, authHeader, payload) {
     return { ok: false, error: message };
   }
   const data = await response.json();
+  if (payload.id) {
+    const linked = await linkAttachmentToWorkItem(baseUrl, authHeader, payload.id, data.url);
+    if (!linked) return { ok: true, url: data.url, id: data.id, warning: "Evidencia enviada, mas nao foi possivel vincula-la ao item — a imagem pode nao aparecer no comentario." };
+  }
   return { ok: true, url: data.url, id: data.id };
 }
 
@@ -229,7 +255,7 @@ Deno.serve(async (req) => {
 
   if (action === "comment") {
     if (!payload.id || !payload.text) return json({ ok: false, error: "ID e texto do comentario sao obrigatorios." }, 400);
-    const result = await addWorkItemComment(baseUrl, authHeader, payload.id, payload.text);
+    const result = await addWorkItemComment(baseUrl, project, authHeader, payload.id, payload.text);
     return json(result, result.ok ? 200 : 200);
   }
   if (action === "attachment") {

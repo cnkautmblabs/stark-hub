@@ -2,6 +2,7 @@ import React from "react";
 import { NavLink } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
+  FiActivity,
   FiBarChart2,
   FiCheckSquare,
   FiChevronsLeft,
@@ -81,6 +82,11 @@ export default function Sidebar({ collapsed, onToggle }) {
         <NavLink to="/" end className="stark-nav-link" title={t("nav.home")}>
           <FiHome /> <span className="stark-nav-label">{t("nav.home")}</span>
         </NavLink>
+        {isEnabled("showHealthCheck") && (
+          <NavLink to="/healthcheck" className="stark-nav-link" title={t("nav.healthCheck")}>
+            <FiActivity /> <span className="stark-nav-label">{t("nav.healthCheck")}</span>
+          </NavLink>
+        )}
         {items.map((item) => (
           <NavLink key={item.to} to={item.to} end={item.to === "/management"} className="stark-nav-link" title={t(item.labelKey)}>
             <item.icon /> <span className="stark-nav-label">{t(item.labelKey)}</span>
