@@ -5,6 +5,7 @@ import { useAuth } from "../../../contexts/AuthContext.jsx";
 import { useHealthcheck } from "../../../hooks/useHealthcheck.js";
 import { flagUrl, hasManagementAccess } from "../../../utils/constants.js";
 import {
+  hcAverageDuration,
   hcEnvironments,
   hcPartnerOptions,
   hcPeriodPresets,
@@ -14,6 +15,8 @@ import {
 import { Button, EmptyState, IconButton, InfoTooltip, RechartsTooltip, WorkbenchHeader } from "../ui/WorkbenchPrimitives.jsx";
 import {
   AutoRefreshCountdown,
+  EndpointStepList,
+  HcExecutionModal,
   HcFlag,
   Heatmap,
   HttpStatusNote,
@@ -88,27 +91,8 @@ function CountryDetailDrawer({ country, countryResult, t, language, onClose }) {
             <div><dt>{t("healthCheck.partnerLabel")}</dt><dd>{country.partner || "-"}</dd></div>
           </dl>
           <h4>{t("healthCheck.detailEndpointsTitle")}</h4>
-          <div className="stark-hc-endpoint-list">
-            {(countryResult?.steps || []).map((step) => {
-              const stepStatus = step.ok ? "operational" : (step.httpStatus >= 500 || step.httpStatus === 0 ? "outage" : "degraded");
-              return (
-                <div key={step.key} className="stark-hc-endpoint-row">
-                  <div>
-                    <strong>{step.name}</strong>
-                    <small>{step.endpoint}</small>
-                    {!step.ok && <HttpStatusNote httpStatus={step.httpStatus} t={t} />}
-                  </div>
-                  <StatusPill status={stepStatus} t={t} />
-                  <div className="stark-hc-endpoint-metrics">
-                    <span>HTTP {step.httpStatus}</span>
-                    <span>{step.durationMs} ms</span>
-                    <span>{t("healthCheck.attemptsLabel", { count: step.attempts })}</span>
-                  </div>
-                </div>
-              );
-            })}
-            {!countryResult && <EmptyState title={t("healthCheck.noHealthcheckData")} />}
-          </div>
+          <EndpointStepList steps={countryResult?.steps} t={t} />
+          {!countryResult && <EmptyState title={t("healthCheck.noHealthcheckData")} />}
           <StatusLegendDetails t={t} />
         </div>
       </section>
@@ -320,6 +304,7 @@ export function HealthCheckWorkbench() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [openCountry, setOpenCountry] = useState(null);
   const [manageOpen, setManageOpen] = useState(false);
+  const [execution, setExecution] = useState(null); // { block, country } — modal do heatmap
   const canManage = hasManagementAccess(profile?.accessLevel, profile?.isAdmin);
 
   const resultByCountry = useMemo(() => {
@@ -444,13 +429,20 @@ export function HealthCheckWorkbench() {
             <Heatmap blocks={hc.periodBlocksByCountry.overall || []} t={t} language={i18n.language} compact />
             <strong>{(hc.periodUptimeByCountry.overall ?? 100).toFixed(2)}%</strong>
           </div>
-          {hc.countries.map((country) => (
-            <div key={country.id} className="stark-hc-history-country-row">
-              <span className="stark-hc-history-country-label"><HcFlag iso2={country.iso2} code={country.code} /> <b>{country.name}</b></span>
-              <Heatmap blocks={hc.periodBlocksByCountry[country.code] || []} t={t} language={i18n.language} compact />
-              <strong>{(hc.periodUptimeByCountry[country.code] ?? 100).toFixed(2)}%</strong>
-            </div>
-          ))}
+          {hc.countries.map((country) => {
+            const countryBlocks = hc.periodBlocksByCountry[country.code] || [];
+            const avgMs = hcAverageDuration(countryBlocks);
+            return (
+              <div key={country.id} className="stark-hc-history-country-row">
+                <span className="stark-hc-history-country-label"><HcFlag iso2={country.iso2} code={country.code} /> <b>{country.name}</b></span>
+                <Heatmap blocks={countryBlocks} t={t} language={i18n.language} compact onBlockClick={(block) => setExecution({ block, country })} />
+                <span className="stark-hc-history-country-stats">
+                  {typeof avgMs === "number" && <small>{t("healthCheck.avgMsLabel", { ms: avgMs })}</small>}
+                  <strong>{(hc.periodUptimeByCountry[country.code] ?? 100).toFixed(2)}%</strong>
+                </span>
+              </div>
+            );
+          })}
           {!hc.countries.length && <EmptyState title={t("healthCheck.noCountries")}>{t("healthCheck.noCountriesBody")}</EmptyState>}
         </div>
       </section>
@@ -497,6 +489,17 @@ export function HealthCheckWorkbench() {
       )}
 
       {manageOpen && canManage && <ManageCountriesPanel hc={hc} t={t} onClose={() => setManageOpen(false)} />}
+
+      {execution && (
+        <HcExecutionModal
+          block={execution.block}
+          country={execution.country}
+          countries={hc.countries}
+          t={t}
+          language={i18n.language}
+          onClose={() => setExecution(null)}
+        />
+      )}
     </section>
   );
 }

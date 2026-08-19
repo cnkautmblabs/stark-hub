@@ -4,6 +4,7 @@ import ReactorLogo from "../../components/layout/ReactorLogo.jsx";
 import publicI18n, { publicSupportedLanguages } from "../../i18n/publicInstance.js";
 import {
   AutoRefreshCountdown,
+  HcExecutionModal,
   HcFlag,
   Heatmap,
   HttpStatusNote,
@@ -14,6 +15,7 @@ import {
   formatDateTime
 } from "../../components/workbench/healthcheck/healthcheckUi.jsx";
 import {
+  hcAverageDuration,
   hcBlocksFromLiveRows,
   hcCalculateSystemStatus,
   hcDateRangeForPreset,
@@ -53,28 +55,13 @@ function LanguageSelect({ t, i18n }) {
   );
 }
 
+// Minimalista de proposito (feedback do usuario: "nao quero 3 cards") — uma
+// unica linha recolhida, uma frase quando aberta, sem grid de cards.
 function WhatWeMonitor({ t }) {
-  const steps = [
-    { icon: "bi-box-arrow-in-right", titleKey: "stepLoginTitle", descKey: "stepLoginDesc" },
-    { icon: "bi-person-vcard", titleKey: "stepMemberTitle", descKey: "stepMemberDesc" },
-    { icon: "bi-box-arrow-right", titleKey: "stepSignoutTitle", descKey: "stepSignoutDesc" }
-  ];
   return (
     <details className="stark-public-status-explainer">
       <summary>{t("publicStatus.whatWeMonitorTitle")}</summary>
       <p>{t("publicStatus.whatWeMonitorBody")}</p>
-      <div className="stark-public-status-steps">
-        {steps.map((step) => (
-          <div key={step.titleKey} className="stark-public-status-step">
-            <i className={`bi ${step.icon}`} />
-            <div>
-              <strong>{t(`publicStatus.${step.titleKey}`)}</strong>
-              <span>{t(`publicStatus.${step.descKey}`)}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-      <StatusLegendDetails t={t} />
     </details>
   );
 }
@@ -109,6 +96,7 @@ function PublicHealthStatusContent() {
   const [periodPreset, setPeriodPreset] = useState("90d");
   const [periodFrom, setPeriodFrom] = useState(defaultRange.from);
   const [periodTo, setPeriodTo] = useState(defaultRange.to);
+  const [execution, setExecution] = useState(null); // { block, country } — modal do heatmap
 
   useEffect(() => {
     let cancelled = false;
@@ -179,7 +167,10 @@ function PublicHealthStatusContent() {
         </div>
       </header>
 
-      <WhatWeMonitor t={t} />
+      <div className="stark-public-status-info-rows">
+        <WhatWeMonitor t={t} />
+        <StatusLegendDetails t={t} />
+      </div>
 
       {state.loading ? (
         <div className="stark-public-status-loading">{t("common.loading")}</div>
@@ -214,8 +205,10 @@ function PublicHealthStatusContent() {
 
           <section className="stark-public-status-components">
             {countries.map((country) => {
-              const countryBlocks = hcDownsampleBlocks(hcLiveBlocksForRange(blocks, periodFrom, periodTo, country.code));
-              const uptime = hcUptimeForBlocks(hcLiveBlocksForRange(blocks, periodFrom, periodTo, country.code));
+              const rangeBlocks = hcLiveBlocksForRange(blocks, periodFrom, periodTo, country.code);
+              const countryBlocks = hcDownsampleBlocks(rangeBlocks);
+              const uptime = hcUptimeForBlocks(rangeBlocks);
+              const avgMs = hcAverageDuration(rangeBlocks);
               const countryResult = resultByCountry.get(country.code);
               return (
                 <div key={country.id} className="stark-public-status-row">
@@ -223,8 +216,9 @@ function PublicHealthStatusContent() {
                     <span className="stark-hc-country-row-main"><HcFlag iso2={country.iso2} code={country.code} /> <strong>{country.name}</strong> <PartnerBadge partner={country.partner} /></span>
                     <StatusPill status={countryResult?.status || "unknown"} t={t} />
                   </div>
-                  <Heatmap blocks={countryBlocks} t={t} language={i18n.language} compact />
+                  <Heatmap blocks={countryBlocks} t={t} language={i18n.language} compact onBlockClick={(block) => setExecution({ block, country })} />
                   <div className="stark-public-status-row-bottom">
+                    {typeof avgMs === "number" && <span>{t("healthCheck.avgMsLabel", { ms: avgMs })}</span>}
                     <span>{uptime.toFixed(2)}% {t("publicStatus.uptimeLabel")}</span>
                   </div>
                 </div>
@@ -237,6 +231,17 @@ function PublicHealthStatusContent() {
       <footer className="stark-public-status-footer">
         <span>{t("publicStatus.poweredBy")}</span>
       </footer>
+
+      {execution && (
+        <HcExecutionModal
+          block={execution.block}
+          country={execution.country}
+          countries={countries}
+          t={t}
+          language={i18n.language}
+          onClose={() => setExecution(null)}
+        />
+      )}
     </div>
   );
 }

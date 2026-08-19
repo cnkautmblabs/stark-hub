@@ -12943,10 +12943,19 @@ body {
   height: 30px;
   border-radius: 2px;
   opacity: .92;
+  border: 0;
+  padding: 0;
+  margin: 0;
 }
 .stark-hc-heatmap-block:hover {
   opacity: 1;
   outline: 2px solid var(--starkAccent);
+}
+.stark-hc-heatmap-block.clickable {
+  cursor: pointer;
+}
+.stark-hc-heatmap-block.clickable:hover {
+  outline-offset: 1px;
 }
 .stark-hc-heatmap.compact .stark-hc-heatmap-block {
   height: 20px;
@@ -13013,7 +13022,7 @@ body {
 }
 .stark-hc-history-country-row {
   display: grid;
-  grid-template-columns: 140px 1fr 64px;
+  grid-template-columns: 140px 1fr auto;
   align-items: center;
   gap: 12px;
 }
@@ -13034,6 +13043,17 @@ body {
   text-align: right;
   font-size: 12.5px;
   flex: none;
+}
+.stark-hc-history-country-stats {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: none;
+}
+.stark-hc-history-country-stats small {
+  color: var(--starkMuted);
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 /* ---------- Dashboard (graficos) ---------- */
@@ -13442,12 +13462,15 @@ body {
   font-weight: 700;
 }
 
-/* ---------- "O que monitoramos" (explicacao pro visitante leigo) ---------- */
-/* details/summary, recolhido por padrao — pedido explicito do usuario
-   ("deixe mais minimalista"): a versao anterior era uma <section> sempre
-   aberta com card+grid+legenda, ocupando a tela toda antes do status em
-   si. Mesmo padrao ja usado no StatusLegendDetails, so que agora tambem
-   engloba a explicacao "o que monitoramos" inteira. */
+/* ---------- "O que monitoramos" + legenda de status (visitante leigo) ---------- */
+/* Duas linhas recolhidas empilhadas, cada uma no seu proprio <details> —
+   pedido explicito do usuario ("nao quero 3 cards, quero minimalista").
+   Cada uma abre so quando clicada, a pagina abre direto no status. */
+.stark-public-status-info-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 .stark-public-status-explainer {
   padding: 10px 16px;
   border: 1px solid var(--starkBorder);
@@ -13462,41 +13485,11 @@ body {
   padding: 4px 0;
 }
 .stark-public-status-explainer > p {
-  margin: 10px 0 12px;
+  margin: 10px 0 2px;
   color: var(--starkMuted);
   font-size: 12px;
   line-height: 1.5;
   max-width: 640px;
-}
-.stark-public-status-steps {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 10px;
-}
-.stark-public-status-step {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--starkSurfaceAlt);
-}
-.stark-public-status-step i {
-  flex: none;
-  font-size: 15px;
-  color: var(--starkAccent);
-  margin-top: 2px;
-}
-.stark-public-status-step strong {
-  display: block;
-  font-size: 11.5px;
-}
-.stark-public-status-step span {
-  display: block;
-  color: var(--starkMuted);
-  font-size: 10.5px;
-  margin-top: 1px;
 }
 .stark-public-status-loading,
 .stark-public-status-empty {
@@ -13576,8 +13569,5 @@ body {
     flex-direction: column;
     align-items: flex-start;
     gap: 10px;
-  }
-  .stark-public-status-steps {
-    grid-template-columns: 1fr;
   }
 }

@@ -403,32 +403,50 @@ export function hcNormalizeLiveResult(row, countries) {
 }
 
 // Uma linha por execucao real (a cada 5min) -> um "bloco" {at, overall,
-// byCountry}, mesmo formato dos blocos de historico do motor de demo.
-// Ordenado cronologicamente (mais antigo primeiro).
+// byCountry, byCountryDuration, row}, mesmo formato dos blocos de historico
+// do motor de demo (+ a linha original, pra abrir o modal de detalhe ao
+// clicar num bloco especifico do heatmap). Ordenado cronologicamente
+// (mais antigo primeiro).
 export function hcBlocksFromLiveRows(rows = []) {
   return rows
     .slice()
     .sort((a, b) => String(a.startedAt || "").localeCompare(String(b.startedAt || "")))
     .map((row) => {
       const byCountry = {};
+      const byCountryDuration = {};
       (row.countries || []).forEach((entry) => {
         const steps = (entry.steps || []).map((step) => ({ ok: Boolean(step.ok), httpStatus: step.httpStatus ?? 0 }));
         byCountry[entry.country] = hcStatusFromSteps(steps);
+        byCountryDuration[entry.country] = entry.durationMs ?? null;
       });
-      return { at: row.finishedAt || row.startedAt, overall: hcCalculateSystemStatus(Object.values(byCountry)), byCountry };
+      return { at: row.finishedAt || row.startedAt, overall: hcCalculateSystemStatus(Object.values(byCountry)), byCountry, byCountryDuration, row };
     });
 }
 
 // Recorta um array PLANO de blocos (ja em ordem cronologica) por data — sem
 // a distincao dia/bloco fino do motor de demo, porque aqui SAO todas
-// execucoes reais, uma granularidade so.
+// execucoes reais, uma granularidade so. Mantem a linha original (row) pra
+// permitir abrir o modal de detalhe daquela execucao especifica.
 export function hcLiveBlocksForRange(blocks, fromDate, toDate, countryCode) {
   return (blocks || [])
     .filter((block) => {
       const dateKey = hcIsoDateLocal(block.at);
       return dateKey >= fromDate && dateKey <= toDate;
     })
-    .map((block) => ({ at: block.at, overall: countryCode ? (block.byCountry?.[countryCode] || "unknown") : block.overall }));
+    .map((block) => ({
+      at: block.at,
+      overall: countryCode ? (block.byCountry?.[countryCode] || "unknown") : block.overall,
+      durationMs: countryCode ? (block.byCountryDuration?.[countryCode] ?? null) : null,
+      row: block.row
+    }));
+}
+
+// Media de durationMs entre os blocos de um periodo — ignora blocos sem
+// duracao conhecida (ex. blocos "diarios" do motor de demo).
+export function hcAverageDuration(blocks = []) {
+  const values = blocks.map((block) => block.durationMs).filter((value) => typeof value === "number");
+  if (!values.length) return null;
+  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
 }
 
 // So pro HEATMAP visual: um periodo longo (ex. 90 dias a cada 5min) tem
@@ -442,8 +460,10 @@ export function hcDownsampleBlocks(blocks, targetCount = hcHistoryBlockCount) {
   const buckets = [];
   for (let i = 0; i < blocks.length; i += bucketSize) {
     const slice = blocks.slice(i, i + bucketSize);
-    const worst = slice.reduce((acc, block) => (statusSeverity[block.overall] > statusSeverity[acc] ? block.overall : acc), slice[0].overall);
-    buckets.push({ at: slice[slice.length - 1].at, overall: worst });
+    // Representa o bucket pelo bloco de PIOR status (o mais relevante pra
+    // investigar); se todos forem iguais, fica o ultimo (mais recente).
+    const representative = slice.reduce((acc, block) => (statusSeverity[block.overall] > statusSeverity[acc.overall] ? block : acc), slice[slice.length - 1]);
+    buckets.push({ at: slice[slice.length - 1].at, overall: representative.overall, durationMs: representative.durationMs ?? null, row: representative.row });
   }
   return buckets;
 }

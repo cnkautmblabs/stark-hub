@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { flagUrl } from "../../../utils/constants.js";
-import { hcHttpStatusExplain, hcPartnerShortLabel, hcStatusStyle } from "../../../utils/workbench/healthcheck.js";
-import { EmptyState } from "../ui/WorkbenchPrimitives.jsx";
+import { hcHttpStatusExplain, hcNormalizeLiveResult, hcPartnerShortLabel, hcStatusStyle } from "../../../utils/workbench/healthcheck.js";
+import { EmptyState, IconButton } from "../ui/WorkbenchPrimitives.jsx";
 
 // Peças visuais compartilhadas entre o Health Check autenticado
 // (HealthCheckWorkbench) e a status page pública (PublicHealthStatus) — um
@@ -30,15 +30,16 @@ export function formatDateTime(value, language) {
 }
 
 export function formatBlockLabel(block, t, language) {
+  const durationSuffix = typeof block.durationMs === "number" ? ` · ${block.durationMs} ms` : "";
   if (block.granularity === "day") {
     try {
       const formatted = new Intl.DateTimeFormat(language, { day: "2-digit", month: "short" }).format(new Date(`${block.at}T12:00:00`));
-      return `${formatted} · ${t(`healthCheck.status.${block.overall}`)}`;
+      return `${formatted} · ${t(`healthCheck.status.${block.overall}`)}${durationSuffix}`;
     } catch {
       return t(`healthCheck.status.${block.overall}`);
     }
   }
-  return `${formatDateTime(block.at, language)} · ${t(`healthCheck.status.${block.overall}`)}`;
+  return `${formatDateTime(block.at, language)} · ${t(`healthCheck.status.${block.overall}`)}${durationSuffix}${block.row ? ` · ${t("healthCheck.clickForDetails")}` : ""}`;
 }
 
 export function formatCountdown(totalSeconds) {
@@ -138,13 +139,86 @@ export function StatusLegendDetails({ t }) {
   );
 }
 
-export function Heatmap({ blocks, t, language, compact = false }) {
+// onBlockClick e opcional — quando presente, cada bloco que tem uma
+// execucao real associada (block.row, ver hcBlocksFromLiveRows) vira
+// clicavel e abre o modal de detalhe daquela execucao especifica (brief:
+// "se clicar mostrar um modal com os detalhes do resultado").
+export function Heatmap({ blocks, t, language, compact = false, onBlockClick }) {
   if (!blocks.length) return <EmptyState title={t("healthCheck.noHistory")} />;
   return (
     <div className={`stark-hc-heatmap ${compact ? "compact" : ""}`} role="img" aria-label={t("healthCheck.historySubtitle")}>
       {blocks.map((block) => {
         const style = hcStatusStyle[block.overall] || hcStatusStyle.unknown;
-        return <span key={block.at} className="stark-hc-heatmap-block" style={{ background: style.color }} title={formatBlockLabel(block, t, language)} />;
+        const label = formatBlockLabel(block, t, language);
+        if (onBlockClick && block.row) {
+          return (
+            <button
+              key={block.at}
+              type="button"
+              className="stark-hc-heatmap-block clickable"
+              style={{ background: style.color }}
+              title={label}
+              aria-label={label}
+              onClick={() => onBlockClick(block)}
+            />
+          );
+        }
+        return <span key={block.at} className="stark-hc-heatmap-block" style={{ background: style.color }} title={label} />;
+      })}
+    </div>
+  );
+}
+
+// Modal com o detalhe de UMA execucao especifica (aberto ao clicar num
+// bloco do heatmap) — mesma lista de steps do drawer de pais "ao vivo",
+// mas pra um resultado historico qualquer, nao so o mais recente.
+export function HcExecutionModal({ block, country, countries, onClose, t, language }) {
+  if (!block?.row) return null;
+  const normalized = hcNormalizeLiveResult(block.row, countries);
+  const countryResult = normalized.countries.find((entry) => entry.country === country.code);
+  return (
+    <div className="stark-hc-drawer-overlay" onClick={onClose}>
+      <section className="stark-hc-drawer" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={country.name}>
+        <header className="stark-hc-drawer-header">
+          <span className="stark-hc-country-row-main">
+            <HcFlag iso2={country.iso2} code={country.code} size={24} />
+            <h3>{country.name}</h3>
+            <PartnerBadge partner={country.partner} />
+          </span>
+          <IconButton title={t("common.close")} onClick={onClose}><i className="bi bi-x-lg" /></IconButton>
+        </header>
+        <div className="stark-hc-drawer-body">
+          <StatusPill status={countryResult?.status || "unknown"} t={t} />
+          <p className="stark-hc-muted">{formatDateTime(normalized.finishedAt, language)}</p>
+          <h4>{t("healthCheck.detailEndpointsTitle")}</h4>
+          <EndpointStepList steps={countryResult?.steps} t={t} />
+          {!countryResult && <EmptyState title={t("healthCheck.noHealthcheckData")} />}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function EndpointStepList({ steps, t }) {
+  return (
+    <div className="stark-hc-endpoint-list">
+      {(steps || []).map((step) => {
+        const stepStatus = step.ok ? "operational" : (step.httpStatus >= 500 || step.httpStatus === 0 ? "outage" : "degraded");
+        return (
+          <div key={step.key} className="stark-hc-endpoint-row">
+            <div>
+              <strong>{step.name}</strong>
+              <small>{step.endpoint}</small>
+              {!step.ok && <HttpStatusNote httpStatus={step.httpStatus} t={t} />}
+            </div>
+            <StatusPill status={stepStatus} t={t} />
+            <div className="stark-hc-endpoint-metrics">
+              <span>HTTP {step.httpStatus}</span>
+              <span>{step.durationMs} ms</span>
+              <span>{t("healthCheck.attemptsLabel", { count: step.attempts })}</span>
+            </div>
+          </div>
+        );
       })}
     </div>
   );
